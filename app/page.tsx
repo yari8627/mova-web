@@ -50,6 +50,7 @@ type TripDraft = {
 type AppNotification = { id: string; type: string; title: string; message: string; link?: string | null; readAt?: string | null; createdAt: string };
 type TravelCompanion = { name: string; email: string; trips: number };
 type TripGuest = { name: string; email: string };
+type SessionUser = { id: string; name: string; email: string; avatarUrl?: string | null };
 
 const emptyDraft: TripDraft = {
   name: "",
@@ -66,33 +67,6 @@ const countryFlags: Record<string, string> = {
   Thailandia: "🇹🇭",
   Italia: "🇮🇹",
 };
-
-const starterTrips: Trip[] = [
-  {
-    id: "japan-2027",
-    name: "Giappone 2027",
-    country: "Giappone",
-    countryCode: "🇯🇵",
-    city: "Tokyo · Kyoto · Osaka",
-    startDate: "2027-08-03",
-    endDate: "2027-08-17",
-    people: 3,
-    theme: "sakura",
-    status: "upcoming",
-  },
-  {
-    id: "egypt-2027",
-    name: "Egitto 2027",
-    country: "Egitto",
-    countryCode: "🇪🇬",
-    city: "Il Cairo · Luxor",
-    startDate: "2027-11-05",
-    endDate: "2027-11-13",
-    people: 2,
-    theme: "sand",
-    status: "planning",
-  },
-];
 
 const navItems = [
   { label: "Home", icon: Home },
@@ -132,10 +106,12 @@ function suggestedTripName(draft: TripDraft) {
 
 export default function Page() {
   const router = useRouter();
-  const [trips, setTrips] = useState<Trip[]>(starterTrips);
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [selectedTripId, setSelectedTripId] = useState(starterTrips[0].id);
+  const [selectedTripId, setSelectedTripId] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState(1);
   const [draft, setDraft] = useState<TripDraft>(emptyDraft);
@@ -150,40 +126,30 @@ export default function Page() {
   const [citySearchOpen, setCitySearchOpen] = useState(false);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("mova-trips");
-    if (stored) {
+    async function loadAccountTrips() {
       try {
-        const parsed = JSON.parse(stored) as Trip[];
-        if (Array.isArray(parsed) && parsed.length) {
-          setTrips(parsed);
-          setSelectedTripId(parsed[0].id);
+        const sessionResponse = await fetch("/api/auth/me", { cache: "no-store" });
+        const session = await sessionResponse.json() as { user: SessionUser | null };
+        if (!session.user) { router.replace("/auth"); return; }
+        setCurrentUser(session.user);
+        const response = await fetch("/api/trips", { cache: "no-store" });
+        if (response.ok) {
+          const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
+          setTrips(accountTrips);
+          setSelectedTripId(accountTrips[0]?.id ?? "");
         }
+        const notificationResponse = await fetch("/api/notifications", { cache: "no-store" });
+        if (notificationResponse.ok) { const result = await notificationResponse.json(); setNotifications(result.notifications); }
+        setAuthReady(true);
       } catch {
-        // Mantiene i dati demo.
+        router.replace("/auth");
       }
     }
-  }, []);
-
-  useEffect(() => {
-    async function loadAccountTrips() {
-      const sessionResponse = await fetch("/api/auth/me"); const session = await sessionResponse.json();
-      if (!session.user) return;
-      const localTrips = JSON.parse(window.localStorage.getItem("mova-trips") || "[]") as Trip[];
-      await Promise.all(localTrips.map((trip) => fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(trip) })));
-      const response = await fetch("/api/trips"); if (!response.ok) return;
-      const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
-      setTrips(accountTrips); if (accountTrips[0]) setSelectedTripId(accountTrips[0].id);
-      const notificationResponse = await fetch("/api/notifications"); if (notificationResponse.ok) { const result = await notificationResponse.json(); setNotifications(result.notifications); }
-    }
     void loadAccountTrips();
-  }, []);
+  }, [router]);
 
   async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
   async function markAllNotificationsRead() { await fetch("/api/notifications", { method: "PATCH" }); setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); }
-
-  useEffect(() => {
-    window.localStorage.setItem("mova-trips", JSON.stringify(trips));
-  }, [trips]);
 
   useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
 
@@ -192,6 +158,8 @@ export default function Page() {
     [selectedTripId, trips]
   );
   function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
+  const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
+  const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
 
   const selectedCountry = useMemo(() => worldCountries.find((country) => country.displayName === draft.country), [draft.country]);
   const countryMatches = useMemo(() => {
@@ -277,6 +245,8 @@ export default function Page() {
     }
   }
 
+  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account"><div className="brand">mova</div><p>Caricamento del tuo spazio di viaggio...</p></main>;
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
@@ -300,9 +270,9 @@ export default function Page() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="user-avatar">GR</div>
+          <div className="user-avatar">{userInitials}</div>
           <div>
-            <strong>Giulia Rossi</strong>
+            <strong>{currentUser.name}</strong>
             <span>Piano Free</span>
           </div>
         </div>
@@ -314,7 +284,7 @@ export default function Page() {
             <Menu size={22} />
           </button>
           <div className="topbar-title">
-            <h1>Ciao, Giulia</h1>
+            <h1>Ciao, {firstName}</h1>
             <p>Continuiamo a costruire il tuo prossimo viaggio.</p>
           </div>
           <div className="notification-center">
@@ -361,6 +331,7 @@ export default function Page() {
             </div>
 
             <div className="trip-grid">
+              {!trips.length && <div className="home-empty"><Plane size={28} /><div><strong>Nessun viaggio ancora</strong><p>Crea il tuo primo viaggio e inizia a organizzare itinerario, partecipanti e documenti.</p></div></div>}
               {trips.map((trip) => (
                 <button
                   key={trip.id}
