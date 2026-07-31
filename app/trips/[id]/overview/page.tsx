@@ -1,13 +1,12 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, FileCheck2, Luggage, MapPin, Paperclip, Plus, ReceiptText, Settings, TicketCheck, Trash2, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileCheck2, MapPin, Paperclip, ReceiptText, Settings, TicketCheck, Users } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
-import { titleCaseItalian } from "../../../../lib/text-format";
 
 type Activity = { id: string; day: number; title: string; place: string; time: string; done: boolean; bookingId?: string | null };
 type Booking = { id: string; title?: string; type?: string; startDate?: string; status: "confirmed" | "pending" };
@@ -15,7 +14,6 @@ type Document = { id: string; name?: string; offline: boolean; bookingId?: strin
 type Expense = { id: string; amount: number; kind?: "expense" | "settlement" };
 type Participant = { id: string; status: "confirmed" | "pending" };
 type TripDates = { startDate: string; endDate: string };
-type PackingItem = { id: string; label: string; packed: boolean };
 
 const starterActivities: Activity[] = [{ id: "arrival", day: 1, title: "Arrivo e primo orientamento", place: "Centro città", time: "15:30", done: true }, { id: "districts", day: 2, title: "Quartieri iconici e cucina locale", place: "Mercato centrale", time: "09:00", done: false }, { id: "excursion", day: 3, title: "Escursione fuori città", place: "Punto di incontro", time: "08:15", done: false }];
 const starterBookings: Booking[] = [{ id: "outbound", status: "confirmed" }, { id: "hotel", status: "confirmed" }, { id: "museum", status: "pending" }];
@@ -30,13 +28,11 @@ function tripGroup(remote: { owner?: { id: string; name: string; email: string }
 export default function OverviewPage() {
   const { id } = useParams<{ id: string }>(); const router = useRouter();
   const { canInvite } = useTripPermissions(id);
-  const [activities, setActivities] = useState<Activity[]>([]); const [bookings, setBookings] = useState<Booking[]>([]); const [documents, setDocuments] = useState<Document[]>([]); const [expenses, setExpenses] = useState<Expense[]>([]); const [participants, setParticipants] = useState<Participant[]>([]); const [budget, setBudget] = useState<number | null>(null); const [tripDates, setTripDates] = useState<TripDates | null>(null); const [packingItems, setPackingItems] = useState<PackingItem[]>([]); const [packingDraft, setPackingDraft] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]); const [bookings, setBookings] = useState<Booking[]>([]); const [documents, setDocuments] = useState<Document[]>([]); const [expenses, setExpenses] = useState<Expense[]>([]); const [participants, setParticipants] = useState<Participant[]>([]); const [budget, setBudget] = useState<number | null>(null); const [tripDates, setTripDates] = useState<TripDates | null>(null);
   useEffect(() => { async function load() { const activityItems = readSaved(`mova-itinerary-${id}`, starterActivities); const bookingItems = readSaved(`mova-bookings-${id}`, starterBookings); const documentItems = readSaved(`mova-documents-${id}`, starterDocuments); const expenseItems = readSaved(`mova-expenses-${id}`, starterExpenses); const participantItems = readSaved(`mova-participants-${id}`, starterParticipants); const savedBudget = window.localStorage.getItem(`mova-budget-${id}`); const budgetValue = savedBudget ? Number(savedBudget) : null; try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); const group = tripGroup(remote); setActivities(remote.activities); setBookings(remote.bookings); setDocuments(remote.documents); setExpenses(remote.expenses); setParticipants(group); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities)); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); window.localStorage.setItem(`mova-documents-${id}`, JSON.stringify(remote.documents)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remote.expenses)); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(group)); if (remote.budget === null) window.localStorage.removeItem(`mova-budget-${id}`); else window.localStorage.setItem(`mova-budget-${id}`, String(remote.budget)); return; } if (response.status === 404) void syncTripSnapshot(id, { activities: activityItems, bookings: bookingItems, documents: documentItems, expenses: expenseItems, participants: participantItems, budget: budgetValue }); } catch { /* Cache offline. */ } setActivities(activityItems); setBookings(bookingItems); setDocuments(documentItems); setExpenses(expenseItems); setParticipants(participantItems); setBudget(budgetValue); } void load(); }, [id]);
   useEffect(() => { fetch(`/api/trips/${id}`).then((response) => response.ok ? response.json() : null).then((trip) => { if (trip) setTripDates({ startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10) }); }).catch(() => undefined); }, [id]);
-  useEffect(() => { fetch(`/api/trips/${id}/packing`, { cache: "no-store" }).then((response) => response.ok ? response.json() : []).then(setPackingItems).catch(() => undefined); }, [id]);
   const nextActivity = useMemo(() => [...activities].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time)).find((item) => !item.done), [activities]);
   const confirmedBookings = bookings.filter((item) => item.status === "confirmed").length; const pendingBookings = bookings.length - confirmedBookings; const offlineDocuments = documents.filter((item) => item.offline).length; const totalExpenses = expenses.filter((item) => item.kind !== "settlement").reduce((sum, item) => sum + item.amount, 0); const confirmedPeople = participants.filter((item) => item.status === "confirmed").length; const pendingPeople = participants.length - confirmedPeople;
-  const packedCount = packingItems.filter((item) => item.packed).length;
   const today = useMemo(() => {
     if (!tripDates) return null;
     const now = new Date(); const current = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12); const start = new Date(`${tripDates.startDate}T12:00:00`); const end = new Date(`${tripDates.endDate}T12:00:00`); const daysFromStart = Math.floor((current.getTime() - start.getTime()) / 86400000);
@@ -45,9 +41,6 @@ export default function OverviewPage() {
     const day = daysFromStart + 1; return { phase: "active" as const, day, distance: 0, activities: activities.filter((item) => item.day === day).sort((a, b) => a.time.localeCompare(b.time)) };
   }, [activities, tripDates]);
 
-  async function addPackingItem(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const label = packingDraft.trim(); if (!label) return; const response = await fetch(`/api/trips/${id}/packing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) }); if (!response.ok) return; const item = await response.json() as PackingItem; setPackingItems((current) => [...current, item]); setPackingDraft(""); }
-  async function togglePackingItem(item: PackingItem) { const packed = !item.packed; setPackingItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, packed } : entry)); const response = await fetch(`/api/trips/${id}/packing`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, packed }) }); if (!response.ok) setPackingItems((current) => current.map((entry) => entry.id === item.id ? item : entry)); }
-  async function removePackingItem(itemId: string) { const previous = packingItems; setPackingItems((current) => current.filter((item) => item.id !== itemId)); const response = await fetch(`/api/trips/${id}/packing?itemId=${encodeURIComponent(itemId)}`, { method: "DELETE" }); if (!response.ok) setPackingItems(previous); }
 
   return <main className="trip-detail-shell overview-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button><button className="secondary-button" onClick={() => router.push(`/trips/${id}/settings`)}><Settings size={18} /> Gestisci</button>{canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}</header>
@@ -63,10 +56,6 @@ export default function OverviewPage() {
       <button className="overview-card" onClick={() => router.push(`/trips/${id}/documents`)}><span className="overview-icon"><FileCheck2 size={22} /></span><div><small>DOCUMENTI</small><strong>{documents.length} caricati</strong><p>{offlineDocuments} disponibili offline</p></div><ChevronRight size={20} /></button>
       <button className="overview-card" onClick={() => router.push(`/trips/${id}/expenses`)}><span className="overview-icon"><ReceiptText size={22} /></span><div><small>SPESE</small><strong>{money.format(totalExpenses)}</strong><p>{budget === null ? "Budget non impostato" : `${money.format(Math.max(budget - totalExpenses, 0))} disponibili`}</p></div><ChevronRight size={20} /></button>
       <button className="overview-card" onClick={() => router.push(`/trips/${id}/participants`)}><span className="overview-icon"><Users size={22} /></span><div><small>PARTECIPANTI</small><strong>{participants.length} {participants.length === 1 ? "persona" : "persone"}</strong><p>{pendingPeople ? `${confirmedPeople} ${confirmedPeople === 1 ? "confermato" : "confermati"} · ${pendingPeople} in attesa` : "Tutti hanno confermato"}</p></div><ChevronRight size={20} /></button>
-    </section>
-    <section className="packing-checklist"><header><div className="packing-heading-icon"><Luggage size={22} /></div><div><p className="section-kicker">CHECKLIST PERSONALE</p><h2>Cosa portare in viaggio</h2><p>Aggiungi ciò che vuoi mettere in valigia e spuntalo quando è pronto.</p></div><strong>{packedCount} / {packingItems.length}</strong></header>
-      <form onSubmit={addPackingItem}><input value={packingDraft} onChange={(event) => setPackingDraft(event.target.value)} maxLength={100} placeholder="Es. adattatore universale" aria-label="Oggetto da aggiungere alla checklist" /><button className="primary-button" type="submit" disabled={!packingDraft.trim()}><Plus size={17} /> Aggiungi</button></form>
-      {packingItems.length > 0 ? <div className="packing-list">{packingItems.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}><button className="packing-toggle" onClick={() => togglePackingItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button><span>{label}</span><button className="packing-remove" onClick={() => removePackingItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>La checklist è vuota</strong><p>Inizia aggiungendo il primo oggetto da portare.</p></div></div>}
     </section>
   </main>;
 }
