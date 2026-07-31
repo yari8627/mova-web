@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
 import { CalendarDays, Check, Clock3, GripVertical, MapPin, Pencil, Plus, Trash2, Users, WalletCards, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
-import { DayActivityMap } from "../../components/day-activity-map";
 import { useDestinationImage } from "../../components/use-destination-image";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
 import { useTripPermissions } from "../../../lib/use-trip-permissions";
@@ -61,16 +60,6 @@ function minutesToTime(value: number) {
   return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 }
 
-function destinationImage(country: string) {
-  const images: Record<string, string> = {
-    Thailandia: "/destinations/thailand.webp",
-    Giappone: "/destinations/japan.webp",
-    Egitto: "/destinations/egypt.webp",
-    Italia: "/destinations/italy.webp",
-  };
-  return images[country];
-}
-
 export default function TripPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -89,7 +78,6 @@ export default function TripPage() {
   const [placeMatches, setPlaceMatches] = useState<PlaceResult[]>([]);
   const [placeSearching, setPlaceSearching] = useState(false);
   const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
-  const [cityImages, setCityImages] = useState<Record<string, string>>({});
   const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
 
@@ -124,20 +112,6 @@ export default function TripPage() {
     async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); setActivities(sortActivities(remote.activities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities)); return; } } catch { /* Cache offline. */ } setTrip(fallbackTrip); setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []); setBudget(savedBudget ? Number(savedBudget) : null); }
     void load();
   }, [id]);
-
-  useEffect(() => {
-    if (!trip) return;
-    const cities = [...new Set(activities.map((activity) => activity.place.trim()).filter(Boolean))];
-    const missing = cities.filter((city) => cityImages[city] === undefined);
-    if (!missing.length) return;
-    void Promise.all(missing.map(async (city) => {
-      try {
-        const response = await fetch(`/api/city-image?strategy=exact-v2&city=${encodeURIComponent(city)}&country=${encodeURIComponent(trip.country)}`);
-        const result = await response.json();
-        return [city, result.image || destinationImage(trip.country) || ""] as const;
-      } catch { return [city, destinationImage(trip.country) || ""] as const; }
-    })).then((entries) => setCityImages((current) => ({ ...current, ...Object.fromEntries(entries) })));
-  }, [activities, cityImages, trip]);
 
   useEffect(() => {
     if (!trip || autoScrolledTrip.current === trip.id) return;
@@ -255,7 +229,7 @@ export default function TripPage() {
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canManage && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong></button>)}</nav>
         <div className="itinerary-days">{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
-          <header className={`itinerary-day-heading ${dayActivities.length && cityImages[dayActivities[0].place] ? "has-city-image" : ""}`} style={dayActivities.length && cityImages[dayActivities[0].place] ? { backgroundImage: `linear-gradient(90deg, rgba(7,18,45,.88), rgba(7,18,45,.38)), url("${cityImages[dayActivities[0].place]}")` } : undefined}><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
+          <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canManage} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
@@ -266,7 +240,6 @@ export default function TripPage() {
             <button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button>
           </div>}</div><div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div></div>
         </article></div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div></div>}
-          {dayActivities.length > 0 && <DayActivityMap activities={dayActivities} countryCode={countryIsoCode} />}
         </section>; })}</div>
       </section>
 
