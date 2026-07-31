@@ -580,7 +580,9 @@ select:focus-visible {
 
 .modal {
   width: min(650px, 100%);
-  max-height: calc(100vh - 44px);
+  max-height: calc(100dvh - 44px);
+  min-width: 0;
+  box-sizing: border-box;
   overflow: auto;
   border-radius: 25px;
   background: white;
@@ -660,6 +662,7 @@ select:focus-visible {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
+.form-grid > *, .trip-form input[type="date"] { min-width: 0; max-width: 100%; }
 
 .modal-actions {
   display: flex;
@@ -830,8 +833,31 @@ select:focus-visible {
   }
 
   .modal {
-    padding: 20px;
+    width: 100%;
+    max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom)));
+    margin: 0;
+    padding: 20px 18px 18px;
     border-radius: 21px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .modal-backdrop {
+    align-items: center;
+    justify-items: center;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  .modal-header { gap: 12px; }
+  .modal-header > div { min-width: 0; }
+  .modal-header h2 { font-size: 24px; line-height: 1.15; overflow-wrap: anywhere; }
+  .step-progress { margin-top: 14px; }
+  .trip-form { min-width: 0; margin-top: 18px; gap: 14px; }
+  .trip-form input[type="date"] { width: 100%; appearance: none; -webkit-appearance: none; }
+
+  @supports not (height: 100dvh) {
+    .modal { max-height: calc(100vh - 32px); }
   }
 
   .modal-actions {
