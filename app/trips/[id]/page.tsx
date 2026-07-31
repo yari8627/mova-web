@@ -14,11 +14,6 @@ type Trip = { id: string; name: string; country: string; countryCode: string; ci
 type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
 type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string };
 
-const fallbackTrips: Trip[] = [
-  { id: "japan-2027", name: "Giappone 2027", country: "Giappone", countryCode: "🇯🇵", city: "Tokyo · Kyoto · Osaka", startDate: "2027-08-03", endDate: "2027-08-17", people: 3, theme: "sakura" },
-  { id: "egypt-2027", name: "Egitto 2027", country: "Egitto", countryCode: "🇪🇬", city: "Il Cairo · Luxor", startDate: "2027-11-05", endDate: "2027-11-13", people: 2, theme: "sand" },
-];
-
 const starterActivities: Activity[] = [
   { id: "arrival", day: 1, title: "Arrivo e primo orientamento", place: "Centro città", time: "15:30", done: true },
   { id: "districts", day: 2, title: "Quartieri iconici e cucina locale", place: "Mercato centrale", time: "09:00", done: false },
@@ -105,10 +100,10 @@ export default function TripPage() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
-    const trips = stored ? (JSON.parse(stored) as Trip[]) : fallbackTrips;
+    const trips = stored ? (JSON.parse(stored) as Trip[]) : [];
     const savedActivities = window.localStorage.getItem(`mova-itinerary-${id}`);
     const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
-    const fallbackTrip = trips.find((item) => item.id === id) ?? fallbackTrips.find((item) => item.id === id) ?? null;
+    const fallbackTrip = trips.find((item) => item.id === id) ?? null;
     async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); setActivities(sortActivities(remote.activities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities)); return; } } catch { /* Cache offline. */ } setTrip(fallbackTrip); setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []); setBudget(savedBudget ? Number(savedBudget) : null); }
     void load();
   }, [id]);
