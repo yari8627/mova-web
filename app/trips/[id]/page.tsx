@@ -79,6 +79,8 @@ export default function TripPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [editorStep, setEditorStep] = useState<1 | 2>(1);
+  const [activeDay, setActiveDay] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyActivity);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export default function TripPage() {
   }, [trip]);
   const placeKeyboard = useAutocompleteKeyboard({ itemCount: placeMatches.length, isOpen: placeSearchOpen, resetKey: draft.place, onOpen: () => setPlaceSearchOpen(true), onClose: () => setPlaceSearchOpen(false), onSelect: selectPlace });
 
-  function selectPlace(index: number) { const place = placeMatches[index]; if (!place) return; setDraft({ ...draft, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude }); setPlaceSearchOpen(false); }
+  function selectPlace(index: number) { const place = placeMatches[index]; if (!place) return; setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude }); setPlaceSearchOpen(false); setEditorStep(2); }
 
   useEffect(() => {
     const query = draft.place.trim();
@@ -144,10 +146,22 @@ export default function TripPage() {
     const end = new Date(`${trip.endDate}T12:00:00`);
     if (today < start || today > end) return;
     const currentDay = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
+    setActiveDay(currentDay);
     autoScrolledTrip.current = trip.id;
     const timer = window.setTimeout(() => document.getElementById(`itinerary-day-${currentDay}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
     return () => window.clearTimeout(timer);
   }, [trip]);
+
+  useEffect(() => {
+    if (!trip) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible) setActiveDay(Number(visible.target.id.replace("itinerary-day-", "")));
+    }, { rootMargin: "-32% 0px -55%", threshold: [0, .25, .5] });
+    const elements = document.querySelectorAll<HTMLElement>(".itinerary-day");
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [trip, activities.length]);
 
   async function persist(next: Activity[]) {
     const ordered = sortActivities(next);
@@ -162,12 +176,14 @@ export default function TripPage() {
     const availableDays = trip ? tripDays(trip.startDate, trip.endDate) : [{ day: 1, date: new Date() }];
     const firstEmptyDay = availableDays.find((item) => !activities.some((activity) => activity.day === item.day))?.day;
     setDraft({ ...emptyActivity, day: day ?? firstEmptyDay ?? availableDays[0].day });
+    setEditorStep(1);
     setShowEditor(true);
   }
 
   function openEdit(activity: Activity) {
     setEditingId(activity.id);
     setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, time: activity.time });
+    setEditorStep(2);
     setShowEditor(true);
   }
 
@@ -214,6 +230,11 @@ export default function TripPage() {
 
   const days = tripDays(trip.startDate, trip.endDate);
 
+  function scrollToDay(day: number) {
+    setActiveDay(day);
+    document.getElementById(`itinerary-day-${day}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return <main className="trip-detail-shell">
     <header className="detail-topbar">
       <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button>
@@ -230,6 +251,7 @@ export default function TripPage() {
     <div className="detail-grid">
       <section className="itinerary-panel">
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canManage && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
+        <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong></button>)}</nav>
         <div className="itinerary-days">{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className={`itinerary-day-heading ${dayActivities.length && cityImages[dayActivities[0].place] ? "has-city-image" : ""}`} style={dayActivities.length && cityImages[dayActivities[0].place] ? { backgroundImage: `linear-gradient(90deg, rgba(7,18,45,.88), rgba(7,18,45,.38)), url("${cityImages[dayActivities[0].place]}")` } : undefined}><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
@@ -249,13 +271,20 @@ export default function TripPage() {
       <aside className="detail-aside"><article className="quick-card"><p className="section-kicker">ORGANIZZAZIONE</p><h3>{activities.filter((item) => item.done).length} di {activities.length} completate</h3><div className="progress-track"><span style={{ width: `${activities.length ? activities.filter((item) => item.done).length / activities.length * 100 : 0}%` }} /></div><p className="aside-copy">Completa le attività principali prima della partenza.</p></article><article className="quick-card"><p className="section-kicker">BUDGET</p><div className="budget-row"><WalletCards size={24} /><div><strong>{budget === null ? "Non impostato" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(budget)}</strong><span>{budget === null ? "Puoi aggiungerlo nella sezione Spese" : "budget totale del viaggio"}</span></div></div></article></aside>
     </div>
 
-    {showEditor && <div className="modal-backdrop" onMouseDown={() => setShowEditor(false)}><div className="modal activity-modal" role="dialog" aria-modal="true" aria-labelledby="activity-title" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="modal-header"><div><p className="section-kicker">ITINERARIO</p><h2 id="activity-title">{editingId ? "Modifica attività" : "Nuova attività"}</h2></div><button className="icon-button" onClick={() => setShowEditor(false)} aria-label="Chiudi"><X size={20} /></button></div>
+    {showEditor && <div className="modal-backdrop activity-backdrop" onMouseDown={() => setShowEditor(false)}><div className="modal activity-modal" role="dialog" aria-modal="true" aria-labelledby="activity-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="activity-sheet-handle" />
+      <div className="modal-header"><div><p className="section-kicker">{editingId ? "ITINERARIO" : `PASSO ${editorStep} DI 2`}</p><h2 id="activity-title">{editingId ? "Modifica attività" : editorStep === 1 ? "Dove vuoi andare?" : "Quando?"}</h2></div><button className="icon-button" onClick={() => setShowEditor(false)} aria-label="Chiudi"><X size={20} /></button></div>
       <form className="trip-form" onSubmit={(event) => { event.preventDefault(); saveActivity(); }}>
-        <label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required autoFocus /></label>
-        <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
-        <label className="autocomplete-field">Luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 2) setPlaceSearchOpen(true); }} onChange={(event) => { setDraft({ ...draft, place: event.target.value, placeAddress: undefined, latitude: undefined, longitude: undefined }); setPlaceSearchOpen(true); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Cerca ristoranti, hotel, musei o indirizzi in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}</div>}</label>
-        <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="submit" className="primary-button">Salva attività</button></div>
+        {editorStep === 1 ? <>
+          <label className="autocomplete-field activity-place-first">Cerca un luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 2) setPlaceSearchOpen(true); }} onChange={(event) => { setDraft({ ...draft, place: event.target.value, placeAddress: undefined, latitude: undefined, longitude: undefined }); setPlaceSearchOpen(true); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Ristorante, museo, hotel o indirizzo in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required autoFocus />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}</div>}</label>
+          <div className="activity-search-hint"><MapPin size={18} /><span>Cerca città, ristoranti, attrazioni, hotel e qualsiasi luogo disponibile sulla mappa.</span></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="button" className="primary-button" disabled={!draft.place.trim()} onClick={() => setEditorStep(2)}>Continua</button></div>
+        </> : <>
+          <button type="button" className="selected-place-summary" onClick={() => setEditorStep(1)}><MapPin size={19} /><span><strong>{draft.place}</strong><small>{draft.placeAddress || "Tocca per cambiare luogo"}</small></span></button>
+          <label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required autoFocus /></label>
+          <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? setShowEditor(false) : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" className="primary-button">Salva attività</button></div>
+        </>}
       </form>
     </div></div>}
   </main>;
