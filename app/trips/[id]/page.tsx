@@ -13,7 +13,7 @@ import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard"
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
 type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
-type PlaceResult = { id: string; name: string; address: string; latitude: number; longitude: number; type: string };
+type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string };
 
 const fallbackTrips: Trip[] = [
   { id: "japan-2027", name: "Giappone 2027", country: "Giappone", countryCode: "🇯🇵", city: "Tokyo · Kyoto · Osaka", startDate: "2027-08-03", endDate: "2027-08-17", people: 3, theme: "sakura" },
@@ -88,6 +88,7 @@ export default function TripPage() {
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
   const [placeMatches, setPlaceMatches] = useState<PlaceResult[]>([]);
   const [placeSearching, setPlaceSearching] = useState(false);
+  const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
   const [cityImages, setCityImages] = useState<Record<string, string>>({});
   const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
@@ -99,7 +100,7 @@ export default function TripPage() {
   }, [trip]);
   const placeKeyboard = useAutocompleteKeyboard({ itemCount: placeMatches.length, isOpen: placeSearchOpen, resetKey: draft.place, onOpen: () => setPlaceSearchOpen(true), onClose: () => setPlaceSearchOpen(false), onSelect: selectPlace });
 
-  function selectPlace(index: number) { const place = placeMatches[index]; if (!place) return; setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude }); setPlaceSearchOpen(false); setEditorStep(2); }
+  async function selectPlace(index: number) { let place = placeMatches[index]; if (!place) return; setPlaceSearchOpen(false); if (place.provider === "google" && place.placeId) { try { const response = await fetch(`/api/places?placeId=${encodeURIComponent(place.placeId)}&sessionToken=${encodeURIComponent(placeSessionToken)}`); if (response.ok) place = await response.json(); } catch { /* Mantiene il risultato selezionato. */ } } setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude }); setEditorStep(2); }
 
   useEffect(() => {
     const query = draft.place.trim();
@@ -107,12 +108,12 @@ export default function TripPage() {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setPlaceSearching(true);
-      try { const response = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}`, { signal: controller.signal }); if (response.ok) setPlaceMatches(await response.json()); }
+      try { const response = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(placeSessionToken)}`, { signal: controller.signal }); if (response.ok) setPlaceMatches(await response.json()); }
       catch { if (!controller.signal.aborted) setPlaceMatches([]); }
       finally { if (!controller.signal.aborted) setPlaceSearching(false); }
     }, 350);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [countryIsoCode, draft.place, showEditor]);
+  }, [countryIsoCode, draft.place, placeSessionToken, showEditor]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
@@ -176,6 +177,7 @@ export default function TripPage() {
     const availableDays = trip ? tripDays(trip.startDate, trip.endDate) : [{ day: 1, date: new Date() }];
     const firstEmptyDay = availableDays.find((item) => !activities.some((activity) => activity.day === item.day))?.day;
     setDraft({ ...emptyActivity, day: day ?? firstEmptyDay ?? availableDays[0].day });
+    setPlaceSessionToken(crypto.randomUUID());
     setEditorStep(1);
     setShowEditor(true);
   }
@@ -276,7 +278,7 @@ export default function TripPage() {
       <div className="modal-header"><div><p className="section-kicker">{editingId ? "ITINERARIO" : `PASSO ${editorStep} DI 2`}</p><h2 id="activity-title">{editingId ? "Modifica attività" : editorStep === 1 ? "Dove vuoi andare?" : "Quando?"}</h2></div><button className="icon-button" onClick={() => setShowEditor(false)} aria-label="Chiudi"><X size={20} /></button></div>
       <form className="trip-form" onSubmit={(event) => { event.preventDefault(); saveActivity(); }}>
         {editorStep === 1 ? <>
-          <label className="autocomplete-field activity-place-first">Cerca un luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 2) setPlaceSearchOpen(true); }} onChange={(event) => { setDraft({ ...draft, place: event.target.value, placeAddress: undefined, latitude: undefined, longitude: undefined }); setPlaceSearchOpen(true); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Ristorante, museo, hotel o indirizzo in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required autoFocus />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}</div>}</label>
+          <label className="autocomplete-field activity-place-first">Cerca un luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 2) setPlaceSearchOpen(true); }} onChange={(event) => { setDraft({ ...draft, place: event.target.value, placeAddress: undefined, latitude: undefined, longitude: undefined }); setPlaceSearchOpen(true); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Ristorante, museo, hotel o indirizzo in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required autoFocus />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}{placeMatches.some((place) => place.provider === "google") && <div className="google-attribution"><img src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" /></div>}</div>}</label>
           <div className="activity-search-hint"><MapPin size={18} /><span>Cerca città, ristoranti, attrazioni, hotel e qualsiasi luogo disponibile sulla mappa.</span></div>
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="button" className="primary-button" disabled={!draft.place.trim()} onClick={() => setEditorStep(2)}>Continua</button></div>
         </> : <>
