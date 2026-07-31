@@ -1131,3 +1131,6 @@ html, body { max-width: 100%; overflow-x: clip; }
   .auth-card form { margin-top: 22px; gap: 14px; }
   .auth-switch { padding-inline: 4px; }
 }
+
+.booking-modal .modal-header { position: sticky; top: -26px; z-index: 25; margin: -2px -2px 0; padding: 2px 2px 14px; background: white; }
+@media (max-width: 520px) { .booking-modal { max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - 12px); scroll-padding-top: 82px; }.booking-modal .modal-header { top: -20px; margin: 0 -1px; padding: 0 1px 13px; }.booking-modal .trip-form { padding-bottom: max(6px, env(safe-area-inset-bottom)); } }
