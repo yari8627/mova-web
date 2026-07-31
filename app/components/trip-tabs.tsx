@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
   { label: "Panoramica", path: "overview" },
-  { label: "Cosa portare", path: "packing" },
+  { label: "Cosa Portare", path: "packing" },
   { label: "Itinerario", path: "" },
   { label: "Prenotazioni", path: "bookings" },
   { label: "Documenti", path: "documents" },

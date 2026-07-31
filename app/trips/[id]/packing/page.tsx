@@ -51,7 +51,7 @@ export default function PackingPage() {
   return <main className="trip-detail-shell packing-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button></header>
     <TripCover tripId={id} />
-    <div className="expenses-title"><p className="section-kicker">CHECKLIST PERSONALE</p><h1>Cosa portare</h1><p>Prepara la valigia e tieni sotto controllo tutto ciò che serve per il viaggio.</p></div>
+    <div className="expenses-title"><p className="section-kicker">CHECKLIST PERSONALE</p><h1>Cosa Portare</h1><p>Prepara la valigia e tieni sotto controllo tutto ciò che serve per il viaggio.</p></div>
     <TripTabs tripId={id} />
     <section className="packing-checklist"><header><div className="packing-heading-icon"><Luggage size={22} /></div><div><p className="section-kicker">LA TUA LISTA</p><h2>Cosa portare in viaggio</h2><p>Aggiungi ciò che vuoi mettere in valigia e spuntalo quando è pronto.</p></div><strong>{packedCount} / {items.length}</strong></header>
       <form onSubmit={addItem}><input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={100} placeholder="Es. adattatore universale" aria-label="Oggetto da aggiungere alla checklist" autoFocus /><button className="primary-button" type="submit" disabled={!draft.trim()}><Plus size={17} /> Aggiungi</button></form>
