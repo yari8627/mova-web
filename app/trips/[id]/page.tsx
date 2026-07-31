@@ -76,7 +76,7 @@ export default function TripPage() {
   const router = useRouter();
   const { canManage, canInvite } = useTripPermissions(id);
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [activities, setActivities] = useState<Activity[]>(starterActivities);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -118,7 +118,7 @@ export default function TripPage() {
     const savedActivities = window.localStorage.getItem(`mova-itinerary-${id}`);
     const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
     const fallbackTrip = trips.find((item) => item.id === id) ?? fallbackTrips.find((item) => item.id === id) ?? null;
-    async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); setActivities(sortActivities(remote.activities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities)); return; } } catch { /* Cache offline. */ } setTrip(fallbackTrip); setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : starterActivities); setBudget(savedBudget ? Number(savedBudget) : null); }
+    async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); setActivities(sortActivities(remote.activities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities)); return; } } catch { /* Cache offline. */ } setTrip(fallbackTrip); setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []); setBudget(savedBudget ? Number(savedBudget) : null); }
     void load();
   }, [id]);
 

@@ -35,7 +35,7 @@ export default function ExpensesPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { canManage, role, userId, userName } = useTripPermissions(id);
-  const [expenses, setExpenses] = useState<Expense[]>(starterExpenses);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [participants, setParticipants] = useState<string[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
