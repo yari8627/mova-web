@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useLayoutEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { BedDouble, CalendarDays, Car, Check, Clock3, Mail, MapPin, Paperclip, Pencil, Plane, Plus, Ticket, Train, Trash2, X } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
@@ -37,6 +37,7 @@ export default function BookingsPage() {
   const { canManage } = useTripPermissions(id);
   const [bookings, setBookings] = useState<Booking[]>([]); const [showEditor, setShowEditor] = useState(false); const [editingId, setEditingId] = useState<string | null>(null); const [draft, setDraft] = useState(emptyDraft); const [flightOptions, setFlightOptions] = useState<FlightOption[]>([]); const [flightSearchError, setFlightSearchError] = useState(""); const [searchingFlights, setSearchingFlights] = useState(false);
   const [attachmentCounts, setAttachmentCounts] = useState<Record<string, number>>({});
+  useLayoutEffect(() => { if (showEditor && !editingId && document.activeElement instanceof HTMLElement) document.activeElement.blur(); }, [editingId, showEditor]);
   useEffect(() => { async function load() { const saved = window.localStorage.getItem(`mova-bookings-${id}`); const cached = saved ? JSON.parse(saved) as Booking[] : starterBookings; try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); setBookings(remote.bookings); setAttachmentCounts(remote.documents.reduce((counts: Record<string, number>, document: { bookingId?: string | null }) => { if (document.bookingId) counts[document.bookingId] = (counts[document.bookingId] || 0) + 1; return counts; }, {})); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); const needsRefresh = remote.bookings.some((booking: Booking) => !remote.activities.some((activity: { bookingId?: string | null; bookingEvent?: string | null }) => activity.bookingId === booking.id && activity.bookingEvent === "start") || Boolean(booking.endDate && booking.type !== "activity" && !remote.activities.some((activity: { bookingId?: string | null; bookingEvent?: string | null }) => activity.bookingId === booking.id && activity.bookingEvent === "end"))); if (needsRefresh) void syncTripResource(id, "bookings", remote.bookings); return; } } catch { /* Cache offline. */ } setBookings(cached); } void load(); }, [id]);
   function persist(next: Booking[]) { const ordered = [...next].sort((a,b) => a.startDate.localeCompare(b.startDate)); setBookings(ordered); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(ordered)); syncTripResource(id, "bookings", ordered); }
   function openNew() { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); setEditingId(null); setDraft(emptyDraft); setFlightOptions([]); setFlightSearchError(""); setShowEditor(true); requestAnimationFrame(() => document.querySelector<HTMLElement>(".booking-modal")?.scrollTo({ top: 0 })); }
