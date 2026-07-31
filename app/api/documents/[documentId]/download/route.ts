@@ -1,0 +1,7 @@
+import { NextResponse } from "next/server";
+import { currentUser } from "../../../../../lib/auth";
+import { readDocumentFile } from "../../../../../lib/document-storage";
+import { prisma } from "../../../../../lib/prisma";
+import { tripAccess } from "../../../../../lib/trip-access";
+
+export async function GET(_: Request, { params }: { params: Promise<{ documentId: string }> }) { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const { documentId } = await params; const document = await prisma.document.findUnique({ where: { id: documentId } }); if (!document?.storageKey) return NextResponse.json({ error: "File non disponibile" }, { status: 404 }); const access = await tripAccess(document.tripId, user); if (!access.allowed) return NextResponse.json({ error: "Accesso negato" }, { status: 403 }); if (document.category === "personal" && document.createdById !== user.id) return NextResponse.json({ error: "Documento personale non accessibile" }, { status: 403 }); const bytes = await readDocumentFile(document.storageKey); const safeName = document.fileName.replace(/["\r\n]/g, "_"); return new Response(bytes, { headers: { "Content-Type": document.mimeType || "application/octet-stream", "Content-Length": String(bytes.byteLength), "Content-Disposition": `attachment; filename="${safeName}"`, "Cache-Control": "private, no-store" } }); }

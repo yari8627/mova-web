@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "passwordLogin" BOOLEAN NOT NULL DEFAULT true;

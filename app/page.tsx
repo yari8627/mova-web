@@ -1,0 +1,488 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { City, Country } from "country-state-city";
+import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
+import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
+import {
+  Bell,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  CircleUserRound,
+  Compass,
+  Earth,
+  Home,
+  Map,
+  Mail,
+  Menu,
+  Plane,
+  Plus,
+  Users,
+  UserPlus,
+  WalletCards,
+  X,
+} from "lucide-react";
+
+type Trip = {
+  id: string;
+  name: string;
+  country: string;
+  countryCode: string;
+  city: string;
+  startDate: string;
+  endDate: string;
+  people: number;
+  theme: "blue" | "teal" | "sand" | "sakura";
+  status: "planning" | "upcoming" | "active" | "past";
+};
+
+type TripDraft = {
+  name: string;
+  country: string;
+  city: string;
+  startDate: string;
+  endDate: string;
+  people: number;
+};
+
+type AppNotification = { id: string; type: string; title: string; message: string; link?: string | null; readAt?: string | null; createdAt: string };
+type TravelCompanion = { name: string; email: string; trips: number };
+type TripGuest = { name: string; email: string };
+
+const emptyDraft: TripDraft = {
+  name: "",
+  country: "",
+  city: "",
+  startDate: "",
+  endDate: "",
+  people: 2,
+};
+
+const countryFlags: Record<string, string> = {
+  Giappone: "🇯🇵",
+  Egitto: "🇪🇬",
+  Thailandia: "🇹🇭",
+  Italia: "🇮🇹",
+};
+
+const starterTrips: Trip[] = [
+  {
+    id: "japan-2027",
+    name: "Giappone 2027",
+    country: "Giappone",
+    countryCode: "🇯🇵",
+    city: "Tokyo · Kyoto · Osaka",
+    startDate: "2027-08-03",
+    endDate: "2027-08-17",
+    people: 3,
+    theme: "sakura",
+    status: "upcoming",
+  },
+  {
+    id: "egypt-2027",
+    name: "Egitto 2027",
+    country: "Egitto",
+    countryCode: "🇪🇬",
+    city: "Il Cairo · Luxor",
+    startDate: "2027-11-05",
+    endDate: "2027-11-13",
+    people: 2,
+    theme: "sand",
+    status: "planning",
+  },
+];
+
+const navItems = [
+  { label: "Home", icon: Home },
+  { label: "Viaggi", icon: Plane },
+  { label: "Progressi", icon: Earth },
+  { label: "Profilo", icon: CircleUserRound },
+];
+
+const regionNames = new Intl.DisplayNames(["it"], { type: "region" });
+const worldCountries = Country.getAllCountries().map((country) => ({
+  ...country,
+  displayName: regionNames.of(country.isoCode) ?? country.name,
+})).sort((a, b) => a.displayName.localeCompare(b.displayName, "it"));
+
+function formatDate(value: string) {
+  if (!value) return "Data da definire";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "Data da definire";
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function daysUntil(value: string) {
+  const today = new Date();
+  const target = new Date(`${value}T12:00:00`);
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86400000));
+}
+
+function suggestedTripName(draft: TripDraft) {
+  const destination = draft.country.trim() || draft.city.split("·")[0]?.trim() || "Viaggio";
+  const year = draft.startDate.slice(0, 4) || String(new Date().getFullYear());
+  return `${destination} ${year}`;
+}
+
+export default function Page() {
+  const router = useRouter();
+  const [trips, setTrips] = useState<Trip[]>(starterTrips);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [selectedTripId, setSelectedTripId] = useState(starterTrips[0].id);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createStep, setCreateStep] = useState(1);
+  const [draft, setDraft] = useState<TripDraft>(emptyDraft);
+  const [customTripName, setCustomTripName] = useState(false);
+  const [frequentTravelers, setFrequentTravelers] = useState<TravelCompanion[]>([]);
+  const [tripGuests, setTripGuests] = useState<TripGuest[]>([]);
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestError, setGuestError] = useState("");
+  const [tripImages, setTripImages] = useState<Record<string, string>>({});
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [countrySearchOpen, setCountrySearchOpen] = useState(false);
+  const [citySearchOpen, setCitySearchOpen] = useState(false);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("mova-trips");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Trip[];
+        if (Array.isArray(parsed) && parsed.length) {
+          setTrips(parsed);
+          setSelectedTripId(parsed[0].id);
+        }
+      } catch {
+        // Mantiene i dati demo.
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    async function loadAccountTrips() {
+      const sessionResponse = await fetch("/api/auth/me"); const session = await sessionResponse.json();
+      if (!session.user) return;
+      const localTrips = JSON.parse(window.localStorage.getItem("mova-trips") || "[]") as Trip[];
+      await Promise.all(localTrips.map((trip) => fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(trip) })));
+      const response = await fetch("/api/trips"); if (!response.ok) return;
+      const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
+      setTrips(accountTrips); if (accountTrips[0]) setSelectedTripId(accountTrips[0].id);
+      const notificationResponse = await fetch("/api/notifications"); if (notificationResponse.ok) { const result = await notificationResponse.json(); setNotifications(result.notifications); }
+    }
+    void loadAccountTrips();
+  }, []);
+
+  async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
+  async function markAllNotificationsRead() { await fetch("/api/notifications", { method: "PATCH" }); setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); }
+
+  useEffect(() => {
+    window.localStorage.setItem("mova-trips", JSON.stringify(trips));
+  }, [trips]);
+
+  useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
+
+  const selectedTrip = useMemo(
+    () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0],
+    [selectedTripId, trips]
+  );
+  function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
+
+  const selectedCountry = useMemo(() => worldCountries.find((country) => country.displayName === draft.country), [draft.country]);
+  const countryMatches = useMemo(() => {
+    const query = draft.country.trim().toLocaleLowerCase("it");
+    if (!query) return [];
+    return worldCountries.filter((country) => country.displayName.toLocaleLowerCase("it").includes(query) || country.name.toLocaleLowerCase().includes(query)).slice(0, 8);
+  }, [draft.country]);
+  const cityMatches = useMemo(() => {
+    if (!selectedCountry) return [];
+    const query = draft.city.split("·").at(-1)?.trim().toLocaleLowerCase("it") ?? "";
+    if (!query) return [];
+    return (City.getCitiesOfCountry(selectedCountry.isoCode) ?? []).filter((city) => city.name.toLocaleLowerCase().includes(query)).slice(0, 8);
+  }, [draft.city, selectedCountry]);
+  const countryKeyboard = useAutocompleteKeyboard({ itemCount: countryMatches.length, isOpen: countrySearchOpen, resetKey: draft.country, onOpen: () => setCountrySearchOpen(true), onClose: () => setCountrySearchOpen(false), onSelect: selectCountry });
+  const cityKeyboard = useAutocompleteKeyboard({ itemCount: cityMatches.length, isOpen: citySearchOpen, resetKey: draft.city, onOpen: () => setCitySearchOpen(true), onClose: () => setCitySearchOpen(false), onSelect: selectCity });
+
+  useEffect(() => { if (createStep === 3 && !customTripName) setDraft((current) => ({ ...current, name: suggestedTripName(current) })); }, [createStep, customTripName, draft.country, draft.city, draft.startDate]);
+
+  function selectCountry(index: number) { const country = countryMatches[index]; if (!country) return; setDraft({ ...draft, country: country.displayName, city: "" }); setCountrySearchOpen(false); }
+  function selectCity(index: number) { const city = cityMatches[index]; if (!city) return; const previous = draft.city.split("·").slice(0, -1).map((part) => part.trim()).filter(Boolean); setDraft({ ...draft, city: [...previous, city.name].join(" · ") }); setCitySearchOpen(false); }
+
+  function openCreate() {
+    setDraft(emptyDraft);
+    setCustomTripName(false);
+    setTripGuests([]);
+    setGuestEmail("");
+    setGuestError("");
+    setCreateStep(1);
+    setShowCreate(true);
+    void fetch("/api/travel-companions").then((response) => response.ok ? response.json() : []).then(setFrequentTravelers).catch(() => setFrequentTravelers([]));
+  }
+
+  function closeCreate() {
+    setShowCreate(false);
+    setCreateStep(1);
+  }
+
+  function toggleCompanion(companion: TravelCompanion) { setGuestError(""); setTripGuests((current) => current.some((item) => item.email === companion.email) ? current.filter((item) => item.email !== companion.email) : [...current, { name: companion.name, email: companion.email }]); }
+  function addGuestEmail() {
+    const email = guestEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setGuestError("Inserisci un indirizzo email valido."); return; }
+    if (tripGuests.some((item) => item.email === email)) { setGuestError("Questa persona è già stata aggiunta."); return; }
+    const known = frequentTravelers.find((item) => item.email === email);
+    const fallbackName = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it"));
+    setTripGuests((current) => [...current, { name: known?.name || fallbackName, email }]); setGuestEmail(""); setGuestError("");
+  }
+
+  async function addTrip() {
+    const country = draft.country;
+    const themeMap: Record<string, Trip["theme"]> = {
+      Giappone: "sakura",
+      Egitto: "sand",
+      Thailandia: "teal",
+      Italia: "blue",
+    };
+    const flagMap: Record<string, string> = {
+      Giappone: "🇯🇵",
+      Egitto: "🇪🇬",
+      Thailandia: "🇹🇭",
+      Italia: "🇮🇹",
+    };
+    const name = draft.name.trim() || suggestedTripName(draft);
+    const newTrip: Trip = {
+      id: `${Date.now()}`,
+      name,
+      country,
+      countryCode: selectedCountry?.flag ?? countryFlags[country] ?? "🌍",
+      city: draft.city || country,
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      people: 1 + tripGuests.length,
+      theme: themeMap[country] ?? "blue",
+      status: "planning",
+    };
+    setTrips((current) => [newTrip, ...current]);
+    setSelectedTripId(newTrip.id);
+    closeCreate();
+    try {
+      const tripResponse = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newTrip) });
+      if (tripResponse.ok) await Promise.allSettled(tripGuests.map((guest) => fetch(`/api/trips/${newTrip.id}/invites`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...guest, role: "participant" }) })));
+    } catch {
+      // Il salvataggio locale resta disponibile se il server è temporaneamente offline.
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
+        <div className="brand-row">
+          <div>
+            <div className="brand">mova</div>
+            <div className="brand-subtitle">Travel together</div>
+          </div>
+          <button className="icon-button mobile-only" onClick={() => setMobileMenu(false)} aria-label="Chiudi menu">
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="main-nav" aria-label="Navigazione principale">
+          {navItems.map(({ label, icon: Icon }, index) => (
+            <button key={label} className={`nav-item ${index === 0 ? "active" : ""}`} onClick={() => { if (label === "Profilo") router.push("/auth"); if (label === "Progressi") router.push("/progress"); }}>
+              <Icon size={20} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="user-avatar">GR</div>
+          <div>
+            <strong>Giulia Rossi</strong>
+            <span>Piano Free</span>
+          </div>
+        </div>
+      </aside>
+
+      <section className="content">
+        <header className="topbar">
+          <button className="icon-button mobile-only" onClick={() => setMobileMenu(true)} aria-label="Apri menu">
+            <Menu size={22} />
+          </button>
+          <div className="topbar-title">
+            <h1>Ciao, Giulia</h1>
+            <p>Continuiamo a costruire il tuo prossimo viaggio.</p>
+          </div>
+          <div className="notification-center">
+            <button className="icon-button notification-button" aria-label="Notifiche" onClick={() => setNotificationsOpen((value) => !value)}><Bell size={21} />{notifications.some((item) => !item.readAt) && <span className="notification-dot" />}{notifications.filter((item) => !item.readAt).length > 0 && <span className="notification-count">{notifications.filter((item) => !item.readAt).length}</span>}</button>
+            {notificationsOpen && <div className="notification-popover"><header><div><p className="section-kicker">AGGIORNAMENTI</p><h2>Notifiche</h2></div>{notifications.some((item) => !item.readAt) && <button onClick={markAllNotificationsRead}>Segna tutte come lette</button>}</header><div className="notification-list">{notifications.length ? notifications.map((item) => <button key={item.id} className={item.readAt ? "" : "unread"} onClick={() => openNotification(item)}><span className="notification-item-icon"><Bell size={17} /></span><div><strong>{item.title}</strong><p>{item.message}</p><small>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(item.createdAt))}</small></div></button>) : <p className="notification-empty">Non ci sono ancora notifiche.</p>}</div></div>}
+          </div>
+        </header>
+
+        <div className="page-grid">
+          <section className="primary-column">
+            {selectedTrip ? (
+              <article className={`hero-card theme-${selectedTrip.theme}`} style={imageForTrip(selectedTrip) ? { backgroundImage: `url(${imageForTrip(selectedTrip)})` } : undefined}>
+                <div className="hero-overlay" />
+                <div className="hero-content">
+                  <div className="eyebrow">
+                    <span>{selectedTrip.countryCode}</span>
+                    <span>{selectedTrip.country}</span>
+                  </div>
+                  <h2>{selectedTrip.name}</h2>
+                  <p>{selectedTrip.city}</p>
+                  <div className="hero-meta">
+                    <span><CalendarDays size={17} /> {formatDate(selectedTrip.startDate)} – {formatDate(selectedTrip.endDate)}</span>
+                    <span><Users size={17} /> {selectedTrip.people} partecipanti</span>
+                  </div>
+                  <button className="light-button" onClick={() => router.push(`/trips/${selectedTrip.id}/overview`)}>
+                    Apri viaggio <ChevronRight size={18} />
+                  </button>
+                </div>
+                <div className="countdown">
+                  <strong>{daysUntil(selectedTrip.startDate)}</strong>
+                  <span>giorni</span>
+                </div>
+              </article>
+            ) : null}
+
+            <div className="section-heading">
+              <div>
+                <p className="section-kicker">I TUOI VIAGGI</p>
+                <h3>In programma</h3>
+              </div>
+              <button className="primary-button" onClick={openCreate}>
+                <Plus size={18} /> Nuovo viaggio
+              </button>
+            </div>
+
+            <div className="trip-grid">
+              {trips.map((trip) => (
+                <button
+                  key={trip.id}
+                  className={`trip-card ${selectedTripId === trip.id ? "selected" : ""}`}
+                  onClick={() => setSelectedTripId(trip.id)}
+                >
+                  <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.08), rgba(12,23,51,.18)), url(${imageForTrip(trip)})` } : undefined}>
+                    <span>{trip.countryCode}</span>
+                  </div>
+                  <div className="trip-card-copy">
+                    <strong>{trip.name}</strong>
+                    <span>{trip.city}</span>
+                    <small>{formatDate(trip.startDate)} · {trip.people} persone</small>
+                  </div>
+                  <ChevronRight size={18} />
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <aside className="secondary-column">
+            <div className="quick-card">
+              <div className="section-kicker">STATO DEL VIAGGIO</div>
+              <h3>Preparazione</h3>
+              <div className="progress-row">
+                <span>Voli</span><strong>100%</strong>
+              </div>
+              <div className="progress-track"><span style={{ width: "100%" }} /></div>
+              <div className="progress-row">
+                <span>Hotel</span><strong>50%</strong>
+              </div>
+              <div className="progress-track"><span style={{ width: "50%" }} /></div>
+              <div className="progress-row">
+                <span>Attività</span><strong>30%</strong>
+              </div>
+              <div className="progress-track"><span style={{ width: "30%" }} /></div>
+            </div>
+
+            <div className="quick-card">
+              <div className="section-kicker">AZIONI RAPIDE</div>
+              <div className="quick-actions">
+                <button><CalendarDays size={19} /><span>Itinerario</span></button>
+                <button><WalletCards size={19} /><span>Spese</span></button>
+                <button><Map size={19} /><span>Mappa</span></button>
+                <button><Compass size={19} /><span>App Utili</span></button>
+              </div>
+            </div>
+
+            <div className="tip-card">
+              <Plane size={22} />
+              <div>
+                <strong>Consiglio Mova</strong>
+                <p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      {showCreate && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeCreate}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="create-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="section-kicker">NUOVO VIAGGIO · PASSO {createStep} DI 3</div>
+                <h2 id="create-title">{createStep === 1 ? "Dove vuoi andare?" : createStep === 2 ? "Quando si parte?" : "Ultimi dettagli"}</h2>
+              </div>
+              <button className="icon-button" onClick={closeCreate} aria-label="Chiudi"><X size={21} /></button>
+            </div>
+            <div className="step-progress" aria-label={`Passo ${createStep} di 3`}><span style={{ width: `${createStep * 33.333}%` }} /></div>
+            <form onSubmit={(event) => { event.preventDefault(); if (createStep === 1 && (!selectedCountry || !draft.city.trim())) return; createStep < 3 ? setCreateStep(createStep + 1) : addTrip(); }} className="trip-form">
+              {createStep === 1 && <>
+                <label className="autocomplete-field">Paese
+                  <input value={draft.country} autoFocus onFocus={() => setCountrySearchOpen(Boolean(draft.country.trim()))} onChange={(event) => { setDraft({ ...draft, country: event.target.value, city: "" }); setCountrySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={countryKeyboard.onKeyDown} placeholder="Inizia a digitare un Paese" autoComplete="off" role="combobox" aria-expanded={countrySearchOpen && countryMatches.length > 0} aria-controls="country-options" aria-activedescendant={countryKeyboard.activeIndex >= 0 ? `country-option-${countryKeyboard.activeIndex}` : undefined} required />
+                  {countrySearchOpen && countryMatches.length > 0 && <div className="autocomplete-menu" id="country-options" role="listbox">{countryMatches.map((country, index) => <button type="button" id={`country-option-${index}`} role="option" aria-selected={countryKeyboard.activeIndex === index} className={countryKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={country.isoCode} onMouseEnter={() => countryKeyboard.setActiveIndex(index)} onClick={() => selectCountry(index)}><span>{country.flag}</span><strong>{country.displayName}</strong><small>{country.name !== country.displayName ? country.name : country.isoCode}</small></button>)}</div>}
+                </label>
+                <label className="autocomplete-field">Città o tappe
+                  <input value={draft.city} disabled={!selectedCountry} onFocus={() => setCitySearchOpen(true)} onChange={(event) => { setDraft({ ...draft, city: event.target.value }); setCitySearchOpen(true); }} onKeyDown={cityKeyboard.onKeyDown} placeholder={selectedCountry ? "Es. Roma · Firenze" : "Seleziona prima un Paese"} autoComplete="off" role="combobox" aria-expanded={citySearchOpen && cityMatches.length > 0} aria-controls="city-options" aria-activedescendant={cityKeyboard.activeIndex >= 0 ? `city-option-${cityKeyboard.activeIndex}` : undefined} required />
+                  {citySearchOpen && cityMatches.length > 0 && <div className="autocomplete-menu" id="city-options" role="listbox">{cityMatches.map((city, index) => <button type="button" id={`city-option-${index}`} role="option" aria-selected={cityKeyboard.activeIndex === index} className={cityKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={`${city.name}-${city.stateCode}-${index}`} onMouseEnter={() => cityKeyboard.setActiveIndex(index)} onClick={() => selectCity(index)}><Map size={17} /><strong>{city.name}</strong><small>{city.stateCode}</small></button>)}</div>}
+                  {selectedCountry && <small className="field-hint">Per aggiungere un’altra tappa, digita “ · ” e continua a scrivere.</small>}
+                </label>
+              </>}
+              {createStep === 2 && <div className="form-grid">
+                <label>Partenza
+                  <input type="date" value={draft.startDate} onChange={(event) => setDraft({ ...draft, startDate: event.target.value })} required />
+                </label>
+                <label>Ritorno
+                  <input type="date" min={draft.startDate} value={draft.endDate} onChange={(event) => setDraft({ ...draft, endDate: event.target.value })} required />
+                </label>
+              </div>}
+              {createStep === 3 && <>
+                <label>Nome del viaggio
+                  <input value={draft.name} onChange={(event) => { setCustomTripName(true); setDraft({ ...draft, name: event.target.value }); }} placeholder={`Es. ${suggestedTripName(draft)}`} required />
+                </label>
+                <section className="create-participants">
+                  <div className="create-participants-heading"><div><strong>Partecipanti</strong><span>Tu sei già incluso nel viaggio</span></div><span><Users size={16} /> {1 + tripGuests.length}</span></div>
+                  {frequentTravelers.length > 0 && <div className="frequent-travelers"><small>PERSONE CON CUI HAI GIÀ VIAGGIATO</small><div>{frequentTravelers.map((companion) => { const selected = tripGuests.some((item) => item.email === companion.email); return <button type="button" key={companion.email} className={selected ? "selected" : ""} onClick={() => toggleCompanion(companion)}><span className="companion-avatar">{companion.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><strong>{companion.name}</strong><small>{companion.trips} {companion.trips === 1 ? "viaggio insieme" : "viaggi insieme"}</small></span><span className="companion-check">{selected ? <Check size={15} /> : <UserPlus size={15} />}</span></button>; })}</div></div>}
+                  <div className="new-guest"><label>Invita una nuova persona</label><div><Mail size={17} /><input type="email" value={guestEmail} onChange={(event) => { setGuestEmail(event.target.value); setGuestError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addGuestEmail(); } }} placeholder="nome@email.com" /><button type="button" onClick={addGuestEmail} disabled={!guestEmail.trim()}><Plus size={17} /> Aggiungi</button></div>{guestError && <small className="guest-error">{guestError}</small>}</div>
+                  {tripGuests.length > 0 && <div className="selected-guests">{tripGuests.map((guest) => <span key={guest.email}><span>{guest.name}</span><small>{guest.email}</small><button type="button" onClick={() => setTripGuests((current) => current.filter((item) => item.email !== guest.email))} aria-label={`Rimuovi ${guest.name}`}><X size={14} /></button></span>)}</div>}
+                </section>
+                <div className="trip-summary">
+                  <span className="summary-flag">{selectedCountry?.flag ?? countryFlags[draft.country] ?? "🌍"}</span>
+                  <div><strong>{draft.name || `Viaggio in ${draft.country}`}</strong><span>{draft.city} · {formatDate(draft.startDate)} – {formatDate(draft.endDate)} · {1 + tripGuests.length} {1 + tripGuests.length === 1 ? "partecipante" : "partecipanti"}</span></div>
+                </div>
+              </>}
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={createStep === 1 ? closeCreate : () => setCreateStep(createStep - 1)}>{createStep === 1 ? "Annulla" : "Indietro"}</button>
+                <button type="submit" className="primary-button" disabled={createStep === 1 && (!selectedCountry || !draft.city.trim())}>{createStep === 3 ? "Crea viaggio" : "Continua"} <ChevronRight size={18} /></button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <nav className="mobile-bottom-nav" aria-label="Navigazione mobile">
+        {navItems.map(({ label, icon: Icon }, index) => (
+          <button key={label} className={index === 0 ? "active" : ""} onClick={() => { if (label === "Profilo") router.push("/auth"); if (label === "Progressi") router.push("/progress"); }}>
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+    </main>
+  );
+}

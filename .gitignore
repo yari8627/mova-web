@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+.env
+.env.local
+prisma/dev.db
+prisma/dev.db-journal
+backups/
+.tools/
+storage/documents/*
+!storage/documents/.gitkeep
+storage/avatars/*
+!storage/avatars/.gitkeep
+.DS_Store
+*.log
+*.tsbuildinfo

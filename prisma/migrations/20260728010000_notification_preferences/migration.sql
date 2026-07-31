@@ -1,0 +1,4 @@
+ALTER TABLE "Notification" ADD COLUMN "dedupeKey" TEXT;
+CREATE UNIQUE INDEX "Notification_dedupeKey_key" ON "Notification"("dedupeKey");
+CREATE TABLE "NotificationPreference" ("id" TEXT NOT NULL PRIMARY KEY, "userId" TEXT NOT NULL, "invites" BOOLEAN NOT NULL DEFAULT true, "itineraryChanges" BOOLEAN NOT NULL DEFAULT true, "bookingUpdates" BOOLEAN NOT NULL DEFAULT true, "expenseUpdates" BOOLEAN NOT NULL DEFAULT true, "documentUpdates" BOOLEAN NOT NULL DEFAULT true, "tripReminders" BOOLEAN NOT NULL DEFAULT true, "activityReminders" BOOLEAN NOT NULL DEFAULT true, "reminderDaysBefore" INTEGER NOT NULL DEFAULT 7, "activityHoursBefore" INTEGER NOT NULL DEFAULT 24, CONSTRAINT "NotificationPreference_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "NotificationPreference_userId_key" ON "NotificationPreference"("userId");

@@ -1,0 +1,5 @@
+ALTER TABLE "Booking" ADD COLUMN "provider" TEXT;
+ALTER TABLE "Booking" ADD COLUMN "location" TEXT;
+ALTER TABLE "Booking" ADD COLUMN "notes" TEXT;
+ALTER TABLE "Booking" ADD COLUMN "source" TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE "Booking" ADD COLUMN "importedAt" DATETIME;

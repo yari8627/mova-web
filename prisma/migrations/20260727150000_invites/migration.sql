@@ -1,0 +1,3 @@
+CREATE TABLE "TripInvite" ("id" TEXT NOT NULL PRIMARY KEY, "code" TEXT NOT NULL, "tripId" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT 'participant', "status" TEXT NOT NULL DEFAULT 'pending', "expiresAt" DATETIME NOT NULL, "acceptedAt" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "TripInvite_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip" ("id") ON DELETE CASCADE ON UPDATE CASCADE);
+CREATE UNIQUE INDEX "TripInvite_code_key" ON "TripInvite"("code");
+CREATE INDEX "TripInvite_tripId_email_idx" ON "TripInvite"("tripId", "email");

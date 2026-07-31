@@ -1,0 +1,14 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { AlertTriangle, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+type AccountState = { requiresPassword: boolean; ownedTrips: Array<{ id: string; name: string }> };
+export default function AccountSettingsPage() {
+  const router = useRouter(); const [account, setAccount] = useState<AccountState | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
+  useEffect(() => { fetch("/api/auth/account").then((response) => response.json()).then(setAccount); }, []);
+  async function removeAccount(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setLoading(true); setError(""); const data = new FormData(event.currentTarget); const response = await fetch("/api/auth/account", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: data.get("password"), confirmation: data.get("confirmation") }) }); const result = await response.json(); setLoading(false); if (!response.ok) return setError(result.error || "Non è stato possibile eliminare l’account."); router.push("/auth"); router.refresh(); }
+  if (!account) return <main className="detail-loading">Controllo dell’account…</main>;
+  return <main className="preference-shell"><header><button className="detail-brand home-brand-button" onClick={() => router.push("/")}>mova</button></header><section className="preference-card account-card"><div className="preference-heading"><span><AlertTriangle size={25} /></span><div><p className="section-kicker">ACCOUNT</p><h1>Elimina account</h1><p>Questa operazione è permanente e non può essere annullata.</p></div></div>{account.ownedTrips.length > 0 && <div className="account-blocker"><strong>Prima devi gestire questi viaggi:</strong>{account.ownedTrips.map((trip) => <button key={trip.id} onClick={() => router.push(`/trips/${trip.id}/settings`)}>{trip.name}<span>Trasferisci proprietà o elimina</span></button>)}</div>}<form className="security-form account-delete-form" onSubmit={removeAccount}><p>Verranno eliminati profilo, sessioni, notifiche e dati personali. Le informazioni condivise già attribuite al gruppo potrebbero restare senza riferimento al tuo account.</p>{account.requiresPassword && <label>Password attuale<input name="password" type="password" autoComplete="current-password" required /></label>}<label>Scrivi ELIMINA per confermare<input name="confirmation" autoComplete="off" required /></label>{error && <div className="auth-error">{error}</div>}<button className="danger-button account-delete-button" disabled={loading || account.ownedTrips.length > 0}><Trash2 size={17} /> {loading ? "Eliminazione…" : "Elimina definitivamente l’account"}</button></form></section></main>;
+}

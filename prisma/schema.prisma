@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id          String        @id
+  name        String
+  country     String
+  countryCode String
+  city        String
+  startDate   DateTime
+  endDate     DateTime
+  people      Int           @default(1)
+  theme       String        @default("blue")
+  budget      Float?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  archivedAt  DateTime?
+  ownerId     String?
+  owner       User?         @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  activities  Activity[]
+  bookings    Booking[]
+  documents   Document[]
+  expenses    Expense[]
+  participants Participant[]
+  invites      TripInvite[]
+  packingItems PackingItem[]
+}
+
+model User {
+  id           String        @id
+  name         String
+  email        String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  emailVerifiedAt DateTime?
+  pendingEmail String?       @unique
+  avatarStorageKey String?   @unique
+  avatarMimeType String?
+  googleSub String?          @unique
+  externalAvatarUrl String?
+  passwordLogin Boolean      @default(true)
+  passportCountry String     @default("ITA")
+  sessions     AuthSession[]
+  trips        Trip[]
+  documents    Document[]
+  expenses     Expense[]
+  notifications Notification[]
+  notificationPreference NotificationPreference?
+  emailTokens  EmailToken[]
+  visitedCountries VisitedCountry[]
+  packingItems PackingItem[]
+}
+
+model PackingItem {
+  id        String   @id
+  tripId    String
+  userId    String
+  label     String
+  packed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, userId, createdAt])
+}
+
+model VisitedCountry {
+  id          String   @id
+  userId      String
+  countryCode String
+  visitedAt   DateTime @default(now())
+  source      String   @default("manual")
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, countryCode])
+  @@index([userId, visitedAt])
+}
+
+model AuthSession {
+  id        String   @id
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Activity {
+  id      String  @id
+  tripId  String
+  day     Int
+  title   String
+  place   String
+  placeAddress String?
+  latitude Float?
+  longitude Float?
+  time    String
+  done    Boolean @default(false)
+  bookingId String?
+  bookingEvent String?
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  trip    Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model Booking {
+  id        String   @id
+  tripId    String
+  title     String
+  type      String
+  startDate DateTime
+  endDate   DateTime?
+  reference String?
+  status    String   @default("pending")
+  provider  String?
+  location  String?
+  notes     String?
+  source    String   @default("manual")
+  importedAt DateTime?
+  originAirport String?
+  destinationAirport String?
+  itineraryActivities Activity[]
+  documents Document[]
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id       String  @id
+  tripId   String
+  name     String
+  category String
+  fileName String
+  size     Int
+  offline  Boolean @default(false)
+  createdById String?
+  storageKey String? @unique
+  mimeType String?
+  requirementKey String?
+  bookingId String?
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  trip     Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model Expense {
+  id          String  @id
+  tripId      String
+  description String
+  amount      Float
+  category    String
+  paidBy      String
+  date        DateTime
+  sharedWith  String?
+  kind        String  @default("expense")
+  recipient   String?
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  trip        Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+}
+
+model Participant {
+  id     String @id
+  tripId String
+  name   String
+  email  String
+  role   String @default("participant")
+  status String @default("pending")
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, email])
+}
+
+model TripInvite {
+  id         String    @id
+  code       String    @unique
+  tripId     String
+  email      String
+  name       String
+  role       String    @default("participant")
+  status     String    @default("pending")
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+  trip       Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, email])
+}
+
+model Notification {
+  id        String    @id
+  userId    String
+  tripId    String?
+  type      String
+  title     String
+  message   String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  dedupeKey String?   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model NotificationPreference {
+  id                 String  @id
+  userId             String  @unique
+  invites            Boolean @default(true)
+  itineraryChanges   Boolean @default(true)
+  bookingUpdates     Boolean @default(true)
+  expenseUpdates     Boolean @default(true)
+  documentUpdates    Boolean @default(true)
+  tripReminders      Boolean @default(true)
+  activityReminders  Boolean @default(true)
+  reminderDaysBefore Int     @default(7)
+  activityHoursBefore Int    @default(24)
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailToken {
+  id        String    @id
+  userId    String
+  type      String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, usedAt])
+}

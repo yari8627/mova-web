@@ -1,0 +1,8 @@
+import { randomUUID } from "crypto";
+import { NextResponse } from "next/server";
+import { currentUser } from "../../../lib/auth";
+import { prisma } from "../../../lib/prisma";
+
+const defaults = { invites: true, itineraryChanges: true, bookingUpdates: true, expenseUpdates: true, documentUpdates: true, tripReminders: true, activityReminders: true, reminderDaysBefore: 7, activityHoursBefore: 24 };
+export async function GET() { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); return NextResponse.json(await prisma.notificationPreference.upsert({ where: { userId: user.id }, update: {}, create: { id: randomUUID(), userId: user.id, ...defaults } })); }
+export async function PATCH(request: Request) { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const body = await request.json(); const data = { invites: Boolean(body.invites), itineraryChanges: Boolean(body.itineraryChanges), bookingUpdates: Boolean(body.bookingUpdates), expenseUpdates: Boolean(body.expenseUpdates), documentUpdates: Boolean(body.documentUpdates), tripReminders: Boolean(body.tripReminders), activityReminders: Boolean(body.activityReminders), reminderDaysBefore: Math.max(1, Math.min(30, Number(body.reminderDaysBefore) || 7)), activityHoursBefore: Math.max(1, Math.min(168, Number(body.activityHoursBefore) || 24)) }; return NextResponse.json(await prisma.notificationPreference.upsert({ where: { userId: user.id }, update: data, create: { id: randomUUID(), userId: user.id, ...data } })); }

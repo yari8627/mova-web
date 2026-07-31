@@ -1,0 +1,5 @@
+"use client";
+import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+export default function VerifyEmailPage() { const { token } = useParams<{ token: string }>(); const router = useRouter(); const [status, setStatus] = useState("Verifica in corso…"); const [verified, setVerified] = useState(false); useEffect(() => { fetch("/api/auth/verify-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).then(async (response) => { const result = await response.json(); setVerified(response.ok); setStatus(response.ok ? "Email verificata correttamente" : result.error); }); }, [token]); return <main className="auth-shell"><section className="auth-card auth-profile">{verified && <CheckCircle2 className="verify-icon" size={56} />}<div className="auth-brand">mova</div><h1>{status}</h1><button className="primary-button auth-submit" onClick={() => router.push(verified ? "/" : "/auth")}>Continua</button></section></main>; }

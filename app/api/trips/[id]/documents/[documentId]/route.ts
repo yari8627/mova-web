@@ -1,0 +1,9 @@
+import { NextResponse } from "next/server";
+import { currentUser } from "../../../../../../lib/auth";
+import { deleteDocumentFile } from "../../../../../../lib/document-storage";
+import { prisma } from "../../../../../../lib/prisma";
+import { tripAccess } from "../../../../../../lib/trip-access";
+
+async function authorize(tripId: string, documentId: string) { const user = await currentUser(); if (!user) return { error: NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }) }; const access = await tripAccess(tripId, user); if (!access.allowed) return { error: NextResponse.json({ error: "Accesso negato" }, { status: 403 }) }; const document = await prisma.document.findFirst({ where: { id: documentId, tripId } }); if (!document) return { error: NextResponse.json({ error: "Documento non trovato" }, { status: 404 }) }; if (access.role === "participant" && (document.category !== "personal" || document.createdById !== user.id)) return { error: NextResponse.json({ error: "Puoi modificare soltanto i tuoi documenti personali" }, { status: 403 }) }; return { document }; }
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; documentId: string }> }) { const { id, documentId } = await params; const auth = await authorize(id, documentId); if (auth.error) return auth.error; const body = await request.json(); return NextResponse.json(await prisma.document.update({ where: { id: documentId }, data: { offline: Boolean(body.offline) } })); }
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string; documentId: string }> }) { const { id, documentId } = await params; const auth = await authorize(id, documentId); if (auth.error) return auth.error; await deleteDocumentFile(auth.document?.storageKey); await prisma.document.delete({ where: { id: documentId } }); return NextResponse.json({ deleted: true }); }

@@ -1,0 +1,7 @@
+import { randomUUID } from "crypto";
+import { NextResponse } from "next/server";
+import { currentUser } from "../../../../../lib/auth";
+import { prisma } from "../../../../../lib/prisma";
+import { tripAccess } from "../../../../../lib/trip-access";
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const { id } = await params; const access = await tripAccess(id, user); if (!access.allowed) return NextResponse.json({ error: "Accesso negato" }, { status: 403 }); const body = await request.json(); const personal = access.role === "participant"; if (!body.description || Number(body.amount) <= 0) return NextResponse.json({ error: "Dati della spesa non validi" }, { status: 400 }); const expense = await prisma.expense.create({ data: { id: randomUUID(), tripId: id, description: String(body.description), amount: Number(body.amount), category: String(body.category || "Altro"), paidBy: personal ? user.name : String(body.paidBy || user.name), date: new Date(String(body.date)), sharedWith: body.sharedWith ? JSON.stringify(body.sharedWith) : null, kind: personal ? "expense" : String(body.kind || "expense"), recipient: personal ? null : body.recipient || null, createdById: user.id } }); return NextResponse.json(expense, { status: 201 }); }
