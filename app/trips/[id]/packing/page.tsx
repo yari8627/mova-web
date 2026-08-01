@@ -2,12 +2,32 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Check, Luggage, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Camera, Check, Droplets, FileText, Footprints, Glasses, Headphones, Luggage, Pill, Plug, Plus, Shirt, Smartphone, Sun, Trash2, Umbrella, Utensils, WalletCards } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { titleCaseItalian } from "../../../../lib/text-format";
 
 type PackingItem = { id: string; label: string; packed: boolean };
+
+function PackingIcon({ label }: { label: string }) {
+  const value = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it");
+  if (/caric|adattator|presa|cavo|power.?bank|batter/.test(value)) return <Plug size={18} />;
+  if (/telefon|cellular|smartphone|tablet/.test(value)) return <Smartphone size={18} />;
+  if (/cuffi|auricolar|airpod/.test(value)) return <Headphones size={18} />;
+  if (/fotocamer|macchina fotograf|camera|gopro/.test(value)) return <Camera size={18} />;
+  if (/passaport|document|carta ident|patente|bigliett|visto/.test(value)) return <FileText size={18} />;
+  if (/portafogli|contant|soldi|carta di credito/.test(value)) return <WalletCards size={18} />;
+  if (/magli|camici|pantalon|vestit|giacc|felpa|intim|costume/.test(value)) return <Shirt size={18} />;
+  if (/scarp|sandali|ciabatt|stival/.test(value)) return <Footprints size={18} />;
+  if (/medicin|farmac|compress|pillol|cerott/.test(value)) return <Pill size={18} />;
+  if (/spazzolin|dentifric|shampoo|sapone|deodor|crema|igiene/.test(value)) return <Droplets size={18} />;
+  if (/occhial/.test(value)) return <Glasses size={18} />;
+  if (/ombrell|impermeabil/.test(value)) return <Umbrella size={18} />;
+  if (/crema solare|protezione solare|cappell/.test(value)) return <Sun size={18} />;
+  if (/libro|guida|quaderno/.test(value)) return <BookOpen size={18} />;
+  if (/cibo|snack|panino|borraccia|acqua|posate/.test(value)) return <Utensils size={18} />;
+  return <Luggage size={18} />;
+}
 
 export default function PackingPage() {
   const { id } = useParams<{ id: string }>();
@@ -55,7 +75,7 @@ export default function PackingPage() {
     <TripTabs tripId={id} />
     <section className="packing-checklist"><header><div className="packing-heading-icon"><Luggage size={22} /></div><div><p className="section-kicker">LA TUA LISTA</p><h2>Cosa portare in viaggio</h2><p>Aggiungi ciò che vuoi mettere in valigia e spuntalo quando è pronto.</p></div><strong>{packedCount} / {items.length}</strong></header>
       <form onSubmit={addItem}><input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={100} placeholder="Es. adattatore universale" aria-label="Oggetto da aggiungere alla checklist" autoFocus /><button className="primary-button" type="submit" disabled={!draft.trim()}><Plus size={17} /> Aggiungi</button></form>
-      {items.length > 0 ? <div className="packing-list">{items.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}><button className="packing-toggle" onClick={() => toggleItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button><span>{label}</span><button className="packing-remove" onClick={() => removeItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>La checklist è vuota</strong><p>Inizia aggiungendo il primo oggetto da portare.</p></div></div>}
+      {items.length > 0 ? <div className="packing-list">{items.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}><button className="packing-toggle" onClick={() => toggleItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button><span className="packing-item-icon"><PackingIcon label={label} /></span><span className="packing-item-label">{label}</span><button className="packing-remove" onClick={() => removeItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>La checklist è vuota</strong><p>Inizia aggiungendo il primo oggetto da portare.</p></div></div>}
     </section>
   </main>;
 }
