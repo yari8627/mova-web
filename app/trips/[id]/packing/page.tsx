@@ -7,7 +7,7 @@ import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { titleCaseItalian } from "../../../../lib/text-format";
 
-type PackingItem = { id: string; label: string; packed: boolean };
+type PackingItem = { id: string; label: string; packed: boolean; scope: "personal" | "shared"; createdBy?: string };
 
 function PackingIcon({ label }: { label: string }) {
   const value = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it");
@@ -34,20 +34,22 @@ export default function PackingPage() {
   const router = useRouter();
   const [items, setItems] = useState<PackingItem[]>([]);
   const [draft, setDraft] = useState("");
+  const [scope, setScope] = useState<"personal" | "shared">("personal");
   const packedCount = items.filter((item) => item.packed).length;
 
   useEffect(() => {
-    fetch(`/api/trips/${id}/packing`, { cache: "no-store" })
+    setItems([]);
+    fetch(`/api/trips/${id}/packing?scope=${scope}`, { cache: "no-store" })
       .then((response) => response.ok ? response.json() : [])
       .then(setItems)
       .catch(() => undefined);
-  }, [id]);
+  }, [id, scope]);
 
   async function addItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const label = draft.trim();
     if (!label) return;
-    const response = await fetch(`/api/trips/${id}/packing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label }) });
+    const response = await fetch(`/api/trips/${id}/packing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label, scope }) });
     if (!response.ok) return;
     const item = await response.json() as PackingItem;
     setItems((current) => [...current, item]);
@@ -73,9 +75,10 @@ export default function PackingPage() {
     <TripCover tripId={id} />
     <div className="expenses-title"><p className="section-kicker">CHECKLIST PERSONALE</p><h1>Cosa Portare</h1><p>Prepara la valigia e tieni sotto controllo tutto ciò che serve per il viaggio.</p></div>
     <TripTabs tripId={id} />
-    <section className="packing-checklist"><header><div className="packing-heading-icon"><Luggage size={22} /></div><div><p className="section-kicker">LA TUA LISTA</p><h2>Cosa portare in viaggio</h2><p>Aggiungi ciò che vuoi mettere in valigia e spuntalo quando è pronto.</p></div><strong>{packedCount} / {items.length}</strong></header>
+    <nav className="packing-scope-tabs" aria-label="Tipo di checklist"><button className={scope === "personal" ? "active" : undefined} onClick={() => setScope("personal")}><strong>Personale</strong><span>Visibile solo a te</span></button><button className={scope === "shared" ? "active" : undefined} onClick={() => setScope("shared")}><strong>Condivisa</strong><span>Visibile ai partecipanti</span></button></nav>
+    <section className="packing-checklist"><header><div className="packing-heading-icon"><Luggage size={22} /></div><div><p className="section-kicker">{scope === "personal" ? "LA TUA LISTA" : "LISTA DEL GRUPPO"}</p><h2>{scope === "personal" ? "Le mie cose" : "Cose condivise"}</h2><p>{scope === "personal" ? "Solo tu puoi vedere e gestire questa checklist." : "Tutti i partecipanti del viaggio possono vederla e aggiornarla."}</p></div><strong>{packedCount} / {items.length}</strong></header>
       <form onSubmit={addItem}><input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={100} placeholder="Es. adattatore universale" aria-label="Oggetto da aggiungere alla checklist" autoFocus /><button className="primary-button" type="submit" disabled={!draft.trim()}><Plus size={17} /> Aggiungi</button></form>
-      {items.length > 0 ? <div className="packing-list">{items.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}><button className="packing-toggle" onClick={() => toggleItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button><span className="packing-item-icon"><PackingIcon label={label} /></span><span className="packing-item-label">{label}</span><button className="packing-remove" onClick={() => removeItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>La checklist è vuota</strong><p>Inizia aggiungendo il primo oggetto da portare.</p></div></div>}
+      {items.length > 0 ? <div className="packing-list">{items.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}><button className="packing-toggle" onClick={() => toggleItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button><span className="packing-item-icon"><PackingIcon label={label} /></span><span className="packing-item-copy"><span className="packing-item-label">{label}</span>{scope === "shared" && item.createdBy && <small>Aggiunto da {item.createdBy}</small>}</span><button className="packing-remove" onClick={() => removeItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>{scope === "personal" ? "La tua checklist è vuota" : "La checklist condivisa è vuota"}</strong><p>{scope === "personal" ? "Inizia aggiungendo il primo oggetto da portare." : "Aggiungi qualcosa che può servire al gruppo."}</p></div></div>}
     </section>
   </main>;
 }

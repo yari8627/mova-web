@@ -13,12 +13,13 @@ async function authorizedUser(id: string) {
   return { user };
 }
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
-  const items = await prisma.packingItem.findMany({ where: { tripId: id, userId: auth.user!.id }, orderBy: [{ packed: "asc" }, { createdAt: "asc" }] });
-  return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label) })));
+  const scope = new URL(request.url).searchParams.get("scope") === "shared" ? "shared" : "personal";
+  const items = await prisma.packingItem.findMany({ where: { tripId: id, scope, ...(scope === "personal" ? { userId: auth.user!.id } : {}) }, include: { user: { select: { name: true } } }, orderBy: [{ packed: "asc" }, { createdAt: "asc" }] });
+  return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label), createdBy: item.user.name })));
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,11 +27,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
   const body = await request.json();
+  const scope = body.scope === "shared" ? "shared" : "personal";
   const label = titleCaseItalian(String(body.label || ""));
   if (!label) return NextResponse.json({ error: "Inserisci un oggetto" }, { status: 400 });
   if (label.length > 100) return NextResponse.json({ error: "Il nome è troppo lungo" }, { status: 400 });
-  const item = await prisma.packingItem.create({ data: { id: randomUUID(), tripId: id, userId: auth.user!.id, label } });
-  return NextResponse.json(item, { status: 201 });
+  const item = await prisma.packingItem.create({ data: { id: randomUUID(), tripId: id, userId: auth.user!.id, label, scope }, include: { user: { select: { name: true } } } });
+  return NextResponse.json({ ...item, createdBy: item.user.name }, { status: 201 });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -38,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
   const body = await request.json();
-  const existing = await prisma.packingItem.findFirst({ where: { id: String(body.id || ""), tripId: id, userId: auth.user!.id } });
+  const existing = await prisma.packingItem.findFirst({ where: { id: String(body.id || ""), tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
   if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
   const item = await prisma.packingItem.update({ where: { id: existing.id }, data: { packed: body.packed === undefined ? undefined : Boolean(body.packed) } });
   return NextResponse.json(item);
@@ -49,7 +51,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
   const itemId = new URL(request.url).searchParams.get("itemId") || "";
-  const existing = await prisma.packingItem.findFirst({ where: { id: itemId, tripId: id, userId: auth.user!.id } });
+  const existing = await prisma.packingItem.findFirst({ where: { id: itemId, tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
   if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
   await prisma.packingItem.delete({ where: { id: existing.id } });
   return NextResponse.json({ deleted: true });
