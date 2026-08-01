@@ -9,6 +9,10 @@ import { titleCaseItalian } from "../../../../lib/text-format";
 
 type PackingItem = { id: string; label: string; packed: boolean; scope: "personal" | "shared"; createdBy?: string };
 
+function sortPackingItems(items: PackingItem[]) {
+  return [...items].sort((a, b) => Number(a.packed) - Number(b.packed));
+}
+
 function PackingIcon({ label }: { label: string }) {
   const value = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it");
   if (/caric|adattator|presa|cavo|power.?bank|batter/.test(value)) return <Plug size={18} />;
@@ -41,7 +45,7 @@ export default function PackingPage() {
     setItems([]);
     fetch(`/api/trips/${id}/packing?scope=${scope}`, { cache: "no-store" })
       .then((response) => response.ok ? response.json() : [])
-      .then(setItems)
+      .then((result) => setItems(sortPackingItems(result)))
       .catch(() => undefined);
   }, [id, scope]);
 
@@ -52,15 +56,15 @@ export default function PackingPage() {
     const response = await fetch(`/api/trips/${id}/packing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label, scope }) });
     if (!response.ok) return;
     const item = await response.json() as PackingItem;
-    setItems((current) => [...current, item]);
+    setItems((current) => sortPackingItems([...current, item]));
     setDraft("");
   }
 
   async function toggleItem(item: PackingItem) {
     const packed = !item.packed;
-    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, packed } : entry));
+    setItems((current) => sortPackingItems(current.map((entry) => entry.id === item.id ? { ...entry, packed } : entry)));
     const response = await fetch(`/api/trips/${id}/packing`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, packed }) });
-    if (!response.ok) setItems((current) => current.map((entry) => entry.id === item.id ? item : entry));
+    if (!response.ok) setItems((current) => sortPackingItems(current.map((entry) => entry.id === item.id ? item : entry)));
   }
 
   async function removeItem(itemId: string) {
