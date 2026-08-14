@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { City, Country } from "country-state-city";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
 import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
+import { canonicalCountryName } from "../lib/country-names";
 import {
   Bell,
   CalendarDays,
@@ -79,7 +80,7 @@ const navItems = [
 const regionNames = new Intl.DisplayNames(["it"], { type: "region" });
 const worldCountries = Country.getAllCountries().map((country) => ({
   ...country,
-  displayName: regionNames.of(country.isoCode) ?? country.name,
+  displayName: canonicalCountryName(country.isoCode, regionNames.of(country.isoCode) ?? country.name),
 })).sort((a, b) => a.displayName.localeCompare(b.displayName, "it"));
 
 function formatDate(value: string) {
