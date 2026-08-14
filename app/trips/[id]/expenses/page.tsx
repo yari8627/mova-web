@@ -88,7 +88,7 @@ export default function ExpensesPage() {
     if (!role) return;
     setSaveError("");
     setEditingId(null);
-    setDraft({ ...emptyDraft, date: todayLocal(), paidBy: role === "participant" ? userName : participants[0], recipient: participants[1] ?? participants[0], sharedWith: [...participants], kind: "expense" });
+    setDraft({ ...emptyDraft, date: todayLocal(), paidBy: userName || participants[0] || "", recipient: participants.find((name) => name !== userName) ?? participants[0] ?? "", sharedWith: [...participants], kind: "expense" });
     setShowAdd(true);
   }
 
@@ -116,7 +116,7 @@ export default function ExpensesPage() {
     if (!response.ok) { setSaveError(result.error || "Non è stato possibile salvare la spesa."); return; }
     const persistedExpense = normalizeExpense(result as Expense);
     remember(editingId ? expenses.map((item) => item.id === editingId ? persistedExpense : item) : [persistedExpense, ...expenses]);
-    setDraft({ ...emptyDraft, paidBy: participants[0], recipient: participants[1] ?? participants[0], sharedWith: [...participants] });
+    setDraft({ ...emptyDraft, paidBy: userName || participants[0] || "", recipient: participants.find((name) => name !== userName) ?? participants[0] ?? "", sharedWith: [...participants] });
     setEditingId(null);
     setShowAdd(false);
   }
@@ -145,9 +145,10 @@ export default function ExpensesPage() {
 
     {showAdd && <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}><div className="modal expense-modal" role="dialog" aria-modal="true" aria-labelledby="expense-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="section-kicker">{draft.kind === "expense" ? "SPESA CONDIVISA" : "REGOLAZIONE SALDO"}</p><h2 id="expense-title">{editingId ? "Modifica movimento" : draft.kind === "expense" ? "Aggiungi spesa" : "Regola saldo"}</h2></div><button className="icon-button" onClick={() => setShowAdd(false)} aria-label="Chiudi"><X size={20} /></button></div><form className="trip-form" onSubmit={(event) => { event.preventDefault(); saveExpense(); }}>
       <div className="movement-type"><button type="button" className={draft.kind === "expense" ? "selected" : ""} onClick={() => setDraft({ ...draft, kind: "expense" })}>Dividi spesa</button><button type="button" className={draft.kind === "settlement" ? "selected" : ""} onClick={() => setDraft({ ...draft, kind: "settlement", description: draft.description || "Regolazione saldo" })}>Regola saldo</button></div>
+      {draft.kind === "expense" && <label>Pagata da<select value={draft.paidBy} onChange={(event) => setDraft({ ...draft, paidBy: event.target.value })}>{participants.map((name) => <option key={name}>{name}</option>)}</select></label>}
       <label>Descrizione<input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Es. Cena a Shinjuku" required autoFocus /></label>
       <label>Importo (€)<input inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="0,00" required /></label>
-      {draft.kind === "expense" ? <><div className="form-grid"><label>Categoria<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}><option>Ristoranti</option><option>Alloggio</option><option>Trasporti</option><option>Attività</option><option>Altro</option></select></label><label>Pagata da<select value={draft.paidBy} onChange={(event) => setDraft({ ...draft, paidBy: event.target.value })}>{participants.map((name) => <option key={name}>{name}</option>)}</select></label></div>
+      {draft.kind === "expense" ? <><label>Categoria<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}><option>Ristoranti</option><option>Alloggio</option><option>Trasporti</option><option>Attività</option><option>Altro</option></select></label>
       <fieldset className="split-people"><legend>Dividi con ({draft.sharedWith.length})</legend><div>{participants.map((name) => { const selected = draft.sharedWith.includes(name); return <button type="button" className={selected ? "selected" : ""} key={name} onClick={() => setDraft({ ...draft, sharedWith: selected ? draft.sharedWith.filter((item) => item !== name) : [...draft.sharedWith, name] })}><span>{name.slice(0, 1)}</span>{name}{selected && <span className="split-check">✓</span>}</button>; })}</div>{!draft.sharedWith.length && <p>Seleziona almeno una persona.</p>}</fieldset>
       <div className="split-preview"><CircleDollarSign size={20} /><span>Quota per persona</span><strong>{draft.amount && draft.sharedWith.length ? money.format(Number(draft.amount.replace(",", ".")) / draft.sharedWith.length) : money.format(0)}</strong></div></> : <><div className="form-grid"><label>Chi paga<select value={draft.paidBy} onChange={(event) => setDraft({ ...draft, paidBy: event.target.value, recipient: event.target.value === draft.recipient ? participants.find((name) => name !== event.target.value) ?? "" : draft.recipient })}>{participants.map((name) => <option key={name}>{name}</option>)}</select></label><label>Chi riceve<select value={draft.recipient} onChange={(event) => setDraft({ ...draft, recipient: event.target.value })}>{participants.filter((name) => name !== draft.paidBy).map((name) => <option key={name}>{name}</option>)}</select></label></div><div className="settlement-note"><CircleDollarSign size={20} /><span>L’importo riduce il debito di {draft.paidBy} verso {draft.recipient} senza aumentare le spese del viaggio.</span></div></>}
       {saveError && <div className="auth-error security-feedback">{saveError}</div>}
