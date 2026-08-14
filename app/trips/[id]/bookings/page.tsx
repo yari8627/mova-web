@@ -108,6 +108,10 @@ function dateLabel(value: string) {
   }).format(new Date(value));
 }
 
+function bookingTitle(item: Booking) {
+  return item.type === "flight" ? item.title.replace(/^Volo\s+/i, "") : item.title;
+}
+
 function BookingVisual({ item }: { item: Booking }) {
   const category = travelCategoryFromText(item.type, `${item.title} ${item.provider || ""}`);
   const [image, setImage] = useState("");
@@ -373,7 +377,7 @@ export default function BookingsPage() {
       draft.type === "flight"
         ? {
             ...confirmedDraft,
-            title: `Volo ${airportCode(draft.originAirport)} → ${airportCode(draft.destinationAirport)}`,
+            title: `${airportCode(draft.originAirport)} → ${airportCode(draft.destinationAirport)}`,
             location: `${draft.originAirport} → ${draft.destinationAirport}`,
           }
         : confirmedDraft;
@@ -501,17 +505,6 @@ export default function BookingsPage() {
         </div>
         {groups.map((group) => (
           <div className="booking-group" key={group.type}>
-            <h2>
-              {group.type === "flight"
-                ? "Voli"
-                : group.type === "hotel"
-                  ? "Hotel"
-                  : group.type === "train"
-                    ? "Treni"
-                    : group.type === "car"
-                      ? "Auto e transfer"
-                      : "Attività"}
-            </h2>
             {group.items.map((item) => (
               <article
                 id={`booking-${item.id}`}
@@ -521,7 +514,7 @@ export default function BookingsPage() {
                 <BookingVisual item={item} />
                 <div>
                   <div className="booking-title-line">
-                    <strong>{item.title}</strong>
+                    <strong>{bookingTitle(item)}</strong>
                     {item.source === "email" && (
                       <span className="booking-source">
                         <Mail size={11} /> Email
