@@ -454,6 +454,9 @@ export default function BookingsPage() {
       items: bookings.filter((item) => item.type === type),
     }))
     .filter((group) => group.items.length);
+  const transportCount = bookings.filter((item) => ["flight", "train", "car"].includes(item.type)).length;
+  const hotelCount = bookings.filter((item) => item.type === "hotel").length;
+  const activityCount = bookings.filter((item) => item.type === "activity").length;
   useEffect(() => {
     if (
       !highlightedBookingId ||
@@ -492,14 +495,26 @@ export default function BookingsPage() {
         <div className="booking-overview">
           <div>
             <strong>{bookings.length}</strong>
-            <span>prenotazioni</span>
+            <span>Prenotazioni</span>
+          </div>
+          <div>
+            <strong>{transportCount}</strong>
+            <span>Trasporti</span>
+          </div>
+          <div>
+            <strong>{hotelCount}</strong>
+            <span>Hotel</span>
+          </div>
+          <div>
+            <strong>{activityCount}</strong>
+            <span>Attività</span>
           </div>
           {canManage && (
             <button
               className="primary-button booking-add-button"
               onClick={openNew}
             >
-              <Plus size={18} /> Aggiungi prenotazione
+              <Plus size={18} /> Aggiungi Prenotazione
             </button>
           )}
         </div>
