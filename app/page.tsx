@@ -336,9 +336,8 @@ export default function Page() {
                     Apri viaggio <ChevronRight size={18} />
                   </button>
                 </div>
-                <div className="countdown">
-                  <strong>{daysUntil(selectedTrip.startDate)}</strong>
-                  <span>giorni</span>
+                <div className="countdown" aria-label={daysUntil(selectedTrip.startDate) === 0 ? "Partenza oggi" : `Partenza tra ${daysUntil(selectedTrip.startDate)} ${daysUntil(selectedTrip.startDate) === 1 ? "giorno" : "giorni"}`}>
+                  {daysUntil(selectedTrip.startDate) === 0 ? <strong className="countdown-today">Oggi</strong> : <><span>Tra</span><strong>{daysUntil(selectedTrip.startDate)}</strong><span>{daysUntil(selectedTrip.startDate) === 1 ? "giorno" : "giorni"}</span></>}
                 </div>
               </article>
             ) : null}
