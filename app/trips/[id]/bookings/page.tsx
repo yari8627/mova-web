@@ -607,7 +607,7 @@ export default function BookingsPage() {
               <div>
                 <p className="section-kicker">PRENOTAZIONE</p>
                 <h2>
-                  {editingId ? "Modifica prenotazione" : "Nuova prenotazione"}
+                  {editingId ? "Modifica Prenotazione" : "Nuova Prenotazione"}
                 </h2>
               </div>
               <button
@@ -639,21 +639,21 @@ export default function BookingsPage() {
                   <option value="flight">Volo</option>
                   <option value="hotel">Hotel</option>
                   <option value="train">Treno</option>
-                  <option value="car">Auto o transfer</option>
+                  <option value="car">Auto o Transfer</option>
                   <option value="activity">Attività</option>
                 </select>
               </label>
               {draft.type === "flight" ? (
                 <div className="form-grid airport-fields">
                   <AirportField
-                    label="Aeroporto di partenza"
+                    label="Aeroporto di Partenza"
                     value={draft.originAirport}
                     onChange={(value) =>
                       setDraft({ ...draft, originAirport: value })
                     }
                   />
                   <AirportField
-                    label="Aeroporto di arrivo"
+                    label="Aeroporto di Arrivo"
                     value={draft.destinationAirport}
                     onChange={(value) =>
                       setDraft({ ...draft, destinationAirport: value })
@@ -675,7 +675,7 @@ export default function BookingsPage() {
                 </label>
               )}
               <label>
-                Data e ora
+                Data e Ora
                 <input
                   type="datetime-local"
                   value={draft.startDate}
@@ -770,7 +770,7 @@ export default function BookingsPage() {
                 )}
               </div>
               <label>
-                Riferimento o conferma
+                Riferimento o Conferma
                 <input
                   value={draft.reference}
                   onChange={(event) =>
