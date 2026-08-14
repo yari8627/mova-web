@@ -1,9 +1,12 @@
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { currentUser } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
 import { tripAccess } from "../../../../../lib/trip-access";
 import { titleCaseItalian } from "../../../../../lib/text-format";
+
+type PackingRow = { id: string; tripId: string; userId: string; label: string; packed: boolean; scope: string; createdAt: Date; updatedAt: Date; createdBy?: string };
 
 let packingSchemaReady: Promise<void> | null = null;
 
@@ -45,8 +48,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (auth.response) return auth.response;
   await ensurePackingSchema();
   const scope = new URL(request.url).searchParams.get("scope") === "shared" ? "shared" : "personal";
-  const items = await prisma.packingItem.findMany({ where: { tripId: id, scope, ...(scope === "personal" ? { userId: auth.user!.id } : {}) }, include: { user: { select: { name: true } } }, orderBy: [{ packed: "asc" }, { createdAt: "asc" }] });
-  return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label), createdBy: item.user.name })));
+  const visibility = scope === "personal" ? Prisma.sql`AND p."userId" = ${auth.user!.id}` : Prisma.empty;
+  const items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`
+    SELECT p.*, u."name" AS "createdBy"
+    FROM "PackingItem" p
+    JOIN "User" u ON u."id" = p."userId"
+    WHERE p."tripId" = ${id} AND p."scope" = ${scope} ${visibility}
+    ORDER BY p."packed" ASC, p."createdAt" ASC
+  `);
+  return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label) })));
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -59,8 +69,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const label = titleCaseItalian(String(body.label || ""));
   if (!label) return NextResponse.json({ error: "Inserisci un oggetto" }, { status: 400 });
   if (label.length > 100) return NextResponse.json({ error: "Il nome è troppo lungo" }, { status: 400 });
-  const item = await prisma.packingItem.create({ data: { id: randomUUID(), tripId: id, userId: auth.user!.id, label, scope }, include: { user: { select: { name: true } } } });
-  return NextResponse.json({ ...item, createdBy: item.user.name }, { status: 201 });
+  const itemId = randomUUID();
+  const items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`
+    INSERT INTO "PackingItem" ("id", "tripId", "userId", "label", "packed", "scope", "createdAt", "updatedAt")
+    VALUES (${itemId}, ${id}, ${auth.user!.id}, ${label}, false, ${scope}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    RETURNING *
+  `);
+  return NextResponse.json({ ...items[0], createdBy: auth.user!.name }, { status: 201 });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -69,10 +84,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (auth.response) return auth.response;
   await ensurePackingSchema();
   const body = await request.json();
-  const existing = await prisma.packingItem.findFirst({ where: { id: String(body.id || ""), tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
-  if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
-  const item = await prisma.packingItem.update({ where: { id: existing.id }, data: { packed: body.packed === undefined ? undefined : Boolean(body.packed) } });
-  return NextResponse.json(item);
+  const items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`
+    UPDATE "PackingItem"
+    SET "packed" = ${Boolean(body.packed)}, "updatedAt" = CURRENT_TIMESTAMP
+    WHERE "id" = ${String(body.id || "")} AND "tripId" = ${id}
+      AND ("scope" = 'shared' OR ("scope" = 'personal' AND "userId" = ${auth.user!.id}))
+    RETURNING *
+  `);
+  if (!items.length) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
+  return NextResponse.json(items[0]);
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -81,8 +101,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (auth.response) return auth.response;
   await ensurePackingSchema();
   const itemId = new URL(request.url).searchParams.get("itemId") || "";
-  const existing = await prisma.packingItem.findFirst({ where: { id: itemId, tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
-  if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
-  await prisma.packingItem.delete({ where: { id: existing.id } });
+  const deleted = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    DELETE FROM "PackingItem"
+    WHERE "id" = ${itemId} AND "tripId" = ${id}
+      AND ("scope" = 'shared' OR ("scope" = 'personal' AND "userId" = ${auth.user!.id}))
+    RETURNING "id"
+  `);
+  if (!deleted.length) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
   return NextResponse.json({ deleted: true });
 }
