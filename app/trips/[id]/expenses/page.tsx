@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, BedDouble, Bus, CircleDollarSign, Plane, Pencil, Plus, ReceiptText, ShoppingBag, Ticket, Train, Trash2, Utensils, Users, WalletCards, X } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
-import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
+import { syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
 type Expense = { id: string; description: string; amount: number; category: string; paidBy: string; date: string; sharedWith?: string[]; kind?: "expense" | "settlement"; recipient?: string; createdById?: string | null };
@@ -41,6 +41,8 @@ export default function ExpensesPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     const saved = window.localStorage.getItem(`mova-expenses-${id}`);
@@ -65,15 +67,25 @@ export default function ExpensesPage() {
     return { name, balance: paid - owed + settlementAdjustment };
   });
 
-  function persist(next: Expense[]) {
-    if (!canManage) return;
+  function remember(next: Expense[]) {
     setExpenses(next);
     window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(next));
-    syncTripResource(id, "expenses", next);
+  }
+
+  function normalizeExpense(item: Expense & { sharedWith?: string | string[] }) {
+    return { ...item, date: item.date.slice(0, 10), sharedWith: typeof item.sharedWith === "string" ? JSON.parse(item.sharedWith) : item.sharedWith } as Expense;
+  }
+
+  async function deleteExpense(expenseId: string) {
+    setSaveError("");
+    const response = await fetch(`/api/trips/${id}/expenses/${expenseId}`, { method: "DELETE" });
+    if (!response.ok) { const result = await response.json().catch(() => ({})); setSaveError(result.error || "Non è stato possibile eliminare la spesa."); return; }
+    remember(expenses.filter((item) => item.id !== expenseId));
   }
 
   function openNewExpense() {
     if (!role) return;
+    setSaveError("");
     setEditingId(null);
     setDraft({ ...emptyDraft, paidBy: role === "participant" ? userName : participants[0], recipient: participants[1] ?? participants[0], sharedWith: [...participants], kind: "expense" });
     setShowAdd(true);
@@ -81,6 +93,7 @@ export default function ExpensesPage() {
 
   function openEditExpense(expense: Expense) {
     if (!canManage && expense.createdById !== userId) return;
+    setSaveError("");
     setEditingId(expense.id);
     setDraft({ description: expense.description, amount: String(expense.amount).replace(".", ","), category: expense.category, paidBy: expense.paidBy, date: expense.date, sharedWith: expense.sharedWith?.length ? [...expense.sharedWith] : [...participants], kind: expense.kind ?? "expense", recipient: expense.recipient ?? participants.find((name) => name !== expense.paidBy) ?? "Marco" });
     setShowAdd(true);
@@ -92,7 +105,16 @@ export default function ExpensesPage() {
     if (draft.kind === "expense" && !draft.sharedWith.length) return;
     if (draft.kind === "settlement" && draft.paidBy === draft.recipient) return;
     const savedExpense = { description: draft.description.trim(), amount, category: draft.category, paidBy: draft.paidBy, date: draft.date, sharedWith: draft.sharedWith, kind: draft.kind, recipient: draft.kind === "settlement" ? draft.recipient : undefined };
-    if (!canManage) { const endpoint = editingId ? `/api/trips/${id}/expenses/${editingId}` : `/api/trips/${id}/expenses`; const response = await fetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(savedExpense) }); if (!response.ok) return; const result = await response.json() as Expense; const next = editingId ? expenses.map((item) => item.id === editingId ? { ...result, date: result.date.slice(0, 10) } : item) : [{ ...result, date: result.date.slice(0, 10) }, ...expenses]; setExpenses(next); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(next)); } else persist(editingId ? expenses.map((item) => item.id === editingId ? { ...item, ...savedExpense } : item) : [{ id: `${Date.now()}`, ...savedExpense }, ...expenses]);
+    setSaving(true);
+    setSaveError("");
+    const endpoint = editingId ? `/api/trips/${id}/expenses/${editingId}` : `/api/trips/${id}/expenses`;
+    let response: Response;
+    try { response = await fetch(endpoint, { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(savedExpense) }); }
+    catch { setSaving(false); setSaveError("Connessione non disponibile. La spesa non è ancora stata salvata."); return; }
+    const result = await response.json().catch(() => ({})); setSaving(false);
+    if (!response.ok) { setSaveError(result.error || "Non è stato possibile salvare la spesa."); return; }
+    const persistedExpense = normalizeExpense(result as Expense);
+    remember(editingId ? expenses.map((item) => item.id === editingId ? persistedExpense : item) : [persistedExpense, ...expenses]);
     setDraft({ ...emptyDraft, paidBy: participants[0], recipient: participants[1] ?? participants[0], sharedWith: [...participants] });
     setEditingId(null);
     setShowAdd(false);
@@ -113,7 +135,8 @@ export default function ExpensesPage() {
 
     <div className="expenses-grid">
       <section className="expenses-list-panel"><div className="panel-heading"><div><p className="section-kicker">MOVIMENTI</p><h2>Spese</h2></div><button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Nuova spesa</button></div>
-        <div className="expense-list">{expenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => persist(expenses.filter((item) => item.id !== expense.id))} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
+        {saveError && <div className="auth-error security-feedback">{saveError}</div>}
+        <div className="expense-list">{expenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
       </section>
 
       <aside className="balances-panel"><p className="section-kicker">SALDI DEL GRUPPO</p><h2>Chi deve ricevere</h2><div className="balance-list">{balances.map((item) => <div key={item.name}><div className="balance-avatar">{item.name.slice(0, 1)}</div><span>{item.name}</span><strong className={item.balance >= 0 ? "positive" : "negative"}>{item.balance >= 0 ? "+" : ""}{money.format(item.balance)}</strong></div>)}</div><div className="split-note"><Users size={19} /><p>Le spese vengono divise in parti uguali tra {participants.length} partecipanti.</p></div></aside>
@@ -126,7 +149,8 @@ export default function ExpensesPage() {
       {draft.kind === "expense" ? <><div className="form-grid"><label>Categoria<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}><option>Ristoranti</option><option>Alloggio</option><option>Trasporti</option><option>Attività</option><option>Altro</option></select></label><label>Pagata da<select value={draft.paidBy} onChange={(event) => setDraft({ ...draft, paidBy: event.target.value })}>{participants.map((name) => <option key={name}>{name}</option>)}</select></label></div>
       <fieldset className="split-people"><legend>Dividi con ({draft.sharedWith.length})</legend><div>{participants.map((name) => { const selected = draft.sharedWith.includes(name); return <button type="button" className={selected ? "selected" : ""} key={name} onClick={() => setDraft({ ...draft, sharedWith: selected ? draft.sharedWith.filter((item) => item !== name) : [...draft.sharedWith, name] })}><span>{name.slice(0, 1)}</span>{name}{selected && <span className="split-check">✓</span>}</button>; })}</div>{!draft.sharedWith.length && <p>Seleziona almeno una persona.</p>}</fieldset>
       <div className="split-preview"><CircleDollarSign size={20} /><span>Quota per persona</span><strong>{draft.amount && draft.sharedWith.length ? money.format(Number(draft.amount.replace(",", ".")) / draft.sharedWith.length) : money.format(0)}</strong></div></> : <><div className="form-grid"><label>Chi paga<select value={draft.paidBy} onChange={(event) => setDraft({ ...draft, paidBy: event.target.value, recipient: event.target.value === draft.recipient ? participants.find((name) => name !== event.target.value) ?? "" : draft.recipient })}>{participants.map((name) => <option key={name}>{name}</option>)}</select></label><label>Chi riceve<select value={draft.recipient} onChange={(event) => setDraft({ ...draft, recipient: event.target.value })}>{participants.filter((name) => name !== draft.paidBy).map((name) => <option key={name}>{name}</option>)}</select></label></div><div className="settlement-note"><CircleDollarSign size={20} /><span>L’importo riduce il debito di {draft.paidBy} verso {draft.recipient} senza aumentare le spese del viaggio.</span></div></>}
-      <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowAdd(false)}>Annulla</button><button type="submit" className="primary-button"><WalletCards size={18} /> {editingId ? "Salva modifiche" : "Salva spesa"}</button></div>
+      {saveError && <div className="auth-error security-feedback">{saveError}</div>}
+      <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowAdd(false)} disabled={saving}>Annulla</button><button type="submit" className="primary-button" disabled={saving}><WalletCards size={18} /> {saving ? "Salvataggio…" : editingId ? "Salva modifiche" : "Salva spesa"}</button></div>
     </form></div></div>}
   </main>;
 }
