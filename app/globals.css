@@ -643,6 +643,7 @@ select:focus-visible {
 }
 
 .autocomplete-field { position: relative; }
+.optional-label { position: absolute; top: 0; right: 0; color: var(--text-secondary); font-size: 10px; font-weight: 650; }
 .autocomplete-menu { position: absolute; left: 0; right: 0; top: calc(100% - 1px); z-index: 20; max-height: 280px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: white; box-shadow: var(--shadow-lg); }
 .autocomplete-menu button { width: 100%; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 9px; display: grid; grid-template-columns: 25px 1fr auto; align-items: center; gap: 9px; text-align: left; background: transparent; cursor: pointer; }
 .autocomplete-menu button:hover { color: var(--blue); background: var(--blue-soft); }

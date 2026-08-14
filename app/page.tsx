@@ -250,7 +250,7 @@ export default function Page() {
       name,
       country,
       countryCode: selectedCountry?.flag ?? countryFlags[country] ?? "🌍",
-      city: draft.city || country,
+      city: draft.city.trim(),
       startDate: draft.startDate,
       endDate: draft.endDate,
       people: 1 + tripGuests.length,
@@ -327,7 +327,7 @@ export default function Page() {
                     <span>{selectedTrip.country}</span>
                   </div>
                   <h2>{selectedTrip.name}</h2>
-                  <p>{selectedTrip.city}</p>
+                  {selectedTrip.city && <p>{selectedTrip.city}</p>}
                   <div className="hero-meta">
                     <span><CalendarDays size={17} /> {formatDate(selectedTrip.startDate)} – {formatDate(selectedTrip.endDate)}</span>
                     <span><Users size={17} /> {selectedTrip.people} partecipanti</span>
@@ -366,7 +366,7 @@ export default function Page() {
                   </div>
                   <div className="trip-card-copy">
                     <strong>{trip.name}</strong>
-                    <span>{trip.city}</span>
+                    {trip.city && <span>{trip.city}</span>}
                     <small>{formatDate(trip.startDate)} · {trip.people} persone</small>
                   </div>
                   <ChevronRight size={18} />
@@ -425,16 +425,16 @@ export default function Page() {
               <button className="icon-button" onClick={closeCreate} aria-label="Chiudi"><X size={21} /></button>
             </div>
             <div className="step-progress" aria-label={`Passo ${createStep} di 3`}><span style={{ width: `${createStep * 33.333}%` }} /></div>
-            <form onSubmit={(event) => { event.preventDefault(); if (createStep === 1 && (!selectedCountry || !draft.city.trim())) return; createStep < 3 ? setCreateStep(createStep + 1) : addTrip(); }} className="trip-form">
+            <form onSubmit={(event) => { event.preventDefault(); if (createStep === 1 && !selectedCountry) return; createStep < 3 ? setCreateStep(createStep + 1) : addTrip(); }} className="trip-form">
               {createStep === 1 && <>
                 <label className="autocomplete-field">Paese
                   <input value={draft.country} autoFocus onFocus={() => setCountrySearchOpen(false)} onChange={(event) => { setDraft({ ...draft, country: event.target.value, city: "" }); setCountrySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={countryKeyboard.onKeyDown} placeholder="Inizia a digitare un Paese" autoComplete="off" role="combobox" aria-expanded={countrySearchOpen && countryMatches.length > 0} aria-controls="country-options" aria-activedescendant={countryKeyboard.activeIndex >= 0 ? `country-option-${countryKeyboard.activeIndex}` : undefined} required />
                   {countrySearchOpen && countryMatches.length > 0 && <div className="autocomplete-menu" id="country-options" role="listbox">{countryMatches.map((country, index) => <button type="button" id={`country-option-${index}`} role="option" aria-selected={countryKeyboard.activeIndex === index} className={countryKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={country.isoCode} onMouseEnter={() => countryKeyboard.setActiveIndex(index)} onClick={() => selectCountry(index)}><span>{country.flag}</span><strong>{country.displayName}</strong><small>{country.name !== country.displayName ? country.name : country.isoCode}</small></button>)}</div>}
                 </label>
-                <label className="autocomplete-field">Città o tappe
-                  <input value={draft.city} disabled={!selectedCountry} onFocus={() => setCitySearchOpen(false)} onChange={(event) => { setDraft({ ...draft, city: event.target.value }); setCitySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={cityKeyboard.onKeyDown} placeholder={selectedCountry ? "Es. Roma · Firenze" : "Seleziona prima un Paese"} autoComplete="off" role="combobox" aria-expanded={citySearchOpen && cityMatches.length > 0} aria-controls="city-options" aria-activedescendant={cityKeyboard.activeIndex >= 0 ? `city-option-${cityKeyboard.activeIndex}` : undefined} required />
+                <label className="autocomplete-field">Città o tappe <small className="optional-label">Facoltativo</small>
+                  <input value={draft.city} disabled={!selectedCountry} onFocus={() => setCitySearchOpen(false)} onChange={(event) => { setDraft({ ...draft, city: event.target.value }); setCitySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={cityKeyboard.onKeyDown} placeholder={selectedCountry ? "Es. Roma · Firenze" : "Seleziona prima un Paese"} autoComplete="off" role="combobox" aria-expanded={citySearchOpen && cityMatches.length > 0} aria-controls="city-options" aria-activedescendant={cityKeyboard.activeIndex >= 0 ? `city-option-${cityKeyboard.activeIndex}` : undefined} />
                   {citySearchOpen && cityMatches.length > 0 && <div className="autocomplete-menu" id="city-options" role="listbox">{cityMatches.map((city, index) => <button type="button" id={`city-option-${index}`} role="option" aria-selected={cityKeyboard.activeIndex === index} className={cityKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={`${city.name}-${city.stateCode}-${index}`} onMouseEnter={() => cityKeyboard.setActiveIndex(index)} onClick={() => selectCity(index)}><Map size={17} /><strong>{city.name}</strong><small>{city.stateCode}</small></button>)}</div>}
-                  {selectedCountry && <small className="field-hint">Per aggiungere un’altra tappa, digita “ · ” e continua a scrivere.</small>}
+                  {selectedCountry && <small className="field-hint">Puoi continuare senza città oppure aggiungere una o più tappe.</small>}
                 </label>
               </>}
               {createStep === 2 && <div className="form-grid">
@@ -457,12 +457,12 @@ export default function Page() {
                 </section>
                 <div className="trip-summary">
                   <span className="summary-flag">{selectedCountry?.flag ?? countryFlags[draft.country] ?? "🌍"}</span>
-                  <div><strong>{draft.name || `Viaggio in ${draft.country}`}</strong><span>{draft.city} · {formatDate(draft.startDate)} – {formatDate(draft.endDate)} · {1 + tripGuests.length} {1 + tripGuests.length === 1 ? "partecipante" : "partecipanti"}</span></div>
+                  <div><strong>{draft.name || `Viaggio in ${draft.country}`}</strong><span>{[draft.city, `${formatDate(draft.startDate)} – ${formatDate(draft.endDate)}`, `${1 + tripGuests.length} ${1 + tripGuests.length === 1 ? "partecipante" : "partecipanti"}`].filter(Boolean).join(" · ")}</span></div>
                 </div>
               </>}
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={createStep === 1 ? closeCreate : () => setCreateStep(createStep - 1)}>{createStep === 1 ? "Annulla" : "Indietro"}</button>
-                <button type="submit" className="primary-button" disabled={createStep === 1 && (!selectedCountry || !draft.city.trim())}>{createStep === 3 ? "Crea viaggio" : "Continua"} <ChevronRight size={18} /></button>
+                <button type="submit" className="primary-button" disabled={createStep === 1 && !selectedCountry}>{createStep === 3 ? "Crea viaggio" : "Continua"} <ChevronRight size={18} /></button>
               </div>
             </form>
           </div>

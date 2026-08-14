@@ -8,10 +8,10 @@ export async function GET() { const user = await currentUser(); if (!user) retur
 
 export async function POST(request: Request) {
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const body = await request.json();
-  if (!String(body.country || "").trim() || !String(body.city || "").trim()) return NextResponse.json({ error: "Seleziona Paese e città del viaggio" }, { status: 400 });
+  if (!String(body.country || "").trim()) return NextResponse.json({ error: "Seleziona il Paese del viaggio" }, { status: 400 });
   const existing = await prisma.trip.findUnique({ where: { id: body.id } });
   if (existing) { const access = await tripAccess(body.id, user, true); if (!access.allowed) return NextResponse.json({ error: "Non hai accesso a questo viaggio" }, { status: 403 }); return NextResponse.json(access.trip); }
   const normalized = normalizeTripCountry({ country: String(body.country), name: String(body.name) });
-  const trip = await prisma.trip.create({ data: { id: body.id, name: normalized.name, country: normalized.country, countryCode: body.countryCode || "🌍", city: body.city, startDate: new Date(`${body.startDate}T12:00:00`), endDate: new Date(`${body.endDate}T12:00:00`), people: Number(body.people) || 1, theme: body.theme || "blue", ownerId: user.id } });
+  const trip = await prisma.trip.create({ data: { id: body.id, name: normalized.name, country: normalized.country, countryCode: body.countryCode || "🌍", city: String(body.city || "").trim(), startDate: new Date(`${body.startDate}T12:00:00`), endDate: new Date(`${body.endDate}T12:00:00`), people: Number(body.people) || 1, theme: body.theme || "blue", ownerId: user.id } });
   return NextResponse.json(trip, { status: 201 });
 }
