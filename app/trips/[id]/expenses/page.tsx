@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, BedDouble, Bus, CircleDollarSign, Plane, Pencil, Plus, ReceiptText, ShoppingBag, Ticket, Train, Trash2, Utensils, Users, WalletCards, X } from "lucide-react";
+import { ArrowLeft, CircleDollarSign, Pencil, Plus, ReceiptText, ShoppingBag, Trash2, Users, WalletCards, X } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
+import { TravelCategory, TravelCategoryIcon, travelCategoryFromText } from "../../../components/travel-category-icon";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
@@ -19,17 +20,22 @@ const todayLocal = () => { const now = new Date(); return `${now.getFullYear()}-
 const emptyDraft = { description: "", amount: "", category: "Ristoranti", paidBy: "", date: todayLocal(), sharedWith: [] as string[], kind: "expense" as "expense" | "settlement", recipient: "" };
 const money = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
 
+function expenseTravelCategory(expense: Expense): TravelCategory | null {
+  if (expense.kind === "settlement") return null;
+  const description = expense.description.toLocaleLowerCase("it");
+  if (expense.category === "Ristoranti") return "food";
+  if (expense.category === "Alloggio") return "hotel";
+  if (expense.category === "Attività") return "activity";
+  const detected = travelCategoryFromText(expense.category, description);
+  if (expense.category === "Trasporti" && detected === "place") return "bus";
+  return detected;
+}
+
 function ExpenseCategoryIcon({ expense }: { expense: Expense }) {
   if (expense.kind === "settlement") return <CircleDollarSign size={19} />;
-  const description = expense.description.toLocaleLowerCase("it");
-  if (expense.category === "Ristoranti" || /pranzo|cena|ristorante|bar|colazione|caffè/.test(description)) return <Utensils size={19} />;
-  if (expense.category === "Alloggio" || /hotel|albergo|appartamento|ostello|b&b/.test(description)) return <BedDouble size={19} />;
-  if (/volo|aereo|flight|airline/.test(description)) return <Plane size={19} />;
-  if (/treno|ferrovia|metro|rail/.test(description)) return <Train size={19} />;
-  if (expense.category === "Trasporti" || /bus|taxi|transfer|auto/.test(description)) return <Bus size={19} />;
-  if (expense.category === "Attività" || /museo|visita|tour|biglietto/.test(description)) return <Ticket size={19} />;
-  if (/shopping|souvenir|acquisto/.test(description)) return <ShoppingBag size={19} />;
-  return <ReceiptText size={19} />;
+  if (/shopping|souvenir|acquisto/.test(expense.description.toLocaleLowerCase("it"))) return <ShoppingBag size={19} />;
+  const category = expenseTravelCategory(expense);
+  return category ? <TravelCategoryIcon category={category} size={19} /> : <ReceiptText size={19} />;
 }
 
 export default function ExpensesPage() {
@@ -137,7 +143,7 @@ export default function ExpensesPage() {
     <div className="expenses-grid">
       <section className="expenses-list-panel"><div className="panel-heading"><div><p className="section-kicker">MOVIMENTI</p><h2>Spese</h2></div><button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Nuova spesa</button></div>
         {saveError && <div className="auth-error security-feedback">{saveError}</div>}
-        <div className="expense-list">{expenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
+        <div className="expense-list">{expenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; const visualCategory = expenseTravelCategory(expense); return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : visualCategory ? `booking-icon-${visualCategory}` : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
       </section>
 
       <aside className="balances-panel"><p className="section-kicker">SALDI DEL GRUPPO</p><h2>Chi deve ricevere</h2><div className="balance-list">{balances.map((item) => <div key={item.name}><div className="balance-avatar">{item.name.slice(0, 1)}</div><span>{item.name}</span><strong className={item.balance >= 0 ? "positive" : "negative"}>{item.balance >= 0 ? "+" : ""}{money.format(item.balance)}</strong></div>)}</div><div className="split-note"><Users size={19} /><p>Le spese vengono divise in parti uguali tra {participants.length} partecipanti.</p></div></aside>
