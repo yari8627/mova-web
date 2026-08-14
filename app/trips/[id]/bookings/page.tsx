@@ -372,7 +372,7 @@ export default function BookingsPage() {
       return;
     setSaving(true);
     setSaveError("");
-    const confirmedDraft = { ...draft, status: "confirmed" as const };
+    const confirmedDraft = { ...draft, endDate: "", status: "confirmed" as const };
     const completed =
       draft.type === "flight"
         ? {
@@ -419,7 +419,7 @@ export default function BookingsPage() {
       provider: flight.airline,
       reference: flight.flightNumber,
       startDate: flight.departureAt.slice(0, 16),
-      endDate: flight.arrivalAt.slice(0, 16),
+      endDate: "",
     });
     setFlightOptions([]);
     setFlightSearchError("");
@@ -674,30 +674,17 @@ export default function BookingsPage() {
                   />
                 </label>
               )}
-              <div className="form-grid">
-                <label>
-                  Andata
-                  <input
-                    type="datetime-local"
-                    value={draft.startDate}
-                    onChange={(event) =>
-                      setDraft({ ...draft, startDate: event.target.value })
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  Ritorno
-                  <input
-                    type="datetime-local"
-                    min={draft.startDate}
-                    value={draft.endDate}
-                    onChange={(event) =>
-                      setDraft({ ...draft, endDate: event.target.value })
-                    }
-                  />
-                </label>
-              </div>
+              <label>
+                Data e ora
+                <input
+                  type="datetime-local"
+                  value={draft.startDate}
+                  onChange={(event) =>
+                    setDraft({ ...draft, startDate: event.target.value })
+                  }
+                  required
+                />
+              </label>
               {draft.type === "flight" && (
                 <>
                   <button
