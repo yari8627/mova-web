@@ -965,7 +965,7 @@ select:focus-visible {
 .itinerary-day .timeline { margin: 0; padding: 16px 16px 0; }
 .day-activity-map { margin: 0 16px 16px 60px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: white; }.day-activity-map > header { min-height: 48px; padding: 10px 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }.day-activity-map > header > div { display: flex; align-items: center; gap: 7px; color: var(--navy); }.day-activity-map > header > div svg { color: var(--blue); }.day-activity-map > header > span { padding: 5px 8px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font-size: 10px; font-weight: 800; }.day-map-canvas { height: 250px; z-index: 0; border-block: 1px solid var(--border); background: #eaf0f6; }.day-activity-map > footer { padding: 8px 12px; color: var(--text-secondary); font-size: 10px; }.day-map-marker-wrap { border: 0; background: transparent; }.day-map-marker-wrap span { width: 30px; height: 30px; display: grid; place-items: center; border: 3px solid white; border-radius: 50%; color: white; background: var(--blue); box-shadow: 0 4px 12px rgba(20,57,130,.35); font-size: 12px; font-weight: 900; }.leaflet-tooltip div { display: grid; gap: 2px; }.leaflet-tooltip strong { color: var(--navy); }.leaflet-tooltip small { color: var(--text-secondary); }
 .drop-zone.drag-over { color: var(--blue); background: #eef3ff; outline: 2px dashed #7da2ff; outline-offset: -5px; }
-.activity-drop-line { height: 8px; margin: -4px 0 4px 44px; border-radius: 6px; display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 800; transition: .15s ease; }
+.activity-drop-line { height: 8px; margin: -4px 0 4px; border-radius: 6px; display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 800; transition: .15s ease; }
 .activity-drop-line.drag-over { height: 32px; margin-block: 2px 8px; color: var(--blue); border: 2px dashed #7da2ff; background: #eef3ff; }
 .activity-drop-line-last { margin-bottom: 12px; }
 .timeline-item[draggable="true"] { cursor: grab; }
@@ -975,8 +975,7 @@ select:focus-visible {
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .panel-heading h2 { margin: 0; font-size: 27px; }
 .timeline { margin-top: 30px; }
-.timeline-item { position: relative; width: 100%; min-width: 0; display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 12px; padding-bottom: 20px; }
-.timeline-item:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 31px; bottom: -1px; width: 2px; background: var(--border); }
+.timeline-item { position: relative; width: 100%; min-width: 0; display: block; padding-bottom: 20px; }
 .timeline-dot { z-index: 1; width: 32px; height: 32px; border: 3px solid #d9e0ef; border-radius: 50%; display: grid; place-items: center; background: white; color: white; }
 .timeline-dot.done { border-color: var(--teal); background: var(--teal); }
 .timeline-dot { min-height: 32px; padding: 0; cursor: pointer; }
@@ -985,6 +984,11 @@ select:focus-visible {
 .timeline-card h3 { max-width: 100%; margin: 5px 0 13px; overflow-wrap: anywhere; }
 .timeline-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .timeline-card-heading > div:first-child { min-width: 0; }
+.timeline-card-title { min-width: 0; display: flex; align-items: flex-start; gap: 11px; }
+.timeline-card-title > div { min-width: 0; }
+.activity-check { flex: 0 0 28px; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 0; border: 2px solid #cbd5e7; border-radius: 50%; display: grid; place-items: center; color: white; background: white; cursor: pointer; }
+.activity-check.done { border-color: var(--teal); background: var(--teal); }
+.activity-check:disabled { cursor: default; opacity: .65; }
 .activity-meta { min-width: 0; display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-secondary); font-size: 13px; }.activity-meta span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
 .timeline-card span { display: flex; align-items: center; gap: 5px; }
 .activity-actions { display: flex; gap: 4px; }
@@ -1020,10 +1024,7 @@ select:focus-visible {
   .itinerary-day-heading small { max-width: 100%; overflow-wrap: anywhere; }
   .itinerary-day-heading > button { flex: 0 0 auto; min-height: 36px; padding: 0 4px; }
   .itinerary-day .timeline { padding: 10px 8px 0; }
-  .timeline-item { grid-template-columns: 24px minmax(0,1fr); gap: 8px; padding-bottom: 14px; }
-  .timeline-item:not(:last-child)::before { left: 11px; top: 24px; }
-  .timeline-dot { width: 24px; min-height: 24px; border-width: 2px; }
-  .timeline-dot svg { width: 13px; height: 13px; }
+  .timeline-item { padding-bottom: 14px; }
   .timeline-card { padding: 12px; border-radius: 13px; }
   .timeline-card h3 { margin-bottom: 10px; font-size: 16px; line-height: 1.3; }
   .timeline-card-heading { display: block; }
@@ -1031,7 +1032,7 @@ select:focus-visible {
   .activity-meta span { align-items: flex-start; line-height: 1.35; }
   .activity-actions { width: 100%; margin: 10px 0 0; justify-content: flex-end; flex-wrap: wrap; }
   .activity-actions button,.booking-attach-button,.drag-handle { width: 40px; min-height: 40px; }
-  .activity-drop-line { margin-left: 32px; }
+  .activity-drop-line { margin-left: 0; }
   .detail-aside { margin-top: 16px; grid-template-columns: 1fr; }
   .activity-backdrop { place-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
   .activity-modal { width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom))); margin: auto; padding: 20px 18px 18px; border-radius: 22px; animation: activity-sheet-in .22s ease-out; }
