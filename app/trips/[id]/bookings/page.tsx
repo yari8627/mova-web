@@ -228,6 +228,8 @@ export default function BookingsPage() {
   const [flightOptions, setFlightOptions] = useState<FlightOption[]>([]);
   const [flightSearchError, setFlightSearchError] = useState("");
   const [searchingFlights, setSearchingFlights] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [attachmentCounts, setAttachmentCounts] = useState<
     Record<string, number>
   >({});
@@ -300,13 +302,13 @@ export default function BookingsPage() {
     }
     void load();
   }, [id]);
-  function persist(next: Booking[]) {
+  async function persist(next: Booking[]) {
     const ordered = [...next].sort((a, b) =>
       a.startDate.localeCompare(b.startDate),
     );
     setBookings(ordered);
     window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(ordered));
-    syncTripResource(id, "bookings", ordered);
+    return syncTripResource(id, "bookings", ordered);
   }
   function openNew() {
     if (document.activeElement instanceof HTMLElement)
@@ -315,6 +317,7 @@ export default function BookingsPage() {
     setDraft(emptyDraft);
     setFlightOptions([]);
     setFlightSearchError("");
+    setSaveError("");
     setShowEditor(true);
     requestAnimationFrame(() =>
       document
@@ -340,7 +343,7 @@ export default function BookingsPage() {
     });
     setShowEditor(true);
   }
-  function save() {
+  async function save() {
     if (
       !draft.startDate ||
       (draft.type === "flight"
@@ -348,6 +351,8 @@ export default function BookingsPage() {
         : !draft.title)
     )
       return;
+    setSaving(true);
+    setSaveError("");
     const confirmedDraft = { ...draft, status: "confirmed" as const };
     const completed =
       draft.type === "flight"
@@ -357,13 +362,18 @@ export default function BookingsPage() {
             location: `${draft.originAirport} → ${draft.destinationAirport}`,
           }
         : confirmedDraft;
-    persist(
+    const saved = await persist(
       editingId
         ? bookings.map((item) =>
             item.id === editingId ? { ...item, ...completed } : item,
           )
         : [...bookings, { id: `${Date.now()}`, ...completed }],
     );
+    setSaving(false);
+    if (!saved) {
+      setSaveError("Non è stato possibile salvare la prenotazione. Riprova.");
+      return;
+    }
     setShowEditor(false);
   }
   async function findFlights() {
@@ -787,6 +797,7 @@ export default function BookingsPage() {
                   rows={3}
                 />
               </label>
+              {saveError && <div className="flight-search-error">{saveError}</div>}
               <div className="modal-actions">
                 <button
                   type="button"
@@ -795,8 +806,8 @@ export default function BookingsPage() {
                 >
                   Annulla
                 </button>
-                <button type="submit" className="primary-button">
-                  Salva prenotazione
+                <button type="submit" className="primary-button" disabled={saving}>
+                  {saving ? "Salvataggio…" : "Salva prenotazione"}
                 </button>
               </div>
             </form>
