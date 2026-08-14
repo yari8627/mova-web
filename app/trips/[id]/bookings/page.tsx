@@ -3,25 +3,23 @@
 import { ChangeEvent, useEffect, useLayoutEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
-  BedDouble,
   CalendarDays,
-  Car,
   Mail,
   MapPin,
   Paperclip,
   Pencil,
   Plane,
   Plus,
-  Ticket,
-  Train,
   Trash2,
   X,
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
+import { TravelCategoryIcon, travelCategoryFromText, travelCategoryLabel } from "../../../components/travel-category-icon";
 import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../../lib/use-autocomplete-keyboard";
+import { fetchDestinationImage } from "../../../../lib/destination-images";
 
 type Booking = {
   id: string;
@@ -100,13 +98,6 @@ const emptyDraft = {
   destinationAirport: "",
 };
 
-function BookingIcon({ type }: { type: Booking["type"] }) {
-  if (type === "flight") return <Plane size={20} />;
-  if (type === "hotel") return <BedDouble size={20} />;
-  if (type === "train") return <Train size={20} />;
-  if (type === "car") return <Car size={20} />;
-  return <Ticket size={20} />;
-}
 function dateLabel(value: string) {
   return new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
@@ -115,6 +106,30 @@ function dateLabel(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function BookingVisual({ item }: { item: Booking }) {
+  const category = travelCategoryFromText(item.type, `${item.title} ${item.provider || ""}`);
+  const [image, setImage] = useState("");
+  const supportsPhoto = ["hotel", "food", "activity", "place"].includes(category);
+  useEffect(() => {
+    let active = true;
+    setImage("");
+    if (supportsPhoto && item.location?.trim()) {
+      void fetchDestinationImage("", item.location).then((result) => { if (active) setImage(result); });
+    }
+    return () => { active = false; };
+  }, [item.location, supportsPhoto]);
+  return (
+    <div
+      className={`booking-icon booking-icon-${category} ${image ? "booking-photo" : ""}`}
+      title={travelCategoryLabel(category)}
+      style={image ? { backgroundImage: `linear-gradient(rgba(8,24,55,.08),rgba(8,24,55,.28)),url(${image})` } : undefined}
+    >
+      {!image && <TravelCategoryIcon category={category} size={21} />}
+      {image && <span><TravelCategoryIcon category={category} size={14} /></span>}
+    </div>
+  );
 }
 const airportCode = (value: string) => value.split(" · ")[0] || value;
 function AirportField({
@@ -503,9 +518,7 @@ export default function BookingsPage() {
                 className={`booking-row ${highlightedBookingId === item.id ? "booking-highlighted" : ""}`}
                 key={item.id}
               >
-                <div className="booking-icon">
-                  <BookingIcon type={item.type} />
-                </div>
+                <BookingVisual item={item} />
                 <div>
                   <div className="booking-title-line">
                     <strong>{item.title}</strong>
