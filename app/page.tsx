@@ -51,6 +51,7 @@ type AppNotification = { id: string; type: string; title: string; message: strin
 type TravelCompanion = { name: string; email: string; trips: number };
 type TripGuest = { name: string; email: string };
 type SessionUser = { id: string; name: string; email: string; avatarUrl?: string | null };
+type TripProgress = { flights: number; hotels: number; activities: number };
 
 const emptyDraft: TripDraft = {
   name: "",
@@ -124,6 +125,7 @@ export default function Page() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [countrySearchOpen, setCountrySearchOpen] = useState(false);
   const [citySearchOpen, setCitySearchOpen] = useState(false);
+  const [tripProgress, setTripProgress] = useState<TripProgress>({ flights: 0, hotels: 0, activities: 0 });
 
   useEffect(() => {
     async function loadAccountTrips() {
@@ -157,6 +159,21 @@ export default function Page() {
     () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0],
     [selectedTripId, trips]
   );
+  useEffect(() => {
+    if (!selectedTrip?.id) { setTripProgress({ flights: 0, hotels: 0, activities: 0 }); return; }
+    let active = true;
+    const percentage = (completed: number, total: number) => total ? Math.round(completed / total * 100) : 0;
+    void fetch(`/api/trips/${selectedTrip.id}`, { cache: "no-store" }).then(async (response) => response.ok ? response.json() : null).then((trip) => {
+      if (!active || !trip) return;
+      const bookings = trip.bookings as Array<{ type: string; status: string }>;
+      const activities = trip.activities as Array<{ done: boolean }>;
+      const flights = bookings.filter((item) => item.type === "flight");
+      const hotels = bookings.filter((item) => item.type === "hotel");
+      const confirmed = (item: { status: string }) => item.status === "confirmed" || item.status === "completed";
+      setTripProgress({ flights: percentage(flights.filter(confirmed).length, flights.length), hotels: percentage(hotels.filter(confirmed).length, hotels.length), activities: percentage(activities.filter((item) => item.done).length, activities.length) });
+    }).catch(() => { if (active) setTripProgress({ flights: 0, hotels: 0, activities: 0 }); });
+    return () => { active = false; };
+  }, [selectedTrip?.id]);
   function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
   const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
@@ -362,17 +379,17 @@ export default function Page() {
               <div className="section-kicker">STATO DEL VIAGGIO</div>
               <h3>Preparazione</h3>
               <div className="progress-row">
-                <span>Voli</span><strong>100%</strong>
+                <span>Voli</span><strong>{tripProgress.flights}%</strong>
               </div>
-              <div className="progress-track"><span style={{ width: "100%" }} /></div>
+              <div className="progress-track"><span style={{ width: `${tripProgress.flights}%` }} /></div>
               <div className="progress-row">
-                <span>Hotel</span><strong>50%</strong>
+                <span>Hotel</span><strong>{tripProgress.hotels}%</strong>
               </div>
-              <div className="progress-track"><span style={{ width: "50%" }} /></div>
+              <div className="progress-track"><span style={{ width: `${tripProgress.hotels}%` }} /></div>
               <div className="progress-row">
-                <span>Attività</span><strong>30%</strong>
+                <span>Attività</span><strong>{tripProgress.activities}%</strong>
               </div>
-              <div className="progress-track"><span style={{ width: "30%" }} /></div>
+              <div className="progress-track"><span style={{ width: `${tripProgress.activities}%` }} /></div>
             </div>
 
             <div className="quick-card">
