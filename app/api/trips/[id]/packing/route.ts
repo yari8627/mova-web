@@ -5,6 +5,32 @@ import { prisma } from "../../../../../lib/prisma";
 import { tripAccess } from "../../../../../lib/trip-access";
 import { titleCaseItalian } from "../../../../../lib/text-format";
 
+let packingSchemaReady: Promise<void> | null = null;
+
+function ensurePackingSchema() {
+  if (!packingSchemaReady) {
+    packingSchemaReady = prisma.$transaction([
+      prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "PackingItem" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "tripId" TEXT NOT NULL REFERENCES "Trip"("id") ON DELETE CASCADE,
+        "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "label" TEXT NOT NULL,
+        "packed" BOOLEAN NOT NULL DEFAULT false,
+        "scope" TEXT NOT NULL DEFAULT 'personal',
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL
+      )`),
+      prisma.$executeRawUnsafe(`ALTER TABLE "PackingItem" ADD COLUMN IF NOT EXISTS "scope" TEXT NOT NULL DEFAULT 'personal'`),
+      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PackingItem_tripId_userId_createdAt_idx" ON "PackingItem"("tripId", "userId", "createdAt")`),
+      prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PackingItem_tripId_scope_createdAt_idx" ON "PackingItem"("tripId", "scope", "createdAt")`),
+    ]).then(() => undefined).catch((error) => {
+      packingSchemaReady = null;
+      throw error;
+    });
+  }
+  return packingSchemaReady;
+}
+
 async function authorizedUser(id: string) {
   const user = await currentUser();
   if (!user) return { response: NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }) };
@@ -17,6 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
+  await ensurePackingSchema();
   const scope = new URL(request.url).searchParams.get("scope") === "shared" ? "shared" : "personal";
   const items = await prisma.packingItem.findMany({ where: { tripId: id, scope, ...(scope === "personal" ? { userId: auth.user!.id } : {}) }, include: { user: { select: { name: true } } }, orderBy: [{ packed: "asc" }, { createdAt: "asc" }] });
   return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label), createdBy: item.user.name })));
@@ -26,6 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
+  await ensurePackingSchema();
   const body = await request.json();
   const scope = body.scope === "shared" ? "shared" : "personal";
   const label = titleCaseItalian(String(body.label || ""));
@@ -39,6 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
+  await ensurePackingSchema();
   const body = await request.json();
   const existing = await prisma.packingItem.findFirst({ where: { id: String(body.id || ""), tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
   if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
@@ -50,6 +79,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   const auth = await authorizedUser(id);
   if (auth.response) return auth.response;
+  await ensurePackingSchema();
   const itemId = new URL(request.url).searchParams.get("itemId") || "";
   const existing = await prisma.packingItem.findFirst({ where: { id: itemId, tripId: id, OR: [{ scope: "shared" }, { scope: "personal", userId: auth.user!.id }] } });
   if (!existing) return NextResponse.json({ error: "Elemento non trovato" }, { status: 404 });
