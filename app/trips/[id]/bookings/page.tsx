@@ -493,9 +493,9 @@ export default function BookingsPage() {
       <TripTabs tripId={id} />
       <section className="bookings-panel">
         <div className="booking-overview">
-          <div>
+          <div className="booking-kpi-total">
             <strong>{bookings.length}</strong>
-            <span>Prenotazioni</span>
+            <span>Totale</span>
           </div>
           <div>
             <strong>{transportCount}</strong>
