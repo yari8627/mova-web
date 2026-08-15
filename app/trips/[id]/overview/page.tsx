@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
   CalendarDays,
@@ -15,7 +16,6 @@ import {
   Settings,
   TicketCheck,
   Users,
-  WalletCards,
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
@@ -471,7 +471,14 @@ export default function OverviewPage() {
                 </label>
               </div>
               <button onClick={openDeviceWallet}>
-                <WalletCards size={22} />
+                <Image
+                  className="travel-wallet-icon"
+                  src="/icons/wallet-travel-ticket.png"
+                  width={44}
+                  height={44}
+                  alt=""
+                  aria-hidden="true"
+                />
                 <span>
                   <small>Apri Wallet</small>
                 </span>

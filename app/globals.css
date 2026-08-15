@@ -1229,3 +1229,4 @@ html, body { max-width: 100%; overflow-x: clip; }
 
 .checkin-wallet-card:not(.completed) > button { opacity: .48; cursor: not-allowed; pointer-events: none; }
 .checkin-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.checkin-title-row > strong { color: var(--navy); font-size: 17px; }.checkin-title-row .checkin-checkbox { flex: 0 0 auto; }
+.travel-wallet-icon { width: 42px; height: 42px; flex: 0 0 42px; object-fit: contain; }
