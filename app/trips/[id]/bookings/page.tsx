@@ -19,7 +19,6 @@ import { TravelCategoryIcon, travelCategoryFromText, travelCategoryLabel } from 
 import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../../lib/use-autocomplete-keyboard";
-import { fetchDestinationImage } from "../../../../lib/destination-images";
 
 type Booking = {
   id: string;
@@ -114,24 +113,12 @@ function bookingTitle(item: Booking) {
 
 function BookingVisual({ item }: { item: Booking }) {
   const category = travelCategoryFromText(item.type, `${item.title} ${item.provider || ""}`);
-  const [image, setImage] = useState("");
-  const supportsPhoto = ["hotel", "food", "activity", "place"].includes(category);
-  useEffect(() => {
-    let active = true;
-    setImage("");
-    if (supportsPhoto && item.location?.trim()) {
-      void fetchDestinationImage("", item.location).then((result) => { if (active) setImage(result); });
-    }
-    return () => { active = false; };
-  }, [item.location, supportsPhoto]);
   return (
     <div
-      className={`booking-icon booking-icon-${category} ${image ? "booking-photo" : ""}`}
+      className={`booking-icon booking-icon-${category}`}
       title={travelCategoryLabel(category)}
-      style={image ? { backgroundImage: `linear-gradient(rgba(8,24,55,.08),rgba(8,24,55,.28)),url(${image})` } : undefined}
     >
-      {!image && <TravelCategoryIcon category={category} size={21} />}
-      {image && <span><TravelCategoryIcon category={category} size={14} /></span>}
+      <TravelCategoryIcon category={category} size={21} />
     </div>
   );
 }
