@@ -433,14 +433,10 @@ export default function BookingsPage() {
       }));
     event.target.value = "";
   }
-  const groups = (
-    ["flight", "hotel", "train", "car", "activity"] as Booking["type"][]
-  )
-    .map((type) => ({
-      type,
-      items: bookings.filter((item) => item.type === type),
-    }))
-    .filter((group) => group.items.length);
+  const groups = [{
+    type: "all",
+    items: [...bookings].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+  }];
   const transportCount = bookings.filter((item) => ["flight", "train", "car"].includes(item.type)).length;
   const hotelCount = bookings.filter((item) => item.type === "hotel").length;
   const activityCount = bookings.filter((item) => item.type === "activity").length;
