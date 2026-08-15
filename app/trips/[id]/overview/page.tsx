@@ -46,6 +46,7 @@ export default function OverviewPage() {
   }, [activities, tripDates]);
 
   function openDeviceWallet() {
+    if (!checkInCompleted) return;
     const agent = navigator.userAgent;
     const isIOS = /iPhone|iPad|iPod/i.test(agent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const isAndroid = /Android/i.test(agent);
