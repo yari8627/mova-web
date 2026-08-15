@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileCheck2, MapPin, Paperclip, ReceiptText, Settings, TicketCheck, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileCheck2, MapPin, Paperclip, ReceiptText, Settings, TicketCheck, Users, WalletCards } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
@@ -41,13 +41,29 @@ export default function OverviewPage() {
     const day = daysFromStart + 1; return { phase: "active" as const, day, distance: 0, activities: activities.filter((item) => item.day === day).sort((a, b) => a.time.localeCompare(b.time)) };
   }, [activities, tripDates]);
 
+  function openDeviceWallet() {
+    const agent = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/i.test(agent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(agent);
+    if (isIOS) {
+      window.location.href = "shoebox://";
+      window.setTimeout(() => { if (!document.hidden) router.push(`/trips/${id}/documents`); }, 1200);
+      return;
+    }
+    if (isAndroid) {
+      window.location.href = "intent://wallet#Intent;scheme=googlewallet;package=com.google.android.apps.walletnfcrel;S.browser_fallback_url=https%3A%2F%2Fwallet.google.com%2F;end";
+      return;
+    }
+    window.open("https://wallet.google.com/", "_blank", "noopener,noreferrer");
+  }
+
 
   return <main className="trip-detail-shell overview-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button><button className="secondary-button" onClick={() => router.push(`/trips/${id}/settings`)}><Settings size={18} /> Gestisci</button>{canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}</header>
     <TripCover tripId={id} />
     <TripTabs tripId={id} />
     <section className="today-dashboard"><header><div><p className="section-kicker">OGGI</p><h2>{today?.phase === "active" ? `Giorno ${today.day} del viaggio` : today?.phase === "before" ? `Partenza tra ${today.distance} ${today.distance === 1 ? "giorno" : "giorni"}` : today?.phase === "after" ? "Viaggio concluso" : "Preparazione del viaggio"}</h2><p>{today?.phase === "active" ? new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" }).format(new Date()) : today?.phase === "before" ? "Controlla le ultime cose prima di partire." : today?.phase === "after" ? "Le informazioni del viaggio restano sempre disponibili." : "Caricamento delle informazioni di oggi…"}</p></div><button className="secondary-button" onClick={() => router.push(`/trips/${id}`)}>Apri itinerario <ChevronRight size={17} /></button></header>
-      {today?.phase === "active" ? today.activities.length ? <div className="today-activities">{today.activities.map((activity) => { const linkedDocuments = documents.filter((document) => document.bookingId && document.bookingId === activity.bookingId); return <article key={activity.id}><time>{activity.time}</time><span className={activity.done ? "done" : ""}>{activity.done ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}</span><div><strong>{activity.title}</strong><p><MapPin size={14} /> {activity.place}</p>{linkedDocuments.length > 0 && <button onClick={() => router.push(`/trips/${id}/documents?booking=${encodeURIComponent(activity.bookingId!)}`)}><Paperclip size={13} /> {linkedDocuments.length} {linkedDocuments.length === 1 ? "documento collegato" : "documenti collegati"}</button>}</div><ChevronRight size={18} /></article>; })}</div> : <div className="today-empty"><CalendarDays size={25} /><div><strong>Nessuna attività prevista oggi</strong><p>Puoi aggiungerla dall’Itinerario.</p></div></div> : <div className="today-preparation"><button onClick={() => router.push(`/trips/${id}/bookings`)}><TicketCheck size={20} /><span><strong>{pendingBookings || "Nessuna"}</strong><small>{pendingBookings === 1 ? "prenotazione da verificare" : "prenotazioni da verificare"}</small></span></button><button onClick={() => router.push(`/trips/${id}/documents`)}><FileCheck2 size={20} /><span><strong>{documents.length}</strong><small>documenti caricati</small></span></button><button onClick={() => router.push(`/trips/${id}/participants`)}><Users size={20} /><span><strong>{pendingPeople || "Nessuno"}</strong><small>{pendingPeople === 1 ? "invito in attesa" : "inviti in attesa"}</small></span></button></div>}
+      {today?.phase === "active" ? today.activities.length ? <div className="today-activities">{today.activities.map((activity) => { const linkedDocuments = documents.filter((document) => document.bookingId && document.bookingId === activity.bookingId); return <article key={activity.id}><time>{activity.time}</time><span className={activity.done ? "done" : ""}>{activity.done ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}</span><div><strong>{activity.title}</strong><p><MapPin size={14} /> {activity.place}</p>{linkedDocuments.length > 0 && <button onClick={() => router.push(`/trips/${id}/documents?booking=${encodeURIComponent(activity.bookingId!)}`)}><Paperclip size={13} /> {linkedDocuments.length} {linkedDocuments.length === 1 ? "documento collegato" : "documenti collegati"}</button>}</div><ChevronRight size={18} /></article>; })}</div> : <div className="today-empty"><CalendarDays size={25} /><div><strong>Nessuna Attività Prevista Oggi</strong><p>Puoi aggiungerla dall’Itinerario.</p></div></div> : <div className="today-preparation wallet-preparation"><button onClick={openDeviceWallet}><WalletCards size={22} /><span><strong>Check-in Effettuato?</strong><small>Apri Wallet</small></span><ChevronRight size={19} /></button></div>}
     </section>
     <section className="overview-heading"><div><p className="section-kicker">PANORAMICA</p><h2>Tutto sotto controllo</h2><p>Le informazioni più importanti, aggiornate dalle altre sezioni.</p></div></section>
     <section className="overview-grid">
