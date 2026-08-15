@@ -1,6 +1,7 @@
 @import "leaflet/dist/leaflet.css";
 
 :root {
+  --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --blue: #075cff;
   --blue-hover: #004de0;
   --blue-soft: #f2f6ff;
@@ -33,7 +34,8 @@ body {
   min-width: 320px;
   color: var(--navy);
   background: var(--background);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
@@ -41,8 +43,16 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-ui);
+  line-height: 1.16;
 }
 
 button {
@@ -1099,6 +1109,22 @@ select:focus-visible {
 .booking-overview > .booking-kpi-total { color: #0b7b70; background: #eafaf7; box-shadow: inset 0 0 0 1px #ccefe8, 0 7px 16px rgba(11,123,112,.1); }.booking-overview > .booking-kpi-total strong { color: #075f58; font-weight: 850; }.booking-overview > .booking-kpi-total span { color: #46827d; font-weight: 850; }
 .completed-heading { margin-top: 34px; }.trip-card.completed { background: #fafbfc; }.trip-card.completed .trip-thumbnail { filter: saturate(.72); }.trip-card.completed > svg { color: #15965a; }.completed-empty { color: var(--text-secondary); background: #fafbfc; }
 @media (max-width: 600px) { .booking-overview { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 5px; }.booking-overview > div { min-width: 0; padding: 10px 3px; text-align: center; }.booking-overview strong { font-size: 18px; }.booking-overview span { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.booking-overview .booking-add-button { width: 100%; min-width: 0; justify-self: stretch; } }
+
+/* Scala tipografica condivisa */
+.topbar-title h1 { font-size: clamp(24px,2.6vw,30px); letter-spacing: -.8px; }
+.hero-content h2 { font-size: clamp(32px,4.2vw,48px); letter-spacing: -1.4px; }
+.detail-hero h1,.shared-trip-cover h1 { font-size: clamp(32px,4.5vw,48px); letter-spacing: -1.4px; }
+.expenses-title h1 { font-size: clamp(28px,4vw,42px); letter-spacing: -1.1px; }
+.progress-heading h1 { font-size: clamp(30px,4.2vw,44px); letter-spacing: -1.2px; }
+.invite-accept-card h1 { font-size: clamp(26px,4vw,34px); }
+.preference-heading h1 { font-size: clamp(24px,3.5vw,32px); }
+.auth-card h1 { font-size: 26px; }
+@media (max-width: 560px) {
+  body { font-size: 14px; }
+  .hero-content h2 { font-size: clamp(29px,9vw,36px); }
+  .detail-hero h1,.shared-trip-cover h1 { font-size: clamp(27px,8.5vw,34px); letter-spacing: -.9px; }
+  .expenses-title h1,.progress-heading h1 { font-size: clamp(27px,8vw,32px); letter-spacing: -.8px; }
+}
 .airport-fields { align-items: start; }.airport-menu { top: calc(100% + 4px); z-index: 120; }.airport-menu button { grid-template-columns: 20px 42px minmax(0,1fr) auto; }.airport-menu button span { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
 .flight-search-button { width: 100%; justify-content: center; }.flight-search-error { padding: 11px 13px; border-radius: 10px; color: #8a5700; background: #fff8ec; font-size: 12px; }.flight-options { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 13px; }.flight-options > button { width: 100%; min-height: 62px; padding: 10px 13px; border: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--navy); background: white; text-align: left; cursor: pointer; }.flight-options > button:last-child { border-bottom: 0; }.flight-options > button:hover { background: var(--blue-soft); }.flight-options span:last-child { text-align: right; }.flight-options strong,.flight-options small { display: block; }.flight-options small { margin-top: 3px; color: var(--text-secondary); font-size: 10px; }
 .profile-card .security-form select { min-height: 46px; padding: 0 12px; border: 1px solid var(--border); border-radius: 11px; background: white; }.profile-card .security-form label > small { color: var(--text-secondary); font-weight: 500; }
