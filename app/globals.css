@@ -1228,3 +1228,4 @@ html, body { max-width: 100%; overflow-x: clip; }
 @media (max-width: 520px) { .booking-modal { max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - 12px); scroll-padding-top: 82px; }.booking-modal .modal-header { top: -20px; margin: 0 -1px; padding: 0 1px 13px; }.booking-modal .trip-form { padding-bottom: max(6px, env(safe-area-inset-bottom)); } }
 
 .checkin-wallet-card:not(.completed) > button { opacity: .48; cursor: not-allowed; pointer-events: none; }
+.checkin-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.checkin-title-row > strong { color: var(--navy); font-size: 17px; }.checkin-title-row .checkin-checkbox { flex: 0 0 auto; }
