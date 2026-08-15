@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Clock3,
   FileCheck2,
-  Luggage,
   MapPin,
   Paperclip,
   ReceiptText,
@@ -489,7 +488,14 @@ export default function OverviewPage() {
               className="packing-wallet-card"
               onClick={() => router.push(`/trips/${id}/packing`)}
             >
-              <Luggage size={22} />
+              <Image
+                className="travel-card-icon"
+                src="/icons/suitcase-travel.png"
+                width={44}
+                height={44}
+                alt=""
+                aria-hidden="true"
+              />
               <span>
                 <strong>Valigia</strong>
                 <small>
