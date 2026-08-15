@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { City, Country } from "country-state-city";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
 import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
-import { canonicalCountryName } from "../lib/country-names";
 import {
   Bell,
   CalendarDays,
@@ -53,6 +51,8 @@ type TravelCompanion = { name: string; email: string; trips: number };
 type TripGuest = { name: string; email: string };
 type SessionUser = { id: string; name: string; email: string; avatarUrl?: string | null };
 type TripProgress = { flights: number; hotels: number; activities: number };
+type CountryOption = { isoCode: string; name: string; displayName: string; flag: string };
+type CityOption = { name: string; stateCode: string };
 
 const emptyDraft: TripDraft = {
   name: "",
@@ -76,12 +76,6 @@ const navItems = [
   { label: "Progressi", icon: Earth },
   { label: "Profilo", icon: CircleUserRound },
 ];
-
-const regionNames = new Intl.DisplayNames(["it"], { type: "region" });
-const worldCountries = Country.getAllCountries().map((country) => ({
-  ...country,
-  displayName: canonicalCountryName(country.isoCode, regionNames.of(country.isoCode) ?? country.name),
-})).sort((a, b) => a.displayName.localeCompare(b.displayName, "it"));
 
 function formatDate(value: string) {
   if (!value) return "Data da definire";
@@ -141,6 +135,9 @@ export default function Page() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [countrySearchOpen, setCountrySearchOpen] = useState(false);
   const [citySearchOpen, setCitySearchOpen] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(null);
+  const [countryMatches, setCountryMatches] = useState<CountryOption[]>([]);
+  const [cityMatches, setCityMatches] = useState<CityOption[]>([]);
   const [tripProgress, setTripProgress] = useState<TripProgress>({ flights: 0, hotels: 0, activities: 0 });
 
   useEffect(() => {
@@ -192,18 +189,20 @@ export default function Page() {
   const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
 
-  const selectedCountry = useMemo(() => worldCountries.find((country) => country.displayName === draft.country), [draft.country]);
-  const countryMatches = useMemo(() => {
-    const query = draft.country.trim().toLocaleLowerCase("it");
-    if (!query) return [];
-    return worldCountries.filter((country) => country.displayName.toLocaleLowerCase("it").includes(query) || country.name.toLocaleLowerCase().includes(query)).slice(0, 8);
-  }, [draft.country]);
-  const cityMatches = useMemo(() => {
-    if (!selectedCountry) return [];
-    const query = draft.city.split("·").at(-1)?.trim().toLocaleLowerCase("it") ?? "";
-    if (!query) return [];
-    return (City.getCitiesOfCountry(selectedCountry.isoCode) ?? []).filter((city) => city.name.toLocaleLowerCase().includes(query)).slice(0, 8);
-  }, [draft.city, selectedCountry]);
+  useEffect(() => {
+    const query = draft.country.trim();
+    if (!countrySearchOpen || !query) { setCountryMatches([]); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => fetch(`/api/destinations?kind=country&q=${encodeURIComponent(query)}`, { signal: controller.signal }).then((response) => response.ok ? response.json() : []).then(setCountryMatches).catch(() => setCountryMatches([])), 160);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [draft.country, countrySearchOpen]);
+  useEffect(() => {
+    const query = draft.city.split("·").at(-1)?.trim() ?? "";
+    if (!citySearchOpen || !selectedCountry || !query) { setCityMatches([]); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => fetch(`/api/destinations?kind=city&countryCode=${selectedCountry.isoCode}&q=${encodeURIComponent(query)}`, { signal: controller.signal }).then((response) => response.ok ? response.json() : []).then(setCityMatches).catch(() => setCityMatches([])), 160);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [draft.city, citySearchOpen, selectedCountry]);
   const countryKeyboard = useAutocompleteKeyboard({ itemCount: countryMatches.length, isOpen: countrySearchOpen, resetKey: draft.country, onOpen: () => setCountrySearchOpen(true), onClose: () => setCountrySearchOpen(false), onSelect: selectCountry });
   const cityKeyboard = useAutocompleteKeyboard({ itemCount: cityMatches.length, isOpen: citySearchOpen, resetKey: draft.city, onOpen: () => setCitySearchOpen(true), onClose: () => setCitySearchOpen(false), onSelect: selectCity });
 
@@ -214,11 +213,14 @@ export default function Page() {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     requestAnimationFrame(() => setOpen(false));
   }
-  function selectCountry(index: number) { const country = countryMatches[index]; if (!country) return; setDraft({ ...draft, country: country.displayName, city: "" }); dismissAutocomplete(setCountrySearchOpen); }
+  function selectCountry(index: number) { const country = countryMatches[index]; if (!country) return; setSelectedCountry(country); setDraft({ ...draft, country: country.displayName, city: "" }); dismissAutocomplete(setCountrySearchOpen); }
   function selectCity(index: number) { const city = cityMatches[index]; if (!city) return; const previous = draft.city.split("·").slice(0, -1).map((part) => part.trim()).filter(Boolean); setDraft({ ...draft, city: [...previous, city.name].join(" · ") }); dismissAutocomplete(setCitySearchOpen); }
 
   function openCreate() {
     setDraft(emptyDraft);
+    setSelectedCountry(null);
+    setCountryMatches([]);
+    setCityMatches([]);
     setCustomTripName(false);
     setTripGuests([]);
     setGuestEmail("");
@@ -466,7 +468,7 @@ export default function Page() {
             <form onSubmit={(event) => { event.preventDefault(); if (createStep === 1 && !selectedCountry) return; createStep < 3 ? setCreateStep(createStep + 1) : addTrip(); }} className="trip-form">
               {createStep === 1 && <>
                 <label className="autocomplete-field">Paese
-                  <input value={draft.country} autoFocus onFocus={() => setCountrySearchOpen(false)} onChange={(event) => { setDraft({ ...draft, country: event.target.value, city: "" }); setCountrySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={countryKeyboard.onKeyDown} placeholder="Inizia a digitare un Paese" autoComplete="off" role="combobox" aria-expanded={countrySearchOpen && countryMatches.length > 0} aria-controls="country-options" aria-activedescendant={countryKeyboard.activeIndex >= 0 ? `country-option-${countryKeyboard.activeIndex}` : undefined} required />
+                  <input value={draft.country} autoFocus onFocus={() => setCountrySearchOpen(false)} onChange={(event) => { setSelectedCountry(null); setDraft({ ...draft, country: event.target.value, city: "" }); setCountrySearchOpen(Boolean(event.target.value.trim())); }} onKeyDown={countryKeyboard.onKeyDown} placeholder="Inizia a digitare un Paese" autoComplete="off" role="combobox" aria-expanded={countrySearchOpen && countryMatches.length > 0} aria-controls="country-options" aria-activedescendant={countryKeyboard.activeIndex >= 0 ? `country-option-${countryKeyboard.activeIndex}` : undefined} required />
                   {countrySearchOpen && countryMatches.length > 0 && <div className="autocomplete-menu" id="country-options" role="listbox">{countryMatches.map((country, index) => <button type="button" id={`country-option-${index}`} role="option" aria-selected={countryKeyboard.activeIndex === index} className={countryKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={country.isoCode} onMouseEnter={() => countryKeyboard.setActiveIndex(index)} onClick={() => selectCountry(index)}><span>{country.flag}</span><strong>{country.displayName}</strong><small>{country.name !== country.displayName ? country.name : country.isoCode}</small></button>)}</div>}
                 </label>
                 <label className="autocomplete-field">Città o tappe <small className="optional-label">Facoltativo</small>
