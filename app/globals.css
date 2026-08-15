@@ -1231,3 +1231,5 @@ html, body { max-width: 100%; overflow-x: clip; }
 .checkin-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.checkin-title-row > strong { color: var(--navy); font-size: 17px; }.checkin-title-row .checkin-checkbox { flex: 0 0 auto; }
 .travel-wallet-icon { width: 42px; height: 42px; flex: 0 0 42px; object-fit: contain; }
 .travel-card-icon { width: 46px; height: 46px; flex: 0 0 46px; object-fit: contain; }
+.packing-wallet-card.incomplete { border-color: #ef6666; box-shadow: inset 0 0 0 1px rgba(220, 38, 38, .08); }.packing-wallet-card.incomplete strong { color: #a91d2b; }.packing-wallet-card.incomplete small,.packing-wallet-card.incomplete > svg:last-child { color: #c43b48; }
+.packing-wallet-card.completed { border-color: #a8dfc1; color: #087a45; background: #eaf8f0; }.packing-wallet-card.completed strong { color: #075f3c; }.packing-wallet-card.completed small,.packing-wallet-card.completed > svg:last-child { color: #438064; }

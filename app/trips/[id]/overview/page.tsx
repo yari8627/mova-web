@@ -485,7 +485,7 @@ export default function OverviewPage() {
               </button>
             </article>
             <button
-              className="packing-wallet-card"
+              className={`packing-wallet-card${packingItems.length === 0 ? "" : packedCount === packingItems.length ? " completed" : " incomplete"}`}
               onClick={() => router.push(`/trips/${id}/packing`)}
             >
               <Image
