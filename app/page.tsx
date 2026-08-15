@@ -100,6 +100,22 @@ function daysUntil(value: string) {
   return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86400000));
 }
 
+function localDateKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function closestCurrentTrip(items: Trip[]) {
+  const today = localDateKey();
+  const current = items.filter((trip) => trip.endDate >= today);
+  return [...current].sort((a, b) => {
+    const aActive = a.startDate <= today && a.endDate >= today;
+    const bActive = b.startDate <= today && b.endDate >= today;
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    return a.startDate.localeCompare(b.startDate);
+  })[0];
+}
+
 function suggestedTripName(draft: TripDraft) {
   const destination = draft.country.trim() || draft.city.split("·")[0]?.trim() || "Viaggio";
   const year = draft.startDate.slice(0, 4) || String(new Date().getFullYear());
@@ -113,7 +129,6 @@ export default function Page() {
   const [authReady, setAuthReady] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [selectedTripId, setSelectedTripId] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState(1);
   const [draft, setDraft] = useState<TripDraft>(emptyDraft);
@@ -139,7 +154,6 @@ export default function Page() {
         if (response.ok) {
           const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
           setTrips(accountTrips);
-          setSelectedTripId(accountTrips[0]?.id ?? "");
         }
         const notificationResponse = await fetch("/api/notifications", { cache: "no-store" });
         if (notificationResponse.ok) { const result = await notificationResponse.json(); setNotifications(result.notifications); }
@@ -156,10 +170,9 @@ export default function Page() {
 
   useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
 
-  const selectedTrip = useMemo(
-    () => trips.find((trip) => trip.id === selectedTripId) ?? trips[0],
-    [selectedTripId, trips]
-  );
+  const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
+  const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
+  const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
   useEffect(() => {
     if (!selectedTrip?.id) { setTripProgress({ flights: 0, hotels: 0, activities: 0 }); return; }
     let active = true;
@@ -258,7 +271,6 @@ export default function Page() {
       status: "planning",
     };
     setTrips((current) => [newTrip, ...current]);
-    setSelectedTripId(newTrip.id);
     closeCreate();
     try {
       const tripResponse = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newTrip) });
@@ -345,20 +357,20 @@ export default function Page() {
             <div className="section-heading">
               <div>
                 <p className="section-kicker">I TUOI VIAGGI</p>
-                <h3>In programma</h3>
+                <h3>In Programma</h3>
               </div>
               <button className="primary-button" onClick={openCreate}>
-                <Plus size={18} /> Nuovo viaggio
+                <Plus size={18} /> Nuovo Viaggio
               </button>
             </div>
 
             <div className="trip-grid">
-              {!trips.length && <div className="home-empty"><Plane size={28} /><div><strong>Nessun viaggio ancora</strong><p>Crea il tuo primo viaggio e inizia a organizzare itinerario, partecipanti e documenti.</p></div></div>}
-              {trips.map((trip) => (
+              {!inProgramTrips.length && <div className="home-empty"><Plane size={28} /><div><strong>Nessun Viaggio in Programma</strong><p>Crea un nuovo viaggio oppure consulta quelli completati.</p></div></div>}
+              {inProgramTrips.map((trip) => (
                 <button
                   key={trip.id}
-                  className={`trip-card ${selectedTripId === trip.id ? "selected" : ""}`}
-                  onClick={() => setSelectedTripId(trip.id)}
+                  className={`trip-card ${selectedTrip?.id === trip.id ? "selected" : ""}`}
+                  onClick={() => router.push(`/trips/${trip.id}/overview`)}
                 >
                   <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.08), rgba(12,23,51,.18)), url(${imageForTrip(trip)})` } : undefined}>
                     <span>{trip.countryCode}</span>
@@ -369,6 +381,33 @@ export default function Page() {
                     <small>{formatDate(trip.startDate)} · {trip.people} persone</small>
                   </div>
                   <ChevronRight size={18} />
+                </button>
+              ))}
+            </div>
+
+            <div className="section-heading completed-heading">
+              <div>
+                <p className="section-kicker">LA TUA STORIA</p>
+                <h3>Completati</h3>
+              </div>
+            </div>
+            <div className="trip-grid completed-trip-grid">
+              {!completedTrips.length && <div className="home-empty completed-empty"><Check size={28} /><div><strong>Nessun Viaggio Completato</strong><p>I viaggi conclusi verranno raccolti automaticamente qui.</p></div></div>}
+              {completedTrips.map((trip) => (
+                <button
+                  key={trip.id}
+                  className="trip-card completed"
+                  onClick={() => router.push(`/trips/${trip.id}/overview`)}
+                >
+                  <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.28), rgba(12,23,51,.42)), url(${imageForTrip(trip)})` } : undefined}>
+                    <span>{trip.countryCode}</span>
+                  </div>
+                  <div className="trip-card-copy">
+                    <strong>{trip.name}</strong>
+                    {trip.city && <span>{trip.city}</span>}
+                    <small>Concluso il {formatDate(trip.endDate)} · {trip.people} persone</small>
+                  </div>
+                  <Check size={18} />
                 </button>
               ))}
             </div>
