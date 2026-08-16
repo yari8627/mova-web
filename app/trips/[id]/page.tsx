@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
-import { CalendarDays, Check, Clock3, GripVertical, MapPin, Pencil, Plus, Trash2, Users, WalletCards, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Pencil, Plus, Trash2, Users, WalletCards, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
 import { useDestinationImage } from "../../components/use-destination-image";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
@@ -207,6 +207,18 @@ export default function TripPage() {
     document.getElementById(`itinerary-day-${day}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
   }
 
+  function openDayRoute(dayActivities: Activity[]) {
+    const stops = sortActivities(dayActivities).map((activity) => Number.isFinite(activity.latitude) && Number.isFinite(activity.longitude) ? `${activity.latitude},${activity.longitude}` : [activity.place, activity.placeAddress].filter(Boolean).join(", "));
+    if (!stops.length) return;
+    if (stops.length === 1) {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const params = new URLSearchParams({ api: "1", origin: stops[0], destination: stops[stops.length - 1], travelmode: "walking" });
+    if (stops.length > 2) params.set("waypoints", stops.slice(1, -1).join("|"));
+    window.open(`https://www.google.com/maps/dir/?${params}`, "_blank", "noopener,noreferrer");
+  }
+
   return <main className="trip-detail-shell">
     <header className="detail-topbar">
       <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button>
@@ -242,7 +254,7 @@ export default function TripPage() {
               </div>
             </div>
           </article>
-        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div></div>}
+        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><Navigation size={18} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div></div>}
         </section>; })}</div>
       </section>
 

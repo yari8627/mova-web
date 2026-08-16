@@ -1013,6 +1013,12 @@ select:focus-visible {
 .activity-actions button { width: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--text-secondary); background: white; cursor: pointer; }
 .activity-actions button:hover { color: var(--blue); border-color: #b7caff; }
 .activity-actions button:disabled { opacity: .35; cursor: default; }
+.day-route-action { padding: 0 16px 16px; }
+.day-route-action button { width: 100%; min-height: 58px; padding: 11px 13px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; border: 1px solid #bfd0ff; border-radius: 13px; color: var(--blue); background: var(--blue-soft); text-align: left; cursor: pointer; }
+.day-route-action button:hover { border-color: var(--blue); background: #e9efff; }
+.day-route-action span,.day-route-action strong,.day-route-action small { min-width: 0; display: block; }
+.day-route-action strong { color: var(--navy); font-size: 14px; }
+.day-route-action small { margin-top: 2px; color: var(--text-secondary); font-size: 11px; font-weight: 500; }
 .activity-modal { width: min(560px, 100%); }
 .detail-aside { display: grid; align-content: start; gap: 16px; }
 .aside-copy { margin: 15px 0 0; color: var(--text-secondary); font-size: 13px; }
@@ -1053,6 +1059,7 @@ select:focus-visible {
   .activity-meta span { align-items: flex-start; line-height: 1.35; }
   .activity-actions { width: 100%; margin: 10px 0 0; justify-content: flex-end; flex-wrap: wrap; }
   .activity-actions button,.booking-attach-button,.drag-handle { width: 40px; min-height: 40px; }
+  .day-route-action { padding: 0 8px 12px; }
   .activity-drop-line { margin-left: 0; }
   .detail-aside { margin-top: 16px; grid-template-columns: 1fr; }
   .activity-backdrop { place-items: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
