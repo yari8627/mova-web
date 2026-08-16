@@ -12,7 +12,6 @@ import {
   CircleUserRound,
   Compass,
   Earth,
-  Home,
   Map,
   Mail,
   Menu,
@@ -70,10 +69,10 @@ const countryFlags: Record<string, string> = {
 };
 
 const navItems = [
-  { label: "Home", icon: Home },
-  { label: "Viaggi", icon: Plane },
-  { label: "Progressi", icon: Earth },
-  { label: "Profilo", icon: CircleUserRound },
+  { label: "I Miei Viaggi", icon: Plane, path: "/" },
+  { label: "Progressi", icon: Earth, path: "/progress" },
+  { label: "Chi Siamo", icon: Users, path: "/about" },
+  { label: "Profilo", icon: CircleUserRound, path: "/settings/profile" },
 ];
 
 function formatDate(value: string) {
@@ -282,8 +281,8 @@ export default function Page() {
         </div>
 
         <nav className="main-nav" aria-label="Navigazione principale">
-          {navItems.map(({ label, icon: Icon }, index) => (
-            <button key={label} className={`nav-item ${index === 0 ? "active" : ""}`} onClick={() => { if (label === "Profilo") router.push("/auth"); if (label === "Progressi") router.push("/progress"); }}>
+          {navItems.map(({ label, icon: Icon, path }, index) => (
+            <button key={label} className={`nav-item ${index === 0 ? "active" : ""}`} onClick={() => router.push(path)}>
               <Icon size={20} />
               <span>{label}</span>
             </button>
@@ -494,8 +493,8 @@ export default function Page() {
       )}
 
       <nav className="mobile-bottom-nav" aria-label="Navigazione mobile">
-        {navItems.map(({ label, icon: Icon }, index) => (
-          <button key={label} className={index === 0 ? "active" : ""} onClick={() => { if (label === "Profilo") router.push("/auth"); if (label === "Progressi") router.push("/progress"); }}>
+        {navItems.map(({ label, icon: Icon, path }, index) => (
+          <button key={label} className={index === 0 ? "active" : ""} onClick={() => router.push(path)}>
             <Icon size={20} />
             <span>{label}</span>
           </button>
