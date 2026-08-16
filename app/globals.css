@@ -1405,6 +1405,12 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
 .global-bottom-nav button { min-width: 0; padding: 5px 3px; border: 0; display: grid; place-items: center; align-content: center; gap: 4px; color: var(--text-secondary); background: transparent; font-size: 10px; line-height: 1.1; cursor: pointer; }
 .global-bottom-nav button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .global-bottom-nav button.active { color: var(--blue); font-weight: 800; }
+.progress-heading { align-items: stretch; flex-direction: column; }
+.progress-heading .primary-button { align-self: center; }
+.continent-progress { padding: 16px 18px; }
+.continent-progress-grid { margin-top: 12px; gap: 4px 20px; }
+.continent-progress-grid article { padding: 5px 0; gap: 9px; }
+.continent-progress-track { height: 6px; }
 
 .profile-card,
 .profile-card .security-form,
@@ -1438,6 +1444,14 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
   .progress-kpis article > div { min-width: 0; width: 100%; }
   .progress-kpis strong { font-size: 17px; line-height: 1.15; overflow-wrap: anywhere; }
   .progress-kpis small { font-size: 9px; line-height: 1.25; }
+  .progress-heading .primary-button { width: fit-content; max-width: 100%; justify-content: center; }
+  .continent-progress { padding: 13px; }
+  .continent-progress h2 { font-size: 17px; }
+  .continent-progress > header > strong { padding: 5px 8px; font-size: 11px; }
+  .continent-progress-grid { margin-top: 8px; }
+  .continent-progress-grid article { padding: 3px 0; }
+  .continent-progress-grid article div:first-child strong { font-size: 12px; }
+  .continent-progress-grid article div:first-child span { font-size: 9px; }
 }
 .about-shell { min-height: 100vh; max-width: 1000px; margin: 0 auto; padding: 28px 24px 70px; }
 .about-hero { margin-top: 70px; max-width: 720px; }.about-hero h1 { margin: 8px 0 16px; font-size: clamp(38px,7vw,68px); letter-spacing: -2px; }.about-hero > p:last-child { color: var(--text-secondary); font-size: 17px; line-height: 1.7; }
