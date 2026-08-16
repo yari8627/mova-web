@@ -76,6 +76,7 @@ export default function TripPage() {
   const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
   const itineraryDaysRef = useRef<HTMLDivElement | null>(null);
+  const photoLookups = useRef(new Set<string>());
 
   const countryIsoCode = useMemo(() => {
     if (!trip) return null;
@@ -98,6 +99,37 @@ export default function TripPage() {
     }, 500);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [countryIsoCode, draft.place, placeSessionToken, showEditor]);
+
+  useEffect(() => {
+    if (!trip || !countryIsoCode) return;
+    const activity = activities.find((item) => !item.photoName && item.place && !photoLookups.current.has(item.id));
+    if (!activity || photoLookups.current.size >= 12) return;
+    const targetActivity = activity;
+    let cancelled = false;
+    photoLookups.current.add(targetActivity.id);
+    async function enrich() {
+      try {
+          const token = crypto.randomUUID();
+          const query = [targetActivity.place, targetActivity.placeAddress, trip?.country].filter(Boolean).join(", ");
+          const suggestionsResponse = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(token)}`);
+          if (!suggestionsResponse.ok) return;
+          const suggestions = await suggestionsResponse.json() as PlaceResult[];
+          const match = suggestions.find((place) => place.provider === "google" && place.placeId);
+          if (!match?.placeId) return;
+          const detailsResponse = await fetch(`/api/places?placeId=${encodeURIComponent(match.placeId)}&sessionToken=${encodeURIComponent(token)}`);
+          if (!detailsResponse.ok) return;
+          const details = await detailsResponse.json() as PlaceResult;
+          if (!details.photoName || cancelled) return;
+          setActivities((current) => {
+            const next = current.map((item) => item.id === targetActivity.id ? { ...item, photoName: details.photoName, photoAttribution: details.photoAttribution, photoAttributionUri: details.photoAttributionUri } : item);
+            window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(next));
+            return next;
+          });
+      } catch { /* La card mantiene il layout senza immagine. */ }
+    }
+    void enrich();
+    return () => { cancelled = true; };
+  }, [activities, countryIsoCode, id, trip]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
@@ -243,7 +275,7 @@ export default function TripPage() {
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canManage} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
             <div className="timeline-card">
               <div className="timeline-card-content">
-                {item.photoName && <figure className="activity-place-photo"><img src={`/api/places/photo?name=${encodeURIComponent(item.photoName)}`} alt={item.place} loading="lazy" />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
+                {item.photoName && <figure className="activity-place-photo"><img src={`/api/places/photo?name=${encodeURIComponent(item.photoName)}`} alt={item.place} loading="lazy" onError={(event) => { event.currentTarget.closest("figure")?.setAttribute("hidden", ""); }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
                     <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canManage} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
