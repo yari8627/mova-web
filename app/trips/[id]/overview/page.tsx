@@ -19,6 +19,7 @@ import {
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
+import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client-cache";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
 type Activity = {
@@ -142,10 +143,15 @@ export default function OverviewPage() {
       );
       const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
       const budgetValue = savedBudget ? Number(savedBudget) : null;
+      setActivities(activityItems);
+      setBookings(bookingItems);
+      setDocuments(documentItems);
+      setExpenses(expenseItems);
+      setParticipants(participantItems);
+      setBudget(budgetValue);
       try {
-        const response = await fetch(`/api/trips/${id}`);
-        if (response.ok) {
-          const remote = await response.json();
+        const remote = await fetchTripSnapshot(id);
+        if (remote) {
           const group = tripGroup(remote);
           setActivities(remote.activities);
           setBookings(remote.bookings);
@@ -182,30 +188,16 @@ export default function OverviewPage() {
             );
           return;
         }
-        if (response.status === 404)
-          void syncTripSnapshot(id, {
-            activities: activityItems,
-            bookings: bookingItems,
-            documents: documentItems,
-            expenses: expenseItems,
-            participants: participantItems,
-            budget: budgetValue,
-          });
       } catch {
         /* Cache offline. */
       }
-      setActivities(activityItems);
-      setBookings(bookingItems);
-      setDocuments(documentItems);
-      setExpenses(expenseItems);
-      setParticipants(participantItems);
-      setBudget(budgetValue);
     }
     void load();
   }, [id]);
   useEffect(() => {
-    fetch(`/api/trips/${id}`)
-      .then((response) => (response.ok ? response.json() : null))
+    const cached = readTripSnapshot(id);
+    if (cached) setTripDates({ startDate: cached.startDate.slice(0, 10), endDate: cached.endDate.slice(0, 10) });
+    fetchTripSnapshot(id)
       .then((trip) => {
         if (trip)
           setTripDates({

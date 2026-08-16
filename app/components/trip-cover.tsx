@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Users } from "lucide-react";
 import { useDestinationImage } from "./use-destination-image";
+import { fetchTripSnapshot, readTripSnapshot } from "../../lib/trip-client-cache";
 
 type Trip = {
   id: string;
@@ -25,7 +26,14 @@ export function TripCover({ tripId }: { tripId: string }) {
   const [trip, setTrip] = useState<Trip | null>(null);
   const image = useDestinationImage(trip?.country, trip?.city);
 
-  useEffect(() => { async function load() { const saved = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Trip[]; const fallback = saved.find((item) => item.id === tripId) || null; try { const response = await fetch(`/api/trips/${tripId}`); if (response.ok) { const remote = await response.json(); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); return; } } catch { /* Usa la cache locale. */ } setTrip(fallback); } void load(); }, [tripId]);
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Trip[];
+    const initial = readTripSnapshot(tripId) || saved.find((item) => item.id === tripId) || null;
+    if (initial) setTrip({ ...initial, startDate: initial.startDate?.slice(0, 10), endDate: initial.endDate?.slice(0, 10) } as Trip);
+    void fetchTripSnapshot(tripId).then((remote) => {
+      if (remote) setTrip({ ...remote, startDate: remote.startDate?.slice(0, 10), endDate: remote.endDate?.slice(0, 10) } as Trip);
+    });
+  }, [tripId]);
 
   if (!trip) return null;
   const dateRange = [formatDate(trip.startDate), formatDate(trip.endDate)].filter(Boolean).join(" – ");

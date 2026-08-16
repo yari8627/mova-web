@@ -8,6 +8,7 @@ import { TripTabs } from "../../../components/trip-tabs";
 import { TravelCategory, TravelCategoryIcon, travelCategoryFromText } from "../../../components/travel-category-icon";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
+import { fetchTripSnapshot } from "../../../../lib/trip-client-cache";
 
 type Expense = { id: string; description: string; amount: number; category: string; paidBy: string; date: string; sharedWith?: string[]; kind?: "expense" | "settlement"; recipient?: string; createdById?: string | null };
 const starterExpenses: Expense[] = [
@@ -56,7 +57,8 @@ export default function ExpensesPage() {
     const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
     const savedParticipants = window.localStorage.getItem(`mova-participants-${id}`);
     if (savedParticipants) { const names = (JSON.parse(savedParticipants) as Array<{ name: string }>).map((person) => person.name).filter(Boolean); setParticipants([...new Set(names)]); }
-    async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); const remoteExpenses = remote.expenses.map((item: Expense & { sharedWith?: string | string[] }) => ({ ...item, date: item.date.slice(0, 10), sharedWith: typeof item.sharedWith === "string" ? JSON.parse(item.sharedWith) : item.sharedWith })); setExpenses(remoteExpenses); setBudget(remote.budget); const groupNames = [remote.owner?.name, ...remote.participants.map((person: { name: string }) => person.name)].filter(Boolean); const names = [...new Set<string>(groupNames.length ? groupNames : [userName])]; setParticipants(names); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remote.participants)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remoteExpenses)); return; } } catch { /* Cache offline. */ } setExpenses(saved ? JSON.parse(saved) : []); setBudget(savedBudget ? Number(savedBudget) : null); }
+    setExpenses(saved ? JSON.parse(saved) : []); setBudget(savedBudget ? Number(savedBudget) : null);
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const remoteExpenses = remote.expenses.map((item: Expense & { sharedWith?: string | string[] }) => ({ ...item, date: item.date.slice(0, 10), sharedWith: typeof item.sharedWith === "string" ? JSON.parse(item.sharedWith) : item.sharedWith })); setExpenses(remoteExpenses); setBudget(remote.budget); const groupNames = [remote.owner?.name, ...remote.participants.map((person: { name: string }) => person.name)].filter(Boolean); const names = [...new Set<string>(groupNames.length ? groupNames : [userName])]; setParticipants(names); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remote.participants)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remoteExpenses)); } }
     void load();
   }, [id]);
 

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
+import { fetchTripSnapshot } from "../../../../lib/trip-client-cache";
 import { TravelCategoryIcon, travelCategoryFromText, travelCategoryLabel } from "../../../components/travel-category-icon";
 import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
@@ -251,10 +252,10 @@ export default function BookingsPage() {
     async function load() {
       const saved = window.localStorage.getItem(`mova-bookings-${id}`);
       const cached = saved ? (JSON.parse(saved) as Booking[]) : starterBookings;
+      setBookings(cached);
       try {
-        const response = await fetch(`/api/trips/${id}`);
-        if (response.ok) {
-          const remote = await response.json();
+        const remote = await fetchTripSnapshot(id);
+        if (remote) {
           setBookings(remote.bookings);
           setAttachmentCounts(
             remote.documents.reduce(

@@ -9,6 +9,7 @@ import { useDestinationImage } from "../../components/use-destination-image";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
 import { useTripPermissions } from "../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard";
+import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-cache";
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
 type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
@@ -137,7 +138,11 @@ export default function TripPage() {
     const savedActivities = window.localStorage.getItem(`mova-itinerary-${id}`);
     const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
     const fallbackTrip = trips.find((item) => item.id === id) ?? null;
-    async function load() { try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const remote = await response.json(); const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) }); setActivities(sortActivities(mergedActivities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); return; } } catch { /* Cache offline. */ } setTrip(fallbackTrip); setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []); setBudget(savedBudget ? Number(savedBudget) : null); }
+    const cachedTrip = readTripSnapshot(id) as Trip | null;
+    setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
+    setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
+    setBudget(savedBudget ? Number(savedBudget) : null);
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
 
