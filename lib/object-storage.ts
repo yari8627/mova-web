@@ -1,9 +1,10 @@
 import { Buffer } from "buffer";
 
 function configuration() {
-  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "mova-private";
+  const clean = (value?: string) => value?.trim().replace(/^['"]|['"]$/g, "");
+  const url = clean(process.env.SUPABASE_URL)?.replace(/\/$/, "");
+  const key = clean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const bucket = clean(process.env.SUPABASE_STORAGE_BUCKET) || "mova-private";
   return url && key ? { url, key, bucket } : null;
 }
 
@@ -14,11 +15,31 @@ function objectUrl(config: NonNullable<ReturnType<typeof configuration>>, key: s
 
 export function remoteStorageConfigured() { return Boolean(configuration()); }
 
+async function ensureBucket(config: NonNullable<ReturnType<typeof configuration>>) {
+  const headers = { apikey: config.key, Authorization: `Bearer ${config.key}` };
+  const existing = await fetch(`${config.url}/storage/v1/bucket/${encodeURIComponent(config.bucket)}`, { headers, cache: "no-store" });
+  if (existing.ok) return;
+  if (existing.status !== 404 && existing.status !== 400) throw new Error(`Verifica storage fallita (${existing.status})`);
+  const created = await fetch(`${config.url}/storage/v1/bucket`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: config.bucket, name: config.bucket, public: false, file_size_limit: 10485760 }),
+  });
+  if (!created.ok && created.status !== 409) {
+    const detail = await created.text();
+    throw new Error(`Creazione archivio fallita (${created.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+  }
+}
+
 export async function putObject(key: string, bytes: Uint8Array, contentType: string) {
   const config = configuration();
   if (!config) throw new Error("Storage remoto non configurato");
+  await ensureBucket(config);
   const response = await fetch(objectUrl(config, key), { method: "POST", headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": contentType, "x-upsert": "true" }, body: Buffer.from(bytes) });
-  if (!response.ok) throw new Error(`Caricamento storage fallito (${response.status})`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Caricamento storage fallito (${response.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+  }
 }
 
 export async function getObject(key: string) {
