@@ -3,17 +3,20 @@ import { currentUser } from "../../../lib/auth";
 
 type NominatimPlace = { place_id: number; display_name: string; name?: string; lat: string; lon: string; type?: string; category?: string };
 type GoogleSuggestion = { placePrediction?: { placeId?: string; text?: { text?: string }; structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } }; types?: string[] } };
+type GooglePhoto = { name?: string; authorAttributions?: Array<{ displayName?: string; uri?: string }> };
 
 async function googlePlaceDetails(placeId: string, sessionToken: string) {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) return null;
   const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=it&sessionToken=${encodeURIComponent(sessionToken)}`, {
-    headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType" },
+    headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,photos" },
     cache: "no-store",
   });
   if (!response.ok) return null;
   const place = await response.json();
-  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place" };
+  const photo = (place.photos as GooglePhoto[] | undefined)?.[0];
+  const attribution = photo?.authorAttributions?.[0];
+  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place", photoName: photo?.name, photoAttribution: attribution?.displayName, photoAttributionUri: attribution?.uri };
 }
 
 async function googleAutocomplete(query: string, countryCode: string, sessionToken: string) {

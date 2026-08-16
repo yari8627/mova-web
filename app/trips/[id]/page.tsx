@@ -11,8 +11,8 @@ import { useTripPermissions } from "../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard";
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
-type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
-type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string };
+type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
+type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string; photoName?: string; photoAttribution?: string; photoAttributionUri?: string };
 
 const starterActivities: Activity[] = [
   { id: "arrival", day: 1, title: "Arrivo e primo orientamento", place: "Centro città", time: "15:30", done: true },
@@ -84,7 +84,7 @@ export default function TripPage() {
   }, [trip]);
   const placeKeyboard = useAutocompleteKeyboard({ itemCount: placeMatches.length, isOpen: placeSearchOpen, resetKey: draft.place, onOpen: () => setPlaceSearchOpen(true), onClose: () => setPlaceSearchOpen(false), onSelect: selectPlace });
 
-  async function selectPlace(index: number) { let place = placeMatches[index]; if (!place) return; setPlaceSearchOpen(false); if (place.provider === "google" && place.placeId) { try { const response = await fetch(`/api/places?placeId=${encodeURIComponent(place.placeId)}&sessionToken=${encodeURIComponent(placeSessionToken)}`); if (response.ok) place = await response.json(); } catch { /* Mantiene il risultato selezionato. */ } } setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude }); setEditorStep(2); }
+  async function selectPlace(index: number) { let place = placeMatches[index]; if (!place) return; setPlaceSearchOpen(false); if (place.provider === "google" && place.placeId) { try { const response = await fetch(`/api/places?placeId=${encodeURIComponent(place.placeId)}&sessionToken=${encodeURIComponent(placeSessionToken)}`); if (response.ok) place = await response.json(); } catch { /* Mantiene il risultato selezionato. */ } } setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri }); setEditorStep(2); }
 
   useEffect(() => {
     const query = draft.place.trim();
@@ -154,7 +154,7 @@ export default function TripPage() {
 
   function openEdit(activity: Activity) {
     setEditingId(activity.id);
-    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, time: activity.time });
+    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, photoName: activity.photoName, photoAttribution: activity.photoAttribution, photoAttributionUri: activity.photoAttributionUri, time: activity.time });
     setEditorStep(2);
     setShowEditor(true);
   }
@@ -229,12 +229,20 @@ export default function TripPage() {
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canManage} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
-          <div className="timeline-card"><div className="timeline-card-heading"><div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canManage} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>{canManage && <div className="activity-actions">
-            <span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span>
-            <button onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button>
-            <button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button>
-          </div>}</div><div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div></div>
-        </article></div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div></div>}
+            <div className="timeline-card">
+              <div className="timeline-card-content">
+                {item.photoName && <figure className="activity-place-photo"><img src={`/api/places/photo?name=${encodeURIComponent(item.photoName)}`} alt={item.place} loading="lazy" />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
+                <div className="timeline-card-main">
+                  <div className="timeline-card-heading">
+                    <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canManage} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
+                    {canManage && <div className="activity-actions"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
+                  </div>
+                  <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div></div>}
         </section>; })}</div>
       </section>
 

@@ -104,6 +104,9 @@ model Activity {
   placeAddress String?
   latitude Float?
   longitude Float?
+  photoName String?
+  photoAttribution String?
+  photoAttributionUri String?
   time    String
   done    Boolean @default(false)
   bookingId String?
