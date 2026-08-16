@@ -375,9 +375,12 @@ select:focus-visible {
   padding: 13px 12px;
   text-align: center;
   border-radius: 17px;
-  background: rgba(255,255,255,0.15);
+  background: rgba(38, 50, 72, 0.68);
   border: 1px solid rgba(255,255,255,0.26);
   backdrop-filter: blur(12px);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .countdown strong,
