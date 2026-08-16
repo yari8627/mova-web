@@ -436,7 +436,7 @@ export default function Page() {
             <div className="tip-card home-invite-card">
               <div className="home-tip-copy"><Plane size={22} /><div><strong>Consiglio Mova</strong><p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p></div></div>
               <form className="home-invite-entry" onSubmit={openInvite}>
-                <label htmlFor="home-invite-code"><KeyRound size={18} /><span><strong>Hai un codice invito?</strong><small>Inserisci il codice ricevuto per partecipare al viaggio.</small></span></label>
+                <label htmlFor="home-invite-code"><KeyRound size={18} /><span><strong>Hai già un codice invito?</strong><small>Inserisci il codice ricevuto per partecipare al viaggio.</small></span></label>
                 <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="MOVA-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
                 {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
               </form>
