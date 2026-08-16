@@ -10,8 +10,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 });
   const { id } = await params; const access = await tripAccess(id, user); if (!access.allowed) return NextResponse.json({ error: "Accesso negato" }, { status: 403 });
   const trip = await prisma.trip.findUnique({ where: { id } }); if (!trip || (access.role !== "owner" && access.role !== "co-organizer")) return NextResponse.json({ error: "Non hai il permesso di invitare partecipanti" }, { status: 403 });
-  const body = await request.json(); const email = String(body.email || "").trim().toLowerCase(); const name = String(body.name || "").trim(); const role = access.role === "owner" && body.role === "co-organizer" ? "co-organizer" : "participant";
-  if (!email || !name) return NextResponse.json({ error: "Nome ed email sono obbligatori" }, { status: 400 });
+  const body = await request.json(); const email = String(body.email || "").trim().toLowerCase(); const pendingName = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it")) || "Invitato"; const name = String(body.name || "").trim() || pendingName; const role = access.role === "owner" && body.role === "co-organizer" ? "co-organizer" : "participant";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Inserisci un indirizzo email valido" }, { status: 400 });
   if (email === user.email.toLowerCase()) return NextResponse.json({ error: "Sei già il proprietario del viaggio" }, { status: 400 });
   const participant = await prisma.participant.upsert({ where: { tripId_email: { tripId: id, email } }, update: { name, role, status: "pending" }, create: { id: randomUUID(), tripId: id, name, email, role, status: "pending" } });
   await prisma.tripInvite.updateMany({ where: { tripId: id, email, status: "pending" }, data: { status: "replaced" } });
