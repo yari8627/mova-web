@@ -14,7 +14,8 @@ export function PwaInstall() {
     const lockPortrait = () => { if (standalone) void orientation?.lock?.("portrait-primary").catch(() => undefined); };
     lockPortrait();
     document.addEventListener("visibilitychange", lockPortrait);
-    if (standalone || window.localStorage.getItem("mova-install-dismissed") === "true") return () => document.removeEventListener("visibilitychange", lockPortrait);
+    const sharedInstallLink = new URLSearchParams(window.location.search).get("install") === "1";
+    if (standalone || (!sharedInstallLink && window.localStorage.getItem("mova-install-dismissed") === "true")) return () => document.removeEventListener("visibilitychange", lockPortrait);
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent); setIos(isIos); if (isIos) setHidden(false);
     const onPrompt = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); setHidden(false); };
     window.addEventListener("beforeinstallprompt", onPrompt);

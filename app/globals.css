@@ -632,7 +632,12 @@ select:focus-visible {
 .home-invite-entry input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,183,165,.13); }
 .home-invite-entry .primary-button { min-height: 44px; box-shadow: none; }
 .home-invite-error { color: #b42318; font-size: 11px; }
-@media (max-width: 520px) { .home-invite-entry > div { grid-template-columns: 1fr; }.home-invite-entry .primary-button { width: 100%; } }
+.home-share-app { padding-top: 14px; border-top: 1px solid #ccefe8; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.home-share-app > div strong,.home-share-app > div small { display: block; }
+.home-share-app > div strong { color: #075f58; }
+.home-share-app > div small { margin-top: 2px; color: #46827d; font-size: 11px; }
+.home-share-app .secondary-button { flex: 0 0 auto; color: #075f58; background: rgba(255,255,255,.78); }
+@media (max-width: 520px) { .home-invite-entry > div { grid-template-columns: 1fr; }.home-invite-entry .primary-button { width: 100%; }.home-share-app { align-items: stretch; flex-direction: column; }.home-share-app .secondary-button { width: 100%; } }
 
 .modal-backdrop {
   position: fixed;

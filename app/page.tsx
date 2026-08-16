@@ -18,6 +18,7 @@ import {
   Menu,
   Plane,
   Plus,
+  Share2,
   Users,
   UserPlus,
   WalletCards,
@@ -124,6 +125,7 @@ export default function Page() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [inviteEntry, setInviteEntry] = useState("");
   const [inviteEntryError, setInviteEntryError] = useState("");
+  const [shareFeedback, setShareFeedback] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState(1);
   const [draft, setDraft] = useState<TripDraft>(emptyDraft);
@@ -166,6 +168,7 @@ export default function Page() {
   async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
   async function markAllNotificationsRead() { await fetch("/api/notifications", { method: "PATCH" }); setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); }
   function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^MOVA-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice MOVA valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
+  async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "MOVA — Travel together", text: "Organizza e condividi i tuoi viaggi con MOVA. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("MOVA condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
 
   useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
 
@@ -437,6 +440,7 @@ export default function Page() {
                 <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="MOVA-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
                 {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
               </form>
+              <div className="home-share-app"><div><strong>Condividi MOVA</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
             </div>
           </aside>
         </div>
