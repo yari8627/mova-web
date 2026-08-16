@@ -632,12 +632,13 @@ select:focus-visible {
 .home-invite-entry input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,183,165,.13); }
 .home-invite-entry .primary-button { min-height: 44px; box-shadow: none; }
 .home-invite-error { color: #b42318; font-size: 11px; }
-.home-share-app { padding-top: 14px; border-top: 1px solid #ccefe8; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.home-share-app > div strong,.home-share-app > div small { display: block; }
-.home-share-app > div strong { color: #075f58; }
-.home-share-app > div small { margin-top: 2px; color: #46827d; font-size: 11px; }
-.home-share-app .secondary-button { flex: 0 0 auto; color: #075f58; background: rgba(255,255,255,.78); }
-@media (max-width: 520px) { .home-invite-entry > div { grid-template-columns: 1fr; }.home-invite-entry .primary-button { width: 100%; }.home-share-app { align-items: stretch; flex-direction: column; }.home-share-app .secondary-button { width: 100%; } }
+.share-app-card { padding: 18px 20px; border: 1px solid var(--border); border-radius: 21px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 12px; align-items: center; background: white; box-shadow: var(--shadow-sm); }
+.share-app-card > span { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); }
+.share-app-card > div strong,.share-app-card > div small { display: block; }
+.share-app-card > div strong { color: var(--navy); }
+.share-app-card > div small { margin-top: 3px; color: var(--text-secondary); font-size: 11px; }
+.share-app-card .secondary-button { flex: 0 0 auto; }
+@media (max-width: 520px) { .home-invite-entry > div { grid-template-columns: 1fr; }.home-invite-entry .primary-button { width: 100%; }.share-app-card { grid-template-columns: 42px minmax(0,1fr); }.share-app-card .secondary-button { width: 100%; grid-column: 1 / -1; } }
 
 .modal-backdrop {
   position: fixed;
@@ -760,7 +761,8 @@ select:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tip-card {
+  .tip-card,
+  .share-app-card {
     grid-column: 1 / -1;
   }
 }

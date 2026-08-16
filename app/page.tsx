@@ -440,8 +440,8 @@ export default function Page() {
                 <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="MOVA-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
                 {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
               </form>
-              <div className="home-share-app"><div><strong>Condividi MOVA</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
             </div>
+            <div className="share-app-card"><span><Share2 size={21} /></span><div><strong>Condividi MOVA</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
           </aside>
         </div>
       </section>
