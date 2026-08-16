@@ -16,6 +16,12 @@ export function ModalScrollLock() {
         const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
         document.body.style.overflow = "hidden";
         if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        const modal = document.querySelector<HTMLElement>(".modal-backdrop .modal");
+        if (modal) {
+          modal.scrollTop = 0;
+          window.requestAnimationFrame(() => { modal.scrollTop = 0; });
+        }
         locked = true;
       } else if (!hasOpenModal && locked) {
         document.body.style.overflow = previousOverflow;
