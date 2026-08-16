@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
 import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
@@ -12,6 +12,7 @@ import {
   CircleUserRound,
   Compass,
   Earth,
+  KeyRound,
   Map,
   Mail,
   Menu,
@@ -121,6 +122,8 @@ export default function Page() {
   const [authReady, setAuthReady] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [inviteEntry, setInviteEntry] = useState("");
+  const [inviteEntryError, setInviteEntryError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState(1);
   const [draft, setDraft] = useState<TripDraft>(emptyDraft);
@@ -162,6 +165,7 @@ export default function Page() {
 
   async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
   async function markAllNotificationsRead() { await fetch("/api/notifications", { method: "PATCH" }); setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); }
+  function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^MOVA-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice MOVA valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
 
   useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
 
@@ -426,12 +430,13 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="tip-card">
-              <Plane size={22} />
-              <div>
-                <strong>Consiglio Mova</strong>
-                <p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p>
-              </div>
+            <div className="tip-card home-invite-card">
+              <div className="home-tip-copy"><Plane size={22} /><div><strong>Consiglio Mova</strong><p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p></div></div>
+              <form className="home-invite-entry" onSubmit={openInvite}>
+                <label htmlFor="home-invite-code"><KeyRound size={18} /><span><strong>Hai un codice invito?</strong><small>Inserisci il codice ricevuto per partecipare al viaggio.</small></span></label>
+                <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="MOVA-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
+                {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
+              </form>
             </div>
           </aside>
         </div>

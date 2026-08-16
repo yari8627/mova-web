@@ -621,6 +621,19 @@ select:focus-visible {
   font-size: 13px;
 }
 
+.home-invite-card { display: grid; gap: 15px; }
+.home-tip-copy { display: flex; align-items: flex-start; gap: 14px; }
+.home-invite-entry { padding-top: 14px; border-top: 1px solid #ccefe8; display: grid; gap: 10px; }
+.home-invite-entry > label { display: flex; align-items: center; gap: 10px; color: #075f58; }
+.home-invite-entry > label span,.home-invite-entry > label strong,.home-invite-entry > label small { display: block; }
+.home-invite-entry > label small { margin-top: 2px; color: #46827d; font-size: 11px; font-weight: 500; }
+.home-invite-entry > div { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; }
+.home-invite-entry input { min-width: 0; height: 44px; padding: 0 12px; border: 1px solid #abdcd4; border-radius: 11px; color: var(--navy); background: white; outline: none; text-transform: uppercase; }
+.home-invite-entry input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(32,183,165,.13); }
+.home-invite-entry .primary-button { min-height: 44px; box-shadow: none; }
+.home-invite-error { color: #b42318; font-size: 11px; }
+@media (max-width: 520px) { .home-invite-entry > div { grid-template-columns: 1fr; }.home-invite-entry .primary-button { width: 100%; } }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
