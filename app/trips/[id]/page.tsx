@@ -75,6 +75,7 @@ export default function TripPage() {
   const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
   const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
+  const itineraryDaysRef = useRef<HTMLDivElement | null>(null);
 
   const countryIsoCode = useMemo(() => {
     if (!trip) return null;
@@ -118,7 +119,7 @@ export default function TripPage() {
     const currentDay = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
     setActiveDay(currentDay);
     autoScrolledTrip.current = trip.id;
-    const timer = window.setTimeout(() => document.getElementById(`itinerary-day-${currentDay}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+    const timer = window.setTimeout(() => document.getElementById(`itinerary-day-${currentDay}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }), 250);
     return () => window.clearTimeout(timer);
   }, [trip]);
 
@@ -127,7 +128,7 @@ export default function TripPage() {
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
       if (visible) setActiveDay(Number(visible.target.id.replace("itinerary-day-", "")));
-    }, { rootMargin: "-32% 0px -55%", threshold: [0, .25, .5] });
+    }, { root: itineraryDaysRef.current, threshold: [.55, .75] });
     const elements = document.querySelectorAll<HTMLElement>(".itinerary-day");
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
@@ -203,7 +204,7 @@ export default function TripPage() {
 
   function scrollToDay(day: number) {
     setActiveDay(day);
-    document.getElementById(`itinerary-day-${day}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById(`itinerary-day-${day}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
   }
 
   return <main className="trip-detail-shell">
@@ -223,7 +224,7 @@ export default function TripPage() {
       <section className="itinerary-panel">
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canManage && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong></button>)}</nav>
-        <div className="itinerary-days">{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
+        <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
