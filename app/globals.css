@@ -1430,6 +1430,15 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
   .profile-card .security-form select { height: 46px; padding-inline: 11px; font-size: 16px; }
   .profile-card .security-action { justify-self: stretch; }
 }
+
+@media (max-width: 620px) {
+  .progress-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  .progress-kpis article { min-width: 0; min-height: 88px; padding: 11px 8px; align-items: flex-start; }
+  .progress-kpis article > span { display: none; }
+  .progress-kpis article > div { min-width: 0; width: 100%; }
+  .progress-kpis strong { font-size: 17px; line-height: 1.15; overflow-wrap: anywhere; }
+  .progress-kpis small { font-size: 9px; line-height: 1.25; }
+}
 .about-shell { min-height: 100vh; max-width: 1000px; margin: 0 auto; padding: 28px 24px 70px; }
 .about-hero { margin-top: 70px; max-width: 720px; }.about-hero h1 { margin: 8px 0 16px; font-size: clamp(38px,7vw,68px); letter-spacing: -2px; }.about-hero > p:last-child { color: var(--text-secondary); font-size: 17px; line-height: 1.7; }
 .about-values { margin-top: 54px; display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }.about-values article { padding: 24px; border: 1px solid var(--border); border-radius: 20px; background: white; box-shadow: var(--shadow-sm); }.about-values svg { color: var(--blue); }.about-values h2 { margin: 16px 0 6px; font-size: 19px; }.about-values p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
