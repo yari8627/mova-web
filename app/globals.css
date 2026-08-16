@@ -235,10 +235,12 @@ select:focus-visible {
 
 .page-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 26px;
   margin-top: 14px;
 }
+
+.secondary-column .quick-card { display: none; }
 
 .hero-card {
   min-height: 340px;

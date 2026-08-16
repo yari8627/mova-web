@@ -50,7 +50,6 @@ type AppNotification = { id: string; type: string; title: string; message: strin
 type TravelCompanion = { name: string; email: string; trips: number };
 type TripGuest = { name: string; email: string };
 type SessionUser = { id: string; name: string; email: string; avatarUrl?: string | null };
-type TripProgress = { flights: number; hotels: number; activities: number };
 type CountryOption = { isoCode: string; name: string; displayName: string; flag: string };
 type CityOption = { name: string; stateCode: string };
 
@@ -132,13 +131,13 @@ export default function Page() {
   const [guestEmail, setGuestEmail] = useState("");
   const [guestError, setGuestError] = useState("");
   const [tripImages, setTripImages] = useState<Record<string, string>>({});
+  const tripProgress = { flights: 0, hotels: 0, activities: 0 };
   const [mobileMenu, setMobileMenu] = useState(false);
   const [countrySearchOpen, setCountrySearchOpen] = useState(false);
   const [citySearchOpen, setCitySearchOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(null);
   const [countryMatches, setCountryMatches] = useState<CountryOption[]>([]);
   const [cityMatches, setCityMatches] = useState<CityOption[]>([]);
-  const [tripProgress, setTripProgress] = useState<TripProgress>({ flights: 0, hotels: 0, activities: 0 });
 
   useEffect(() => {
     async function loadAccountTrips() {
@@ -170,21 +169,6 @@ export default function Page() {
   const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
   const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
   const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
-  useEffect(() => {
-    if (!selectedTrip?.id) { setTripProgress({ flights: 0, hotels: 0, activities: 0 }); return; }
-    let active = true;
-    const percentage = (completed: number, total: number) => total ? Math.round(completed / total * 100) : 0;
-    void fetch(`/api/trips/${selectedTrip.id}`, { cache: "no-store" }).then(async (response) => response.ok ? response.json() : null).then((trip) => {
-      if (!active || !trip) return;
-      const bookings = trip.bookings as Array<{ type: string; status: string }>;
-      const activities = trip.activities as Array<{ done: boolean }>;
-      const flights = bookings.filter((item) => item.type === "flight");
-      const hotels = bookings.filter((item) => item.type === "hotel");
-      const confirmed = (item: { status: string }) => item.status === "confirmed" || item.status === "completed";
-      setTripProgress({ flights: percentage(flights.filter(confirmed).length, flights.length), hotels: percentage(hotels.filter(confirmed).length, hotels.length), activities: percentage(activities.filter((item) => item.done).length, activities.length) });
-    }).catch(() => { if (active) setTripProgress({ flights: 0, hotels: 0, activities: 0 }); });
-    return () => { active = false; };
-  }, [selectedTrip?.id]);
   function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
   const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
