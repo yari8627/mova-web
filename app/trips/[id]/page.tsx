@@ -279,9 +279,9 @@ export default function TripPage() {
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
                     <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canManage} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
-                    {canManage && <div className="activity-actions"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
                   </div>
                   <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div>
+                  {canManage && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
                 </div>
               </div>
             </div>
