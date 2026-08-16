@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ModalScrollLock } from "./components/modal-scroll-lock";
 import { PwaInstall } from "./components/pwa-install";
+import { AppBottomNav } from "./components/app-bottom-nav";
 
 export const metadata: Metadata = {
   title: "Mova — Travel together",
@@ -22,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body><ModalScrollLock /><PwaInstall />{children}</body>
+      <body><ModalScrollLock /><PwaInstall />{children}<AppBottomNav /></body>
     </html>
   );
 }

@@ -492,14 +492,6 @@ export default function Page() {
         </div>
       )}
 
-      <nav className="mobile-bottom-nav" aria-label="Navigazione mobile">
-        {navItems.map(({ label, icon: Icon, path }, index) => (
-          <button key={label} className={index === 0 ? "active" : ""} onClick={() => router.push(path)}>
-            <Icon size={20} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
     </main>
   );
 }
