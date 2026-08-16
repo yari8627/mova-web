@@ -220,7 +220,7 @@ select:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1.9fr) minmax(280px, 0.8fr);
   gap: 26px;
-  margin-top: 25px;
+  margin-top: 14px;
 }
 
 .hero-card {
@@ -731,6 +731,10 @@ select:focus-visible {
 
   .topbar {
     align-items: flex-start;
+  }
+
+  .page-grid {
+    margin-top: 8px;
   }
 
   .topbar-title {
