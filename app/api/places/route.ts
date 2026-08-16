@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   if (placeId) return NextResponse.json(await googlePlaceDetails(placeId, sessionToken), { status: process.env.GOOGLE_MAPS_API_KEY ? 200 : 503 });
   const query = params.get("q")?.trim() || "";
   const countryCode = params.get("countryCode")?.trim().toLowerCase() || "";
-  if (query.length < 2) return NextResponse.json([]);
+  if (query.length < 3) return NextResponse.json([]);
   try {
     const googleResults = await googleAutocomplete(query, countryCode, sessionToken);
     if (googleResults?.length) return NextResponse.json(googleResults);
