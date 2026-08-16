@@ -1384,6 +1384,8 @@ html, body { max-width: 100%; overflow-x: clip; }
 .sidebar { display: none !important; }
 .topbar > .mobile-only { display: none !important; }
 body:has(> .global-bottom-nav) { padding-bottom: 100px; }
+body:has(.auth-loading) { padding-bottom: 0; }
+body:has(.auth-loading) > .global-bottom-nav { display: none; }
 .global-bottom-nav {
   position: fixed;
   left: max(12px, calc((100vw - 680px) / 2));
