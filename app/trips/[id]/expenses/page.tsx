@@ -21,6 +21,25 @@ const todayLocal = () => { const now = new Date(); return `${now.getFullYear()}-
 const emptyDraft = { description: "", amount: "", category: "Ristoranti", paidBy: "", date: todayLocal(), sharedWith: [] as string[], kind: "expense" as "expense" | "settlement", recipient: "" };
 const money = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" });
 
+function normalizeSharedWith(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+}
+
+function normalizeExpense(item: Expense & { sharedWith?: unknown }): Expense {
+  return {
+    ...item,
+    date: typeof item.date === "string" ? item.date.slice(0, 10) : todayLocal(),
+    sharedWith: normalizeSharedWith(item.sharedWith),
+  };
+}
+
 function expenseTravelCategory(expense: Expense): TravelCategory | null {
   if (expense.kind === "settlement") return null;
   const description = expense.description.toLocaleLowerCase("it");
@@ -56,9 +75,10 @@ export default function ExpensesPage() {
     const saved = window.localStorage.getItem(`mova-expenses-${id}`);
     const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
     const savedParticipants = window.localStorage.getItem(`mova-participants-${id}`);
-    if (savedParticipants) { const names = (JSON.parse(savedParticipants) as Array<{ name: string }>).map((person) => person.name).filter(Boolean); setParticipants([...new Set(names)]); }
-    setExpenses(saved ? JSON.parse(saved) : []); setBudget(savedBudget ? Number(savedBudget) : null);
-    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const remoteExpenses = remote.expenses.map((item: Expense & { sharedWith?: string | string[] }) => ({ ...item, date: item.date.slice(0, 10), sharedWith: typeof item.sharedWith === "string" ? JSON.parse(item.sharedWith) : item.sharedWith })); setExpenses(remoteExpenses); setBudget(remote.budget); const groupNames = [remote.owner?.name, ...remote.participants.map((person: { name: string }) => person.name)].filter(Boolean); const names = [...new Set<string>(groupNames.length ? groupNames : [userName])]; setParticipants(names); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remote.participants)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remoteExpenses)); } }
+    if (savedParticipants) { try { const parsed = JSON.parse(savedParticipants) as unknown; const names = (Array.isArray(parsed) ? parsed : []).map((person: { name?: string }) => person?.name).filter((name): name is string => Boolean(name)); setParticipants([...new Set(names)]); } catch { window.localStorage.removeItem(`mova-participants-${id}`); } }
+    try { setExpenses(saved ? (JSON.parse(saved) as Expense[]).map(normalizeExpense) : []); } catch { setExpenses([]); }
+    setBudget(savedBudget ? Number(savedBudget) : null);
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const remoteExpenses = Array.isArray(remote.expenses) ? remote.expenses.map(normalizeExpense) : []; setExpenses(remoteExpenses); setBudget(remote.budget); const remoteParticipants = Array.isArray(remote.participants) ? remote.participants : []; const groupNames = [remote.owner?.name, ...remoteParticipants.map((person: { name?: string }) => person.name)].filter((name): name is string => Boolean(name)); const names = [...new Set<string>(groupNames.length ? groupNames : [userName])]; setParticipants(names); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remoteParticipants)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remoteExpenses)); } }
     void load();
   }, [id]);
 
@@ -69,7 +89,7 @@ export default function ExpensesPage() {
   const balances = participants.map((name) => {
     const paid = expenses.filter((item) => item.kind !== "settlement" && item.paidBy === name).reduce((sum, item) => sum + item.amount, 0);
     const owed = expenses.filter((item) => item.kind !== "settlement").reduce((sum, item) => {
-      const currentSharedWith = item.sharedWith?.filter((participant) => participants.includes(participant)); const sharedWith = currentSharedWith?.length ? currentSharedWith : participants;
+      const currentSharedWith = normalizeSharedWith(item.sharedWith).filter((participant) => participants.includes(participant)); const sharedWith = currentSharedWith.length ? currentSharedWith : participants;
       return sum + (sharedWith.includes(name) ? item.amount / sharedWith.length : 0);
     }, 0);
     const settlementAdjustment = expenses.filter((item) => item.kind === "settlement").reduce((sum, item) => sum + (item.paidBy === name ? item.amount : 0) - (item.recipient === name ? item.amount : 0), 0);
