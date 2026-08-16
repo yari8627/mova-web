@@ -58,6 +58,28 @@ svg {
   user-select: none;
 }
 
+@media (orientation: landscape) and (max-height: 600px) {
+  body::before {
+    content: "mova\A\A Ruota il dispositivo in verticale";
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-content: center;
+    padding: 28px;
+    color: var(--navy);
+    background: #f7f9ff;
+    font-size: 18px;
+    font-weight: 750;
+    line-height: 1.45;
+    text-align: center;
+    white-space: pre-line;
+  }
+
+  body > * { visibility: hidden; }
+  body::before { visibility: visible; }
+}
+
 button,
 input,
 select,

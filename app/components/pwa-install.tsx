@@ -7,7 +7,19 @@ type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<
 
 export function PwaInstall() {
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null); const [ios, setIos] = useState(false); const [iosHelp, setIosHelp] = useState(false); const [hidden, setHidden] = useState(true);
-  useEffect(() => { navigator.serviceWorker?.register("/sw.js").catch(() => undefined); if (window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone || window.localStorage.getItem("mova-install-dismissed") === "true") return; const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent); setIos(isIos); if (isIos) setHidden(false); const onPrompt = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); setHidden(false); }; window.addEventListener("beforeinstallprompt", onPrompt); return () => window.removeEventListener("beforeinstallprompt", onPrompt); }, []);
+  useEffect(() => {
+    navigator.serviceWorker?.register("/sw.js").catch(() => undefined);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    const orientation = screen.orientation as ScreenOrientation & { lock?: (value: string) => Promise<void> };
+    const lockPortrait = () => { if (standalone) void orientation?.lock?.("portrait-primary").catch(() => undefined); };
+    lockPortrait();
+    document.addEventListener("visibilitychange", lockPortrait);
+    if (standalone || window.localStorage.getItem("mova-install-dismissed") === "true") return () => document.removeEventListener("visibilitychange", lockPortrait);
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent); setIos(isIos); if (isIos) setHidden(false);
+    const onPrompt = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); setHidden(false); };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => { window.removeEventListener("beforeinstallprompt", onPrompt); document.removeEventListener("visibilitychange", lockPortrait); };
+  }, []);
   function dismiss() { window.localStorage.setItem("mova-install-dismissed", "true"); setHidden(true); }
   async function install() { if (ios) return setIosHelp(true); if (!prompt) return; await prompt.prompt(); const result = await prompt.userChoice; if (result.outcome === "accepted") setHidden(true); setPrompt(null); }
   if (hidden) return null;
