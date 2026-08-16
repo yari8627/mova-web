@@ -15,8 +15,14 @@ function objectUrl(config: NonNullable<ReturnType<typeof configuration>>, key: s
 
 export function remoteStorageConfigured() { return Boolean(configuration()); }
 
+function authenticationHeaders(config: NonNullable<ReturnType<typeof configuration>>): Record<string, string> {
+  const headers: Record<string, string> = { apikey: config.key };
+  if (!config.key.startsWith("sb_secret_")) headers.Authorization = `Bearer ${config.key}`;
+  return headers;
+}
+
 async function ensureBucket(config: NonNullable<ReturnType<typeof configuration>>) {
-  const headers = { apikey: config.key, Authorization: `Bearer ${config.key}` };
+  const headers = authenticationHeaders(config);
   const existing = await fetch(`${config.url}/storage/v1/bucket/${encodeURIComponent(config.bucket)}`, { headers, cache: "no-store" });
   if (existing.ok) return;
   if (existing.status !== 404 && existing.status !== 400) throw new Error(`Verifica storage fallita (${existing.status})`);
@@ -35,7 +41,7 @@ export async function putObject(key: string, bytes: Uint8Array, contentType: str
   const config = configuration();
   if (!config) throw new Error("Storage remoto non configurato");
   await ensureBucket(config);
-  const response = await fetch(objectUrl(config, key), { method: "POST", headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": contentType, "x-upsert": "true" }, body: Buffer.from(bytes) });
+  const response = await fetch(objectUrl(config, key), { method: "POST", headers: { ...authenticationHeaders(config), "Content-Type": contentType, "x-upsert": "true" }, body: Buffer.from(bytes) });
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Caricamento storage fallito (${response.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`);
@@ -45,7 +51,7 @@ export async function putObject(key: string, bytes: Uint8Array, contentType: str
 export async function getObject(key: string) {
   const config = configuration();
   if (!config) throw new Error("Storage remoto non configurato");
-  const response = await fetch(objectUrl(config, key), { headers: { apikey: config.key, Authorization: `Bearer ${config.key}` }, cache: "no-store" });
+  const response = await fetch(objectUrl(config, key), { headers: authenticationHeaders(config), cache: "no-store" });
   if (!response.ok) throw new Error(`File non disponibile (${response.status})`);
   return Buffer.from(await response.arrayBuffer());
 }
@@ -53,6 +59,6 @@ export async function getObject(key: string) {
 export async function removeObject(key: string) {
   const config = configuration();
   if (!config) throw new Error("Storage remoto non configurato");
-  const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { method: "DELETE", headers: { apikey: config.key, Authorization: `Bearer ${config.key}`, "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
+  const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { method: "DELETE", headers: { ...authenticationHeaders(config), "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
   if (!response.ok && response.status !== 404) throw new Error(`Eliminazione storage fallita (${response.status})`);
 }

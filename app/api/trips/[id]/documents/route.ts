@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await saveDocumentFile(storageKey, new Uint8Array(await file.arrayBuffer()), file.type);
   } catch (error) {
     console.error("Document storage upload failed", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Archivio documenti non disponibile" }, { status: 502 });
+    return NextResponse.json({ error: "Non è stato possibile salvare il documento. Riprova tra poco." }, { status: 502 });
   }
   const document = await prisma.document.create({ data: { id: randomUUID(), tripId: id, name: String(form.get("name") || file.name.replace(/\.[^.]+$/, "")), category, fileName: file.name, size: file.size, offline: false, createdById: user.id, storageKey, mimeType: file.type, requirementKey: form.get("requirementKey") ? String(form.get("requirementKey")) : null, bookingId } });
   if (category === "shared") await notifyTripMembers(id, user.id, { type: "document", title: "Nuovo documento", message: `${user.name} ha aggiunto ${document.name}.`, link: `/trips/${id}/documents` });
