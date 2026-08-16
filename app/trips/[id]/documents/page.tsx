@@ -174,6 +174,29 @@ const formatSize = (bytes: number) =>
   bytes < 1000000
     ? `${Math.round(bytes / 1000)} KB`
     : `${(bytes / 1000000).toFixed(1)} MB`;
+
+async function optimizePhoto(file: File) {
+  if (!file.type.startsWith("image/") || file.size < 1_500_000) return file;
+  const source = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("Immagine non leggibile"));
+      element.src = source;
+    });
+    const scale = Math.min(1, 1800 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.naturalWidth * scale);
+    canvas.height = Math.round(image.naturalHeight * scale);
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } finally {
+    URL.revokeObjectURL(source);
+  }
+}
 const requirementKey = (title: string) =>
   title
     .normalize("NFD")
@@ -198,7 +221,8 @@ export default function DocumentsPage() {
     null,
   );
   const [documentTitle, setDocumentTitle] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   useEffect(() => {
     if (
       !targetBookingId ||
@@ -306,24 +330,27 @@ export default function DocumentsPage() {
         : category;
     setPendingUpload({ file, category: uploadCategory, requirement });
     setDocumentTitle(requirement?.title || file.name.replace(/\.[^.]+$/, ""));
+    setUploadError("");
   }
   async function addFile() {
     if (!pendingUpload || !documentTitle.trim()) return;
     setIsUploading(true);
-    const form = new FormData();
-    form.set("file", pendingUpload.file);
-    form.set("name", documentTitle.trim());
-    form.set("category", pendingUpload.category);
-    if (pendingUpload.requirement)
-      form.set(
-        "requirementKey",
-        requirementKey(pendingUpload.requirement.title),
-      );
-    const response = await fetch(`/api/trips/${id}/documents`, {
-      method: "POST",
-      body: form,
-    });
-    if (response.ok) {
+    setUploadError("");
+    try {
+      const uploadFile = await optimizePhoto(pendingUpload.file);
+      const form = new FormData();
+      form.set("file", uploadFile);
+      form.set("name", documentTitle.trim());
+      form.set("category", pendingUpload.category);
+      if (pendingUpload.requirement) form.set("requirementKey", requirementKey(pendingUpload.requirement.title));
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 45000);
+      const response = await fetch(`/api/trips/${id}/documents`, { method: "POST", body: form, signal: controller.signal });
+      window.clearTimeout(timeout);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(result?.error || "Caricamento non riuscito. Riprova.");
+      }
       const result = (await response.json()) as TravelDocument;
       const next = [
         ...documents.filter(
@@ -337,8 +364,11 @@ export default function DocumentsPage() {
       window.localStorage.setItem(`mova-documents-${id}`, JSON.stringify(next));
       setPendingUpload(null);
       setDocumentTitle("");
+    } catch (error) {
+      setUploadError(error instanceof DOMException && error.name === "AbortError" ? "Il caricamento sta impiegando troppo tempo. Controlla la connessione e riprova." : error instanceof Error ? error.message : "Caricamento non riuscito. Riprova.");
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   }
   const shared = documents.filter((item) => item.category === "shared");
   const personal = documents.filter((item) => item.category === "personal");
@@ -669,6 +699,7 @@ export default function DocumentsPage() {
                 <FileText size={20} />
                 <div><strong>{pendingUpload.file.name}</strong><span>{formatSize(pendingUpload.file.size)}</span></div>
               </div>
+              {uploadError && <p className="form-error" role="alert">{uploadError}</p>}
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setPendingUpload(null)}>Annulla</button>
                 <button type="submit" className="primary-button" disabled={isUploading || !documentTitle.trim()}>
@@ -715,10 +746,11 @@ function DocumentRow({
       </div>
       <div>
         <strong>{document.name}</strong>
-        <span>
+        <span className="document-original-name">
           {document.fileName} · {formatSize(document.size)}
           {document.bookingId ? " · Collegato a una prenotazione" : ""}
         </span>
+        <span>{formatSize(document.size)}{document.bookingId ? " · Collegato a una prenotazione" : ""}</span>
       </div>
       {document.category === "personal" && (
         <Lock size={16} className="document-lock" />
