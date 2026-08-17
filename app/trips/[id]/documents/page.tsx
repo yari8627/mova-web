@@ -774,21 +774,19 @@ function DocumentRow({
       {document.category === "personal" && (
         <Lock size={16} className="document-lock" />
       )}
-      {document.storageKey && (
+      <div className="document-row-actions">
+        {document.storageKey && (
+          <button type="button" className="document-open-link" onClick={onOpen}>
+            <Eye size={16} /> Preview
+          </button>
+        )}
         <button
-          type="button"
-          className="document-open-link"
-          onClick={onOpen}
+          className={`offline-button ${document.offline ? "active" : ""}`}
+          onClick={onToggle}
         >
-          <Eye size={16} /> Apri
+          <WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}
         </button>
-      )}
-      <button
-        className={`offline-button ${document.offline ? "active" : ""}`}
-        onClick={onToggle}
-      >
-        <WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}
-      </button>
+      </div>
       <button
         className="row-delete"
         onClick={onDelete}
