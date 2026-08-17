@@ -239,7 +239,13 @@ const categoryIcon = (category: string) =>
           ? Languages
           : category.includes("Comunicazione")
             ? MessageCircle
-            : Navigation;
+    : Navigation;
+
+function AppLogo({ app }: { app: TravelApp }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <>{app.icon}</>;
+  return <img src={`/api/travel-app-icons?name=${encodeURIComponent(app.name)}&website=${encodeURIComponent(app.url)}`} alt="" loading="lazy" onError={() => setFailed(true)} />;
+}
 
 export default function UsefulAppsPage() {
   const { id } = useParams<{ id: string }>();
@@ -356,7 +362,7 @@ export default function UsefulAppsPage() {
                     );
                     return (
                       <article className="useful-app-card" key={app.name}>
-                        <div className="useful-app-logo">{app.icon}</div>
+                        <div className="useful-app-logo"><AppLogo app={app} /></div>
                         <div>
                           <div className="useful-app-name">
                             <h3>{app.name}</h3>
