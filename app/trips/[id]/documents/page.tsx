@@ -220,6 +220,7 @@ export default function DocumentsPage() {
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(
     null,
   );
+  const [previewDocument, setPreviewDocument] = useState<TravelDocument | null>(null);
   const [documentTitle, setDocumentTitle] = useState("");
     const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -582,6 +583,7 @@ export default function DocumentsPage() {
               <DocumentRow
                 key={document.id}
                 document={document}
+                onOpen={() => setPreviewDocument(document)}
                 onToggle={() =>
                   persist(
                     documents.map((item) =>
@@ -622,6 +624,7 @@ export default function DocumentsPage() {
               <DocumentRow
                 key={document.id}
                 document={document}
+                onOpen={() => setPreviewDocument(document)}
                 onToggle={() =>
                   persist(
                     documents.map((item) =>
@@ -710,6 +713,21 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
+      {previewDocument && (
+        <div className="document-preview-screen" role="dialog" aria-modal="true" aria-labelledby="document-preview-title">
+          <header>
+            <div><p className="section-kicker">ANTEPRIMA</p><h2 id="document-preview-title">{previewDocument.name}</h2></div>
+            <button className="icon-button" type="button" onClick={() => setPreviewDocument(null)} aria-label="Chiudi anteprima"><X size={22} /></button>
+          </header>
+          <div className="document-preview-content">
+            {previewDocument.mimeType?.startsWith("image/") ? (
+              <img src={`/api/documents/${previewDocument.id}/download?preview=1`} alt={previewDocument.name} />
+            ) : (
+              <iframe src={`/api/documents/${previewDocument.id}/download?preview=1`} title={previewDocument.name} />
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -731,14 +749,15 @@ function DocumentKindIcon({ name }: { name: string }) {
 }
 function DocumentRow({
   document,
+  onOpen,
   onToggle,
   onDelete,
 }: {
   document: TravelDocument;
+  onOpen: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }) {
-  const previewUrl = `/api/documents/${document.id}/download?preview=1`;
   return (
     <article data-booking-id={document.bookingId || undefined}>
       <div className="document-icon">
@@ -756,14 +775,13 @@ function DocumentRow({
         <Lock size={16} className="document-lock" />
       )}
       {document.storageKey && (
-        <a
+        <button
+          type="button"
           className="document-open-link"
-          href={previewUrl}
-          target="_blank"
-          rel="noreferrer"
+          onClick={onOpen}
         >
           <Eye size={16} /> Apri
-        </a>
+        </button>
       )}
       <button
         className={`offline-button ${document.offline ? "active" : ""}`}
