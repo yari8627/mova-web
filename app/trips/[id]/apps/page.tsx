@@ -254,9 +254,9 @@ export default function UsefulAppsPage() {
       .then(setTrip)
       .catch(() => undefined);
   }, [id]);
+  const appCountry = useMemo(() => trip ? normalizeAppCountry(trip.country) : "", [trip]);
   const apps = useMemo(() => {
     if (!trip) return [];
-    const appCountry = normalizeAppCountry(trip.country);
     const taxi = taxiApps[appCountry] || defaultTaxi;
     return [
       taxi,
@@ -265,25 +265,33 @@ export default function UsefulAppsPage() {
       ),
       ...international,
     ];
-  }, [trip]);
+  }, [appCountry, trip]);
   const groups = useMemo(
     () => [...new Set(apps.map((app) => app.category))],
     [apps],
   );
   useEffect(() => {
-    if (!trip || !apps.length) return;
-    fetch("/api/travel-apps", {
+    if (!trip || !apps.length || !appCountry) return;
+    const cacheKey = `mova-app-catalog-${appCountry}`;
+    try {
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) setCatalogStatus(JSON.parse(cached) as CatalogStatus);
+    } catch { /* La cache è opzionale. */ }
+    let cancelled = false;
+    const refresh = () => fetch("/api/travel-apps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        country: trip.country,
-        apps: apps.map(({ name, url }) => ({ name, url })),
-      }),
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(setCatalogStatus)
-      .catch(() => undefined);
-  }, [apps, trip]);
+      body: JSON.stringify({ country: appCountry, apps: apps.map(({ name, url }) => ({ name, url })) }),
+    }).then((response) => response.ok ? response.json() : null).then((result: CatalogStatus | null) => {
+      if (!result || cancelled) return;
+      setCatalogStatus(result);
+      try { window.localStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* La cache è opzionale. */ }
+    }).catch(() => undefined);
+    const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    const usedIdleCallback = typeof idleWindow.requestIdleCallback === "function";
+    const handle = usedIdleCallback ? idleWindow.requestIdleCallback!(refresh, { timeout: 1800 }) : window.setTimeout(refresh, 350);
+    return () => { cancelled = true; if (usedIdleCallback) idleWindow.cancelIdleCallback?.(handle); else window.clearTimeout(handle); };
+  }, [appCountry, apps, trip]);
 
   return (
     <main className="trip-detail-shell">

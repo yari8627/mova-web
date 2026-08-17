@@ -3,7 +3,7 @@ import { currentUser } from "../../../lib/auth";
 
 type CatalogApp = { name: string; country: string; url: string; approved?: boolean };
 type CheckRequest = { country?: string; apps?: Array<{ name: string; url: string }> };
-const allowedHosts = new Set(["alipay.com", "www.alipay.com", "wechat.com", "www.wechat.com", "metroman.cn", "www.metroman.cn", "amap.com", "www.amap.com", "indrive.com", "www.indrive.com", "uber.com", "www.uber.com", "careem.com", "www.careem.com", "japantravel.navitime.com", "jreast.co.jp", "www.jreast.co.jp", "grab.com", "www.grab.com", "bolt.eu", "www.bolt.eu", "maps.google.com", "translate.google.com", "xe.com", "www.xe.com", "m.didi.cn", "go.goinc.jp"]);
+const allowedHosts = new Set(["alipay.com", "www.alipay.com", "wechat.com", "www.wechat.com", "metroman.cn", "www.metroman.cn", "amap.com", "www.amap.com", "indrive.com", "www.indrive.com", "uber.com", "www.uber.com", "careem.com", "www.careem.com", "japantravel.navitime.com", "jreast.co.jp", "www.jreast.co.jp", "grab.com", "www.grab.com", "bolt.eu", "www.bolt.eu", "maps.google.com", "translate.google.com", "xe.com", "www.xe.com", "m.didi.cn", "go.goinc.jp", "kride.kakaomobility.com", "navercorp.com", "www.navercorp.com", "papago.naver.com", "korail.go.kr", "www.korail.go.kr", "kakaocorp.com", "www.kakaocorp.com"]);
 
 async function checkUrl(item: { name: string; url: string }) {
   try {
