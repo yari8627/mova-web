@@ -1,4 +1,33 @@
 import { Buffer } from "buffer";
+import { prisma } from "./prisma";
+
+async function ensureDatabaseStorage() {
+  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "MovaStoredFile" (
+    "key" TEXT PRIMARY KEY,
+    "data" BYTEA NOT NULL,
+    "contentType" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+}
+
+async function putDatabaseObject(key: string, bytes: Uint8Array, contentType: string) {
+  await ensureDatabaseStorage();
+  await prisma.$executeRaw`INSERT INTO "MovaStoredFile" ("key", "data", "contentType")
+    VALUES (${key}, ${Buffer.from(bytes)}, ${contentType})
+    ON CONFLICT ("key") DO UPDATE SET "data" = EXCLUDED."data", "contentType" = EXCLUDED."contentType"`;
+}
+
+async function getDatabaseObject(key: string) {
+  await ensureDatabaseStorage();
+  const rows = await prisma.$queryRaw<Array<{ data: Uint8Array }>>`SELECT "data" FROM "MovaStoredFile" WHERE "key" = ${key} LIMIT 1`;
+  if (!rows[0]) throw new Error("File non disponibile");
+  return Buffer.from(rows[0].data);
+}
+
+async function removeDatabaseObject(key: string) {
+  await ensureDatabaseStorage();
+  await prisma.$executeRaw`DELETE FROM "MovaStoredFile" WHERE "key" = ${key}`;
+}
 
 function configuration() {
   const clean = (value?: string) => value?.trim().replace(/^['"]|['"]$/g, "");
@@ -39,26 +68,36 @@ async function ensureBucket(config: NonNullable<ReturnType<typeof configuration>
 
 export async function putObject(key: string, bytes: Uint8Array, contentType: string) {
   const config = configuration();
-  if (!config) throw new Error("Storage remoto non configurato");
-  await ensureBucket(config);
-  const response = await fetch(objectUrl(config, key), { method: "POST", headers: { ...authenticationHeaders(config), "Content-Type": contentType, "x-upsert": "true" }, body: Buffer.from(bytes) });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Caricamento storage fallito (${response.status})${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+  if (config) {
+    try {
+      await ensureBucket(config);
+      const response = await fetch(objectUrl(config, key), { method: "POST", headers: { ...authenticationHeaders(config), "Content-Type": contentType, "x-upsert": "true" }, body: Buffer.from(bytes) });
+      if (!response.ok) throw new Error(`Caricamento storage fallito (${response.status})`);
+      return;
+    } catch (error) {
+      console.warn("Remote document storage unavailable, using database storage", error);
+    }
   }
+  await putDatabaseObject(key, bytes, contentType);
 }
 
 export async function getObject(key: string) {
   const config = configuration();
-  if (!config) throw new Error("Storage remoto non configurato");
-  const response = await fetch(objectUrl(config, key), { headers: authenticationHeaders(config), cache: "no-store" });
-  if (!response.ok) throw new Error(`File non disponibile (${response.status})`);
-  return Buffer.from(await response.arrayBuffer());
+  if (config) {
+    try {
+      const response = await fetch(objectUrl(config, key), { headers: authenticationHeaders(config), cache: "no-store" });
+      if (response.ok) return Buffer.from(await response.arrayBuffer());
+    } catch { /* Usa il database di fallback. */ }
+  }
+  return getDatabaseObject(key);
 }
 
 export async function removeObject(key: string) {
   const config = configuration();
-  if (!config) throw new Error("Storage remoto non configurato");
-  const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { method: "DELETE", headers: { ...authenticationHeaders(config), "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
-  if (!response.ok && response.status !== 404) throw new Error(`Eliminazione storage fallita (${response.status})`);
+  if (config) {
+    try {
+      await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { method: "DELETE", headers: { ...authenticationHeaders(config), "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
+    } catch { /* Prosegue con la pulizia del database. */ }
+  }
+  await removeDatabaseObject(key);
 }
