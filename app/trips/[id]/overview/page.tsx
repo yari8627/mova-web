@@ -7,6 +7,11 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
   Clock3,
   FileCheck2,
   MapPin,
@@ -14,6 +19,7 @@ import {
   ReceiptText,
   Settings,
   TicketCheck,
+  Sun,
   Users,
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
@@ -47,8 +53,9 @@ type Document = {
 };
 type Expense = { id: string; amount: number; kind?: "expense" | "settlement" };
 type Participant = { id: string; status: "confirmed" | "pending" };
-type TripDates = { startDate: string; endDate: string };
+type TripDates = { startDate: string; endDate: string; country: string; city?: string };
 type PackingItem = { id: string; packed: boolean };
+type WeatherDay = { date: string; code: number };
 
 const starterActivities: Activity[] = [
   {
@@ -114,6 +121,15 @@ function tripGroup(remote: {
   return [owner, ...remote.participants].filter(Boolean) as Participant[];
 }
 
+function WeatherIcon({ code }: { code: number }) {
+  if (code === 0) return <Sun size={21} />;
+  if ([1, 2, 3].includes(code)) return <CloudSun size={21} />;
+  if ([45, 48].includes(code)) return <CloudFog size={21} />;
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return <CloudSnow size={21} />;
+  if ([95, 96, 99].includes(code)) return <CloudLightning size={21} />;
+  return <CloudRain size={21} />;
+}
+
 export default function OverviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -125,6 +141,8 @@ export default function OverviewPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [tripDates, setTripDates] = useState<TripDates | null>(null);
+  const [weatherDays, setWeatherDays] = useState<WeatherDay[]>([]);
+  const [weatherUnavailable, setWeatherUnavailable] = useState(false);
   const [packingItems, setPackingItems] = useState<PackingItem[]>([]);
   const [checkInCompleted, setCheckInCompleted] = useState(false);
   const [savingCheckIn, setSavingCheckIn] = useState(false);
@@ -196,17 +214,35 @@ export default function OverviewPage() {
   }, [id]);
   useEffect(() => {
     const cached = readTripSnapshot(id);
-    if (cached) setTripDates({ startDate: cached.startDate.slice(0, 10), endDate: cached.endDate.slice(0, 10) });
+    if (cached) setTripDates({ startDate: cached.startDate.slice(0, 10), endDate: cached.endDate.slice(0, 10), country: cached.country, city: cached.city });
     fetchTripSnapshot(id)
       .then((trip) => {
         if (trip)
           setTripDates({
             startDate: trip.startDate.slice(0, 10),
             endDate: trip.endDate.slice(0, 10),
+            country: trip.country,
+            city: trip.city,
           });
       })
       .catch(() => undefined);
   }, [id]);
+  useEffect(() => {
+    if (!tripDates?.country) return;
+    const cacheKey = `mova-weather-${id}`;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || "null") as { days?: WeatherDay[] } | null;
+      if (cached?.days) setWeatherDays(cached.days);
+    } catch { /* Cache opzionale. */ }
+    const query = new URLSearchParams({ country: tripDates.country, city: tripDates.city || "", start: tripDates.startDate, end: tripDates.endDate });
+    fetch(`/api/weather?${query}`, { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((result: { days?: WeatherDay[]; available?: boolean } | null) => {
+      if (!result) return;
+      const days = result.days || [];
+      setWeatherDays(days);
+      setWeatherUnavailable(!result.available);
+      try { window.localStorage.setItem(cacheKey, JSON.stringify({ days, savedAt: Date.now() })); } catch { /* Cache opzionale. */ }
+    }).catch(() => undefined);
+  }, [id, tripDates]);
   useEffect(() => {
     Promise.all(
       ["personal", "shared"].map((scope) =>
@@ -498,6 +534,35 @@ export default function OverviewPage() {
             </button>
           </div>
         )}
+        {weatherDays.length > 0 ? (
+          <div className="trip-weather-strip" aria-label="Previsioni meteo del viaggio">
+            {weatherDays.map((day) => {
+              const date = new Date(`${day.date}T12:00:00`);
+              return (
+                <div
+                  key={day.date}
+                  title={new Intl.DateTimeFormat("it-IT", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  }).format(date)}
+                >
+                  <WeatherIcon code={day.code} />
+                  <span>
+                    {new Intl.DateTimeFormat("it-IT", {
+                      weekday: "short",
+                      day: "numeric",
+                    }).format(date)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : weatherUnavailable ? (
+          <p className="trip-weather-unavailable">
+            Le previsioni appariranno nei 16 giorni precedenti il viaggio.
+          </p>
+        ) : null}
       </section>
       <section className="overview-heading">
         <div>
