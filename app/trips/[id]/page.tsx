@@ -14,6 +14,7 @@ import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-ca
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
 type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
 type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
+type WeatherDay = { date: string; code: number };
 
 const starterActivities: Activity[] = [
   { id: "arrival", day: 1, title: "Arrivo e primo orientamento", place: "Centro città", time: "15:30", done: true },
@@ -40,6 +41,21 @@ function tripDays(startDate: string, endDate: string) {
 
 function formatDay(date: Date) {
   return new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" }).format(date);
+}
+
+function WeatherIcon({ code }: { code: number }) {
+  const weather = code === 0
+    ? { icon: "☀️", label: "Sereno" }
+    : [1, 2, 3].includes(code)
+      ? { icon: "🌤️", label: "Parzialmente Nuvoloso" }
+      : [45, 48].includes(code)
+        ? { icon: "🌫️", label: "Nebbia" }
+        : [71, 73, 75, 77, 85, 86].includes(code)
+          ? { icon: "❄️", label: "Neve" }
+          : [95, 96, 99].includes(code)
+            ? { icon: "⛈️", label: "Temporale" }
+            : { icon: "🌧️", label: "Pioggia" };
+  return <span className="itinerary-weather-icon" role="img" aria-label={weather.label} title={weather.label}>{weather.icon}</span>;
 }
 
 function sortActivities(items: Activity[]) {
@@ -73,6 +89,7 @@ export default function TripPage() {
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
   const [placeMatches, setPlaceMatches] = useState<PlaceResult[]>([]);
   const [placeSearching, setPlaceSearching] = useState(false);
+  const [weatherDays, setWeatherDays] = useState<WeatherDay[]>([]);
   const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
   const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
@@ -145,6 +162,25 @@ export default function TripPage() {
     async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
+
+  useEffect(() => {
+    if (!trip?.country) return;
+    const cacheKey = `mova-weather-${id}`;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || "null") as { days?: WeatherDay[] } | null;
+      if (cached?.days) setWeatherDays(cached.days);
+    } catch { /* Cache opzionale. */ }
+    const query = new URLSearchParams({ country: trip.country, city: trip.city || "", start: trip.startDate, end: trip.endDate });
+    fetch(`/api/weather?${query}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result: { days?: WeatherDay[] } | null) => {
+        if (!result) return;
+        const next = result.days || [];
+        setWeatherDays(next);
+        try { window.localStorage.setItem(cacheKey, JSON.stringify({ days: next, savedAt: Date.now() })); } catch { /* Cache opzionale. */ }
+      })
+      .catch(() => undefined);
+  }, [id, trip]);
 
   useEffect(() => {
     if (!trip || autoScrolledTrip.current === trip.id) return;
@@ -272,7 +308,7 @@ export default function TripPage() {
     <div className="detail-grid">
       <section className="itinerary-panel">
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canManage && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
-        <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong></button>)}</nav>
+        <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
         <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
