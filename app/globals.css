@@ -435,6 +435,11 @@ select:focus-visible {
   font-size: 25px;
 }
 
+.countdown .countdown-today {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
 .countdown span {
   font-size: 12px;
 }
@@ -910,6 +915,7 @@ select:focus-visible {
   }
 
   .countdown strong { font-size: 21px; }
+  .countdown .countdown-today { font-size: 14px; }
   .countdown span { font-size: 10px; }
 
   .section-heading {
