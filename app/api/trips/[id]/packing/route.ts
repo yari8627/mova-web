@@ -26,6 +26,12 @@ function ensurePackingSchema() {
       prisma.$executeRawUnsafe(`ALTER TABLE "PackingItem" ADD COLUMN IF NOT EXISTS "scope" TEXT NOT NULL DEFAULT 'personal'`),
       prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PackingItem_tripId_userId_createdAt_idx" ON "PackingItem"("tripId", "userId", "createdAt")`),
       prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PackingItem_tripId_scope_createdAt_idx" ON "PackingItem"("tripId", "scope", "createdAt")`),
+      prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "StandardPackingItem" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+        "label" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`),
     ]).then(() => undefined).catch((error) => {
       packingSchemaReady = null;
       throw error;
@@ -49,13 +55,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   await ensurePackingSchema();
   const scope = new URL(request.url).searchParams.get("scope") === "shared" ? "shared" : "personal";
   const visibility = scope === "personal" ? Prisma.sql`AND p."userId" = ${auth.user!.id}` : Prisma.empty;
-  const items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`
+  let items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`
     SELECT p.*, u."name" AS "createdBy"
     FROM "PackingItem" p
     JOIN "User" u ON u."id" = p."userId"
     WHERE p."tripId" = ${id} AND p."scope" = ${scope} ${visibility}
     ORDER BY p."packed" ASC, p."createdAt" ASC
   `);
+  if (scope === "personal" && items.length === 0) {
+    const templates = await prisma.$queryRaw<Array<{ label: string }>>(Prisma.sql`SELECT "label" FROM "StandardPackingItem" WHERE "userId" = ${auth.user!.id} ORDER BY "createdAt" ASC`);
+    if (templates.length) {
+      await prisma.$transaction(templates.map((item) => prisma.$executeRaw(Prisma.sql`INSERT INTO "PackingItem" ("id", "tripId", "userId", "label", "packed", "scope", "createdAt", "updatedAt") VALUES (${randomUUID()}, ${id}, ${auth.user!.id}, ${item.label}, false, 'personal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)));
+      items = await prisma.$queryRaw<PackingRow[]>(Prisma.sql`SELECT p.*, u."name" AS "createdBy" FROM "PackingItem" p JOIN "User" u ON u."id" = p."userId" WHERE p."tripId" = ${id} AND p."scope" = 'personal' AND p."userId" = ${auth.user!.id} ORDER BY p."packed" ASC, p."createdAt" ASC`);
+    }
+  }
   return NextResponse.json(items.map((item) => ({ ...item, label: titleCaseItalian(item.label) })));
 }
 
@@ -65,6 +78,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (auth.response) return auth.response;
   await ensurePackingSchema();
   const body = await request.json();
+  if (body.action === "apply-template") {
+    const templates = await prisma.$queryRaw<Array<{ label: string }>>(Prisma.sql`SELECT "label" FROM "StandardPackingItem" WHERE "userId" = ${auth.user!.id} ORDER BY "createdAt" ASC`);
+    const existing = await prisma.$queryRaw<Array<{ label: string }>>(Prisma.sql`SELECT "label" FROM "PackingItem" WHERE "tripId" = ${id} AND "userId" = ${auth.user!.id} AND "scope" = 'personal'`);
+    const labels = new Set(existing.map((item) => item.label.trim().toLocaleLowerCase("it")));
+    const missing = templates.filter((item) => !labels.has(item.label.trim().toLocaleLowerCase("it")));
+    if (missing.length) await prisma.$transaction(missing.map((item) => prisma.$executeRaw(Prisma.sql`INSERT INTO "PackingItem" ("id", "tripId", "userId", "label", "packed", "scope", "createdAt", "updatedAt") VALUES (${randomUUID()}, ${id}, ${auth.user!.id}, ${item.label}, false, 'personal', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)));
+    return NextResponse.json({ added: missing.length });
+  }
   const scope = body.scope === "shared" ? "shared" : "personal";
   const label = titleCaseItalian(String(body.label || ""));
   if (!label) return NextResponse.json({ error: "Inserisci un oggetto" }, { status: 400 });
