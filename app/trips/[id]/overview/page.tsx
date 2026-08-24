@@ -229,11 +229,21 @@ export default function OverviewPage() {
       .catch(() => undefined);
   }, [id]);
   const nextActivity = useMemo(
-    () =>
-      [...activities]
+    () => {
+      let firstAvailableDay = 1;
+      if (tripDates) {
+        const now = new Date();
+        const current = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+        const start = new Date(`${tripDates.startDate}T12:00:00`);
+        const end = new Date(`${tripDates.endDate}T12:00:00`);
+        if (current > end) firstAvailableDay = Number.POSITIVE_INFINITY;
+        else if (current >= start) firstAvailableDay = Math.floor((current.getTime() - start.getTime()) / 86400000) + 1;
+      }
+      return [...activities]
         .sort((a, b) => a.day - b.day || a.time.localeCompare(b.time))
-        .find((item) => !item.done),
-    [activities],
+        .find((item) => !item.done && item.day >= firstAvailableDay);
+    },
+    [activities, tripDates],
   );
   const confirmedBookings = bookings.filter(
     (item) => item.status === "confirmed",
