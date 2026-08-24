@@ -127,6 +127,7 @@ export default function OverviewPage() {
   const [tripDates, setTripDates] = useState<TripDates | null>(null);
   const [packingItems, setPackingItems] = useState<PackingItem[]>([]);
   const [checkInCompleted, setCheckInCompleted] = useState(false);
+  const [returnCheckInCompleted, setReturnCheckInCompleted] = useState(false);
   const [savingCheckIn, setSavingCheckIn] = useState(false);
   useEffect(() => {
     async function load() {
@@ -224,7 +225,10 @@ export default function OverviewPage() {
     fetch(`/api/trips/${id}/check-in`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((value) => {
-        if (value) setCheckInCompleted(Boolean(value.completed));
+        if (value) {
+          setCheckInCompleted(Boolean(value.completed));
+          setReturnCheckInCompleted(Boolean(value.returnCompleted));
+        }
       })
       .catch(() => undefined);
   }, [id]);
@@ -297,8 +301,18 @@ export default function OverviewPage() {
     };
   }, [activities, tripDates]);
 
-  function openDeviceWallet() {
-    if (!checkInCompleted) return;
+  const showReturnCheckIn = useMemo(() => {
+    if (!tripDates) return false;
+    const now = new Date();
+    const current = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+    const returnDate = new Date(`${tripDates.endDate}T12:00:00`);
+    const reminderStart = new Date(returnDate);
+    reminderStart.setDate(reminderStart.getDate() - 2);
+    return current >= reminderStart && current <= returnDate;
+  }, [tripDates]);
+
+  function openDeviceWallet(completed = checkInCompleted) {
+    if (!completed) return;
     const agent = navigator.userAgent;
     const isIOS =
       /iPhone|iPad|iPod/i.test(agent) ||
@@ -319,20 +333,22 @@ export default function OverviewPage() {
     window.open("https://wallet.google.com/", "_blank", "noopener,noreferrer");
   }
 
-  async function updateCheckIn(completed: boolean) {
+  async function updateCheckIn(completed: boolean, leg: "outbound" | "return" = "outbound") {
     if (savingCheckIn) return;
-    const previous = checkInCompleted;
-    setCheckInCompleted(completed);
+    const previous = leg === "return" ? returnCheckInCompleted : checkInCompleted;
+    if (leg === "return") setReturnCheckInCompleted(completed);
+    else setCheckInCompleted(completed);
     setSavingCheckIn(true);
     try {
       const response = await fetch(`/api/trips/${id}/check-in`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed }),
+        body: JSON.stringify({ completed, leg }),
       });
       if (!response.ok) throw new Error("Salvataggio non riuscito");
     } catch {
-      setCheckInCompleted(previous);
+      if (leg === "return") setReturnCheckInCompleted(previous);
+      else setCheckInCompleted(previous);
     } finally {
       setSavingCheckIn(false);
     }
@@ -471,7 +487,7 @@ export default function OverviewPage() {
                   </span>
                 </label>
               </div>
-              <button onClick={openDeviceWallet}>
+              <button onClick={() => openDeviceWallet(checkInCompleted)}>
                 <Image
                   className="travel-wallet-icon"
                   src="/icons/wallet-travel-ticket.png"
@@ -506,6 +522,40 @@ export default function OverviewPage() {
               </span>
               <ChevronRight size={19} />
             </button>
+          </div>
+        )}
+        {showReturnCheckIn && (
+          <div className="today-preparation return-checkin-preparation">
+            <article
+              className={`checkin-wallet-card${returnCheckInCompleted ? " completed" : ""}`}
+            >
+              <div className="checkin-title-row">
+                <strong>Check-in Ritorno Effettuato?</strong>
+                <label className="checkin-checkbox" aria-label="Check-in ritorno effettuato">
+                  <input
+                    type="checkbox"
+                    checked={returnCheckInCompleted}
+                    disabled={savingCheckIn}
+                    onChange={(event) => void updateCheckIn(event.target.checked, "return")}
+                  />
+                  <span aria-hidden="true">
+                    {returnCheckInCompleted && <CheckCircle2 size={18} />}
+                  </span>
+                </label>
+              </div>
+              <button onClick={() => openDeviceWallet(returnCheckInCompleted)}>
+                <Image
+                  className="travel-wallet-icon"
+                  src="/icons/wallet-travel-ticket.png"
+                  width={44}
+                  height={44}
+                  alt=""
+                  aria-hidden="true"
+                />
+                <span><small>Apri Wallet</small></span>
+                <ChevronRight size={19} />
+              </button>
+            </article>
           </div>
         )}
       </section>
