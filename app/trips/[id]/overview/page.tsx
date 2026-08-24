@@ -547,6 +547,24 @@ export default function OverviewPage() {
         </button>
         <button
           className="overview-card"
+          onClick={() => router.push(`/trips/${id}/expenses`)}
+        >
+          <span className="overview-icon">
+            <ReceiptText size={22} />
+          </span>
+          <div>
+            <small>SPESE</small>
+            <strong>{money.format(totalExpenses)}</strong>
+            <p>
+              {budget === null
+                ? "Budget non impostato"
+                : `${money.format(Math.max(budget - totalExpenses, 0))} disponibili`}
+            </p>
+          </div>
+          <ChevronRight size={20} />
+        </button>
+        <button
+          className="overview-card"
           onClick={() => router.push(`/trips/${id}/bookings`)}
         >
           <span className="overview-icon">
@@ -574,24 +592,6 @@ export default function OverviewPage() {
             <small>DOCUMENTI</small>
             <strong>{documents.length} caricati</strong>
             <p>{offlineDocuments} disponibili offline</p>
-          </div>
-          <ChevronRight size={20} />
-        </button>
-        <button
-          className="overview-card"
-          onClick={() => router.push(`/trips/${id}/expenses`)}
-        >
-          <span className="overview-icon">
-            <ReceiptText size={22} />
-          </span>
-          <div>
-            <small>SPESE</small>
-            <strong>{money.format(totalExpenses)}</strong>
-            <p>
-              {budget === null
-                ? "Budget non impostato"
-                : `${money.format(Math.max(budget - totalExpenses, 0))} disponibili`}
-            </p>
           </div>
           <ChevronRight size={20} />
         </button>
