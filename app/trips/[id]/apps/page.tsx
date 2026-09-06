@@ -12,6 +12,7 @@ import {
   Smartphone,
   TrainFront,
 } from "lucide-react";
+import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client-cache";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 
@@ -255,8 +256,8 @@ export default function UsefulAppsPage() {
     null,
   );
   useEffect(() => {
-    fetch(`/api/trips/${id}`)
-      .then((response) => (response.ok ? response.json() : null))
+    setTrip(readTripSnapshot(id));
+    fetchTripSnapshot(id)
       .then(setTrip)
       .catch(() => undefined);
   }, [id]);

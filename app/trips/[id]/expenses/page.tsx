@@ -8,7 +8,7 @@ import { TripTabs } from "../../../components/trip-tabs";
 import { TravelCategory, TravelCategoryIcon, travelCategoryFromText } from "../../../components/travel-category-icon";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
-import { fetchTripSnapshot } from "../../../../lib/trip-client-cache";
+import { fetchTripSnapshot, readTripSnapshot, removeTripSnapshot } from "../../../../lib/trip-client-cache";
 
 type Expense = { id: string; description: string; amount: number; category: string; paidBy: string; date: string; sharedWith?: string[]; kind?: "expense" | "settlement"; recipient?: string; createdById?: string | null };
 const starterExpenses: Expense[] = [
@@ -136,6 +136,8 @@ export default function ExpensesPage() {
     if (savedParticipants) { try { const parsed = JSON.parse(savedParticipants) as unknown; const names = (Array.isArray(parsed) ? parsed : []).map((person: { name?: string }) => person?.name).filter((name): name is string => Boolean(name)); setParticipants([...new Set(names)]); } catch { window.localStorage.removeItem(`mova-participants-${id}`); } }
     try { setExpenses(saved ? (JSON.parse(saved) as Expense[]).map(normalizeExpense) : []); } catch { setExpenses([]); }
     setBudget(savedBudget ? Number(savedBudget) : null);
+    const snapshot = readTripSnapshot(id);
+    if (snapshot) { setExpenses(snapshot.expenses.map(normalizeExpense)); setBudget(snapshot.budget); const names = [snapshot.owner?.name, ...snapshot.participants.map((person: { name: string }) => person.name)].filter(Boolean); setParticipants([...new Set<string>(names)]); }
     async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const remoteExpenses = Array.isArray(remote.expenses) ? remote.expenses.map(normalizeExpense) : []; setExpenses(remoteExpenses); setBudget(remote.budget); const remoteParticipants = Array.isArray(remote.participants) ? remote.participants : []; const groupNames = [remote.owner?.name, ...remoteParticipants.map((person: { name?: string }) => person.name)].filter((name): name is string => Boolean(name)); const names = [...new Set<string>(groupNames.length ? groupNames : [userName])]; setParticipants(names); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remoteParticipants)); window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(remoteExpenses)); } }
     void load();
   }, [id]);
@@ -147,6 +149,7 @@ export default function ExpensesPage() {
   const { transfers } = useMemo(() => calculateGroupBalances(expenses, participants), [expenses, participants]);
 
   function remember(next: Expense[]) {
+    removeTripSnapshot(id);
     setExpenses(next);
     window.localStorage.setItem(`mova-expenses-${id}`, JSON.stringify(next));
   }

@@ -21,6 +21,9 @@ import {
   X,
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
+import { fetchTripSnapshot, readTripSnapshot, removeTripSnapshot } from "../../../../lib/trip-client-cache";
+import { readPageCache, writePageCache } from "../../../../lib/page-cache";
+import { useTripUserId } from "../../../components/trip-session";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
@@ -208,6 +211,7 @@ const requirementKey = (title: string) =>
 export default function DocumentsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const userId = useTripUserId();
   const targetBookingId = useSearchParams().get("booking");
   const { canManage, role } = useTripPermissions(id);
   const [documents, setDocuments] = useState<TravelDocument[]>([]);
@@ -240,57 +244,25 @@ export default function DocumentsPage() {
     return () => window.clearTimeout(timer);
   }, [documents, targetBookingId]);
   useEffect(() => {
-    async function load() {
-      const saved = window.localStorage.getItem(`mova-documents-${id}`);
-      const cached = saved
-        ? (JSON.parse(saved) as TravelDocument[])
-        : starterDocuments;
-      const trips = JSON.parse(
-        window.localStorage.getItem("mova-trips") ?? "[]",
-      ) as Array<{ id: string; country: string }>;
-      const cachedCountry =
-        trips.find((trip) => trip.id === id)?.country ??
-        (id === "japan-2027"
-          ? "Giappone"
-          : id === "egypt-2027"
-            ? "Egitto"
-            : "");
-      try {
-        const response = await fetch(`/api/trips/${id}`);
-        if (response.ok) {
-          const remote = await response.json();
-          setDocuments(remote.documents);
-          setCountry(remote.country);
-          window.localStorage.setItem(
-            `mova-documents-${id}`,
-            JSON.stringify(remote.documents),
-          );
-          const requirementResponse = await fetch(
-            `/api/trips/${id}/requirements`,
-          );
-          if (requirementResponse.ok) {
-            const result = await requirementResponse.json();
-            if (result.configured && result.items?.length)
-              setLiveRequirements({
-                visa: result.visa,
-                visaRequired: result.visaRequired,
-                passportCountry: result.passportCountry,
-                updated: result.updated,
-                source: result.source,
-                items: result.items,
-                live: true,
-              });
-          }
-          return;
-        }
-      } catch {
-        /* Cache offline. */
-      }
-      setDocuments(cached);
-      setCountry(cachedCountry);
-    }
-    void load();
-  }, [id]);
+    let cancelled = false;
+    const snapshot = readTripSnapshot(id);
+    const cached = readPageCache<{ documents: TravelDocument[]; country: string }>(userId, `documents-${id}`) || (snapshot ? { documents: snapshot.documents, country: snapshot.country } : null);
+    if (cached) { setDocuments(cached.documents); setCountry(cached.country); }
+    void fetchTripSnapshot(id).then((remote) => {
+      if (!remote || cancelled) return;
+      setDocuments(remote.documents);
+      setCountry(remote.country);
+      writePageCache(userId, `documents-${id}`, { documents: remote.documents, country: remote.country });
+      window.localStorage.setItem(`mova-documents-${id}`, JSON.stringify(remote.documents));
+    });
+    void fetch(`/api/trips/${id}/requirements`).then(async (response) => {
+      if (!response.ok) return;
+      const result = await response.json();
+      if (!cancelled && result.configured && result.items?.length)
+        setLiveRequirements({ ...result, live: true });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [id, userId]);
   async function persist(next: TravelDocument[]) {
     const removed = documents.filter(
       (item) => !next.some((candidate) => candidate.id === item.id),
@@ -312,7 +284,9 @@ export default function DocumentsPage() {
       ),
     ]);
     if (responses.some((response) => !response.ok)) return;
+    removeTripSnapshot(id);
     setDocuments(next);
+    writePageCache(userId, `documents-${id}`, { documents: next, country });
     window.localStorage.setItem(`mova-documents-${id}`, JSON.stringify(next));
     if (canManage && [...removed, ...changed].some((item) => !item.storageKey))
       syncTripResource(id, "documents", next);
@@ -361,7 +335,9 @@ export default function DocumentsPage() {
         ),
         result,
       ];
-      setDocuments(next);
+      removeTripSnapshot(id);
+    setDocuments(next);
+    writePageCache(userId, `documents-${id}`, { documents: next, country });
       window.localStorage.setItem(`mova-documents-${id}`, JSON.stringify(next));
       setPendingUpload(null);
       setDocumentTitle("");

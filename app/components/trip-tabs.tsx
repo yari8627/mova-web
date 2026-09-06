@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { preloadOverview } from "../../lib/page-cache";
+import { useTripUserId } from "./trip-session";
 import { usePathname, useRouter } from "next/navigation";
 
 const tabs = [
@@ -16,6 +18,8 @@ const tabs = [
 
 export function TripTabs({ tripId }: { tripId: string }) {
   const router = useRouter();
+  const userId = useTripUserId();
+  useEffect(() => { void preloadOverview(userId, tripId); }, [userId, tripId]);
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
 

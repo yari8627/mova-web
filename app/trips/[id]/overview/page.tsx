@@ -19,6 +19,8 @@ import {
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
+import { fetchPageCache, readPageCache, writePageCache } from "../../../../lib/page-cache";
+import { useTripUserId } from "../../../components/trip-session";
 import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client-cache";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
@@ -117,6 +119,7 @@ function tripGroup(remote: {
 export default function OverviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const userId = useTripUserId();
   const { canInvite } = useTripPermissions(id);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -125,6 +128,8 @@ export default function OverviewPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [tripDates, setTripDates] = useState<TripDates | null>(null);
+  const [packingReady, setPackingReady] = useState(false);
+  const [checkInReady, setCheckInReady] = useState(false);
   const [packingItems, setPackingItems] = useState<PackingItem[]>([]);
   const [checkInCompleted, setCheckInCompleted] = useState(false);
   const [returnCheckInCompleted, setReturnCheckInCompleted] = useState(false);
@@ -144,12 +149,13 @@ export default function OverviewPage() {
       );
       const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
       const budgetValue = savedBudget ? Number(savedBudget) : null;
-      setActivities(activityItems);
-      setBookings(bookingItems);
-      setDocuments(documentItems);
-      setExpenses(expenseItems);
-      setParticipants(participantItems);
-      setBudget(budgetValue);
+      const snapshot = readTripSnapshot(id);
+      setActivities(snapshot?.activities ?? activityItems);
+      setBookings(snapshot?.bookings ?? bookingItems);
+      setDocuments(snapshot?.documents ?? documentItems);
+      setExpenses(snapshot?.expenses ?? expenseItems);
+      setParticipants(snapshot ? tripGroup(snapshot) : participantItems);
+      setBudget(snapshot ? snapshot.budget : budgetValue);
       try {
         const remote = await fetchTripSnapshot(id);
         if (remote) {
@@ -209,29 +215,31 @@ export default function OverviewPage() {
       .catch(() => undefined);
   }, [id]);
   useEffect(() => {
-    Promise.all(
-      ["personal", "shared"].map((scope) =>
-        fetch(`/api/trips/${id}/packing?scope=${scope}`, {
-          cache: "no-store",
-        }).then((response) =>
-          response.ok ? (response.json() as Promise<PackingItem[]>) : [],
-        ),
-      ),
-    )
-      .then(([personal, shared]) => setPackingItems([...personal, ...shared]))
-      .catch(() => setPackingItems([]));
-  }, [id]);
-  useEffect(() => {
-    fetch(`/api/trips/${id}/check-in`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((value) => {
-        if (value) {
-          setCheckInCompleted(Boolean(value.completed));
-          setReturnCheckInCompleted(Boolean(value.returnCompleted));
-        }
-      })
-      .catch(() => undefined);
-  }, [id]);
+    let cancelled = false;
+    const personalKey = `packing-${id}-personal`;
+    const sharedKey = `packing-${id}-shared`;
+    const checkInKey = `check-in-${id}`;
+    const showPacking = () => {
+      if (cancelled) return;
+      setPackingReady(readPageCache(userId, personalKey) !== null && readPageCache(userId, sharedKey) !== null);
+      setPackingItems([
+        ...(readPageCache<PackingItem[]>(userId, personalKey) || []),
+        ...(readPageCache<PackingItem[]>(userId, sharedKey) || []),
+      ]);
+    };
+    const showCheckIn = () => {
+      if (cancelled) return;
+      const cached = readPageCache<{ completed: boolean; returnCompleted: boolean }>(userId, checkInKey);
+      setCheckInReady(cached !== null);
+      if (cached) { setCheckInCompleted(cached.completed); setReturnCheckInCompleted(cached.returnCompleted); }
+    };
+    showPacking();
+    showCheckIn();
+    void fetchPageCache(userId, personalKey, `/api/trips/${id}/packing?scope=personal`).then(showPacking);
+    void fetchPageCache(userId, sharedKey, `/api/trips/${id}/packing?scope=shared`).then(showPacking);
+    void fetchPageCache(userId, checkInKey, `/api/trips/${id}/check-in`).then(showCheckIn);
+    return () => { cancelled = true; };
+  }, [id, userId]);
   const nextActivity = useMemo(
     () => {
       let firstAvailableDay = 1;
@@ -334,10 +342,12 @@ export default function OverviewPage() {
   }
 
   async function updateCheckIn(completed: boolean, leg: "outbound" | "return" = "outbound") {
-    if (savingCheckIn) return;
+    if (savingCheckIn || !checkInReady) return;
     const previous = leg === "return" ? returnCheckInCompleted : checkInCompleted;
     if (leg === "return") setReturnCheckInCompleted(completed);
     else setCheckInCompleted(completed);
+    const previousCache = { completed: checkInCompleted, returnCompleted: returnCheckInCompleted };
+    writePageCache(userId, `check-in-${id}`, { ...previousCache, [leg === "return" ? "returnCompleted" : "completed"]: completed });
     setSavingCheckIn(true);
     try {
       const response = await fetch(`/api/trips/${id}/check-in`, {
@@ -346,7 +356,9 @@ export default function OverviewPage() {
         body: JSON.stringify({ completed, leg }),
       });
       if (!response.ok) throw new Error("Salvataggio non riuscito");
+      writePageCache(userId, `check-in-${id}`, await response.json());
     } catch {
+      writePageCache(userId, `check-in-${id}`, previousCache);
       if (leg === "return") setReturnCheckInCompleted(previous);
       else setCheckInCompleted(previous);
     } finally {
@@ -479,7 +491,7 @@ export default function OverviewPage() {
                   <input
                     type="checkbox"
                     checked={checkInCompleted}
-                    disabled={savingCheckIn}
+                    disabled={savingCheckIn || !checkInReady}
                     onChange={(event) => void updateCheckIn(event.target.checked)}
                   />
                   <span aria-hidden="true">
@@ -517,7 +529,7 @@ export default function OverviewPage() {
               <span>
                 <strong>Valigia</strong>
                 <small>
-                  {packedCount}/{packingItems.length} Pronti
+                  {packingReady ? `${packedCount}/${packingItems.length} Pronti` : "Caricamento…"}
                 </small>
               </span>
               <ChevronRight size={19} />
@@ -535,7 +547,7 @@ export default function OverviewPage() {
                   <input
                     type="checkbox"
                     checked={returnCheckInCompleted}
-                    disabled={savingCheckIn}
+                    disabled={savingCheckIn || !checkInReady}
                     onChange={(event) => void updateCheckIn(event.target.checked, "return")}
                   />
                   <span aria-hidden="true">

@@ -1,4 +1,5 @@
 "use client";
+import { removeTripSnapshot } from "./trip-client-cache";
 
 type TripRecord = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: string };
 type Snapshot = { activities?: unknown[]; bookings?: unknown[]; documents?: unknown[]; expenses?: unknown[]; participants?: unknown[]; budget?: number | null };
@@ -32,6 +33,7 @@ export async function syncTripSnapshot(id: string, snapshot: Snapshot) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ trip, ...snapshot }),
     });
+    if (response.ok) removeTripSnapshot(id);
     return response.ok;
   } catch {
     /* Il localStorage rimane il fallback offline. */

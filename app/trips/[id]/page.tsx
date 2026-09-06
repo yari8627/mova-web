@@ -157,8 +157,9 @@ export default function TripPage() {
     const fallbackTrip = trips.find((item) => item.id === id) ?? null;
     const cachedTrip = readTripSnapshot(id) as Trip | null;
     setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
-    setActivities(savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
-    setBudget(savedBudget ? Number(savedBudget) : null);
+    const snapshot = readTripSnapshot(id);
+    setActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
+    setBudget(snapshot ? snapshot.budget : savedBudget ? Number(savedBudget) : null);
     async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);

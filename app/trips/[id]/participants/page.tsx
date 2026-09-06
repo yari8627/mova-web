@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Check, Clock3, Copy, Pencil, Plus, Trash2, UserRound, Users, X } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
+import { fetchTripSnapshot, readTripSnapshot, removeTripSnapshot } from "../../../../lib/trip-client-cache";
+import { readPageCache, writePageCache } from "../../../../lib/page-cache";
+import { useTripUserId } from "../../../components/trip-session";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripResource } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
@@ -14,6 +17,7 @@ const emptyDraft = { name: "", email: "", role: "participant" as Participant["ro
 export default function ParticipantsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const userId = useTripUserId();
   const { canInvite, canAssignRoles } = useTripPermissions(id);
   const [people, setPeople] = useState<Participant[]>([]);
   const [draft, setDraft] = useState(emptyDraft);
@@ -23,8 +27,23 @@ export default function ParticipantsPage() {
   const [inviteCode, setInviteCode] = useState("");
   const [inviteLink, setInviteLink] = useState("");
 
-  useEffect(() => { async function load() { const saved = window.localStorage.getItem(`mova-participants-${id}`); const localItems = saved ? JSON.parse(saved) as Participant[] : []; try { const response = await fetch(`/api/trips/${id}`); if (response.ok) { const trip = await response.json(); const owner = trip.owner ? { id: `owner-${trip.owner.id}`, name: trip.owner.name, email: trip.owner.email, role: "owner" as const, status: "confirmed" as const } : null; const remoteItems = [owner, ...(trip.participants as Participant[])].filter(Boolean) as Participant[]; setPeople(remoteItems); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(remoteItems)); return; } } catch { /* Usa la cache locale. */ } setPeople(localItems); } void load(); }, [id]);
-  function announce(next: Participant[]) { window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(next)); window.dispatchEvent(new CustomEvent("mova-participants-updated", { detail: { tripId: id } })); }
+  useEffect(() => {
+    let cancelled = false;
+    const snapshot = readTripSnapshot(id);
+    const cached = readPageCache<Participant[]>(userId, `participants-${id}`);
+    const cachedOwner: Participant[] = snapshot?.owner ? [{ id: `owner-${snapshot.owner.id}`, name: snapshot.owner.name, email: snapshot.owner.email, role: "owner", status: "confirmed" }] : [];
+    setPeople(cached || (snapshot ? [...cachedOwner, ...snapshot.participants] : []));
+    void fetchTripSnapshot(id).then((trip) => {
+      if (!trip || cancelled) return;
+      const owner: Participant | null = trip.owner ? { id: `owner-${trip.owner.id}`, name: trip.owner.name, email: trip.owner.email, role: "owner", status: "confirmed" } : null;
+      const next = [...(owner ? [owner] : []), ...trip.participants] as Participant[];
+      setPeople(next);
+      writePageCache(userId, `participants-${id}`, next);
+      window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(next));
+    });
+    return () => { cancelled = true; };
+  }, [id, userId]);
+  function announce(next: Participant[]) { removeTripSnapshot(id); writePageCache(userId, `participants-${id}`, next); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(next)); window.dispatchEvent(new CustomEvent("mova-participants-updated", { detail: { tripId: id } })); }
   function persist(next: Participant[]) { setPeople(next); announce(next); syncTripResource(id, "participants", next.filter((person) => person.role !== "owner")); }
   function openNew() { if (!canInvite) return; setEditingId(null); setDraft({ ...emptyDraft, status: "pending" }); setShowEditor(true); }
   function openEdit(person: Participant) { setEditingId(person.id); setDraft({ name: person.name, email: person.email, role: person.role, status: person.status }); setShowEditor(true); }

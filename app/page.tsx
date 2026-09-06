@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { preloadTrips, tripsPrepared } from "../lib/preload-trips";
+import { setTripCacheAccount } from "../lib/trip-client-cache";
 import { useRouter } from "next/navigation";
+import { readPageCache, writePageCache, preloadOverview } from "../lib/page-cache";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
 import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
 import {
@@ -120,7 +123,9 @@ export default function Page() {
   const router = useRouter();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
+  const [preloadProgress, setPreloadProgress] = useState<{ done: number; total: number } | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [inviteEntry, setInviteEntry] = useState("");
@@ -144,25 +149,40 @@ export default function Page() {
   const [cityMatches, setCityMatches] = useState<CityOption[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadAccountTrips() {
       try {
         const sessionResponse = await fetch("/api/auth/me", { cache: "no-store" });
         const session = await sessionResponse.json() as { user: SessionUser | null };
+        if (cancelled) return;
         if (!session.user) { router.replace("/auth"); return; }
         setCurrentUser(session.user);
+        const userId = session.user.id;
+        setTripCacheAccount(userId);
+        const cached = readPageCache<Trip[]>(userId, "trips");
+        if (cached) { setTrips(cached); if (tripsPrepared(userId, cached)) setAuthReady(true); }
+        // Notifications must never block the trip list.
+        void fetch("/api/notifications", { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) return;
+            const result = await response.json();
+            if (!cancelled) setNotifications(result.notifications);
+          }).catch(() => undefined);
         const response = await fetch("/api/trips", { cache: "no-store" });
+        if (cancelled) return;
         if (response.ok) {
           const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
           setTrips(accountTrips);
+          writePageCache(userId, "trips", accountTrips);
+          await preloadTrips(session.user, accountTrips, (done, total) => { if (!cancelled) setPreloadProgress({ done, total }); }, () => cancelled);
         }
-        const notificationResponse = await fetch("/api/notifications", { cache: "no-store" });
-        if (notificationResponse.ok) { const result = await notificationResponse.json(); setNotifications(result.notifications); }
-        setAuthReady(true);
+        if (!cancelled) setAuthReady(true);
       } catch {
-        router.replace("/auth");
+        if (!cancelled) { setLoadError(true); setAuthReady(true); }
       }
     }
     void loadAccountTrips();
+    return () => { cancelled = true; };
   }, [router]);
 
   async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
@@ -175,6 +195,12 @@ export default function Page() {
   const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
   const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
   const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
+  useEffect(() => {
+    if (currentUser && selectedTrip) void preloadOverview(currentUser.id, selectedTrip.id);
+  }, [currentUser?.id, selectedTrip?.id]);
+  function warmOverview(tripId: string) {
+    if (currentUser) void preloadOverview(currentUser.id, tripId);
+  }
   function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
   const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
@@ -263,6 +289,7 @@ export default function Page() {
       status: "planning",
     };
     setTrips((current) => [newTrip, ...current]);
+    if (currentUser) writePageCache(currentUser.id, "trips", [newTrip, ...trips]);
     closeCreate();
     try {
       const tripResponse = await fetch("/api/trips", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newTrip) });
@@ -272,7 +299,8 @@ export default function Page() {
     }
   }
 
-  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account"><div className="brand">mova</div><p>Caricamento del tuo spazio di viaggio...</p></main>;
+  if (loadError && !currentUser) return <main className="auth-loading"><div className="brand">mova</div><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main>;
+  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account"><div className="brand">mova</div><p>Caricamento del tuo spazio di viaggio...</p>{preloadProgress && preloadProgress.total > 0 && <><p role="status">Preparazione viaggi: {preloadProgress.done} di {preloadProgress.total}</p><button className="secondary-button" onClick={() => setAuthReady(true)}>Apri MOVA mentre termina il caricamento</button></>}</main>;
 
   return (
     <main className="app-shell">
@@ -336,7 +364,7 @@ export default function Page() {
                     <span><CalendarDays size={17} /> {formatDate(selectedTrip.startDate)} – {formatDate(selectedTrip.endDate)}</span>
                     <span><Users size={17} /> {selectedTrip.people} partecipanti</span>
                   </div>
-                  <button className="light-button" onClick={() => router.push(`/trips/${selectedTrip.id}/overview`)}>
+                  <button className="light-button" onPointerEnter={() => warmOverview(selectedTrip.id)} onTouchStart={() => warmOverview(selectedTrip.id)} onFocus={() => warmOverview(selectedTrip.id)} onClick={() => { warmOverview(selectedTrip.id); router.push(`/trips/${selectedTrip.id}/overview`); }}>
                     Apri viaggio <ChevronRight size={18} />
                   </button>
                 </div>
@@ -362,7 +390,7 @@ export default function Page() {
                 <button
                   key={trip.id}
                   className={`trip-card ${selectedTrip?.id === trip.id ? "selected" : ""}`}
-                  onClick={() => router.push(`/trips/${trip.id}/overview`)}
+                  onPointerEnter={() => warmOverview(trip.id)} onTouchStart={() => warmOverview(trip.id)} onFocus={() => warmOverview(trip.id)} onClick={() => { warmOverview(trip.id); router.push(`/trips/${trip.id}/overview`); }}
                 >
                   <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.08), rgba(12,23,51,.18)), url(${imageForTrip(trip)})` } : undefined}>
                     <span>{trip.countryCode}</span>
@@ -389,7 +417,7 @@ export default function Page() {
                 <button
                   key={trip.id}
                   className="trip-card completed"
-                  onClick={() => router.push(`/trips/${trip.id}/overview`)}
+                  onPointerEnter={() => warmOverview(trip.id)} onTouchStart={() => warmOverview(trip.id)} onFocus={() => warmOverview(trip.id)} onClick={() => { warmOverview(trip.id); router.push(`/trips/${trip.id}/overview`); }}
                 >
                   <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.28), rgba(12,23,51,.42)), url(${imageForTrip(trip)})` } : undefined}>
                     <span>{trip.countryCode}</span>

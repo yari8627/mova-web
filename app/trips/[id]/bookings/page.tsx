@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
-import { fetchTripSnapshot } from "../../../../lib/trip-client-cache";
+import { fetchTripSnapshot, readTripSnapshot, removeTripSnapshot } from "../../../../lib/trip-client-cache";
 import { TravelCategoryIcon, travelCategoryFromText, travelCategoryLabel } from "../../../components/travel-category-icon";
 import { syncTripResource, syncTripSnapshot } from "../../../../lib/trip-sync";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
@@ -251,7 +251,7 @@ export default function BookingsPage() {
   useEffect(() => {
     async function load() {
       const saved = window.localStorage.getItem(`mova-bookings-${id}`);
-      const cached = saved ? (JSON.parse(saved) as Booking[]) : starterBookings;
+      const cached = readTripSnapshot(id)?.bookings ?? (saved ? (JSON.parse(saved) as Booking[]) : starterBookings);
       setBookings(cached);
       try {
         const remote = await fetchTripSnapshot(id);
@@ -427,6 +427,7 @@ export default function BookingsPage() {
       method: "POST",
       body: form,
     });
+    if (response.ok) removeTripSnapshot(id);
     if (response.ok)
       setAttachmentCounts((current) => ({
         ...current,
