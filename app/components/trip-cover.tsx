@@ -30,9 +30,17 @@ export function TripCover({ tripId }: { tripId: string }) {
     const saved = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Trip[];
     const initial = readTripSnapshot(tripId) || saved.find((item) => item.id === tripId) || null;
     if (initial) setTrip({ ...initial, startDate: initial.startDate?.slice(0, 10), endDate: initial.endDate?.slice(0, 10) } as Trip);
-    void fetchTripSnapshot(tripId).then((remote) => {
-      if (remote) setTrip({ ...remote, startDate: remote.startDate?.slice(0, 10), endDate: remote.endDate?.slice(0, 10) } as Trip);
-    });
+    let cancelled = false;
+    const apply = (remote: Trip | null) => {
+      if (!cancelled && remote) setTrip({ ...remote, startDate: remote.startDate?.slice(0, 10), endDate: remote.endDate?.slice(0, 10) });
+    };
+    const onSnapshot = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; value: Trip }>).detail;
+      if (detail.id === tripId) apply(detail.value);
+    };
+    window.addEventListener("mova-trip-snapshot", onSnapshot);
+    void fetchTripSnapshot(tripId).then(apply);
+    return () => { cancelled = true; window.removeEventListener("mova-trip-snapshot", onSnapshot); };
   }, [tripId]);
 
   if (!trip) return null;

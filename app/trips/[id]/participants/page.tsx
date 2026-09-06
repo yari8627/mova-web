@@ -43,8 +43,27 @@ export default function ParticipantsPage() {
     });
     return () => { cancelled = true; };
   }, [id, userId]);
-  function announce(next: Participant[]) { removeTripSnapshot(id); writePageCache(userId, `participants-${id}`, next); window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(next)); window.dispatchEvent(new CustomEvent("mova-participants-updated", { detail: { tripId: id } })); }
-  function persist(next: Participant[]) { setPeople(next); announce(next); syncTripResource(id, "participants", next.filter((person) => person.role !== "owner")); }
+  async function announce(next: Participant[]) {
+    writePageCache(userId, `participants-${id}`, next);
+    window.localStorage.setItem(`mova-participants-${id}`, JSON.stringify(next));
+    removeTripSnapshot(id);
+    const remote = await fetchTripSnapshot(id, true);
+    if (remote) {
+      const trips = readPageCache<Array<{ id: string; people: number }>>(userId, "trips");
+      if (trips) writePageCache(userId, "trips", trips.map(trip => trip.id === id ? { ...trip, people: remote.people } : trip));
+      try {
+        const legacy = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Array<{ id: string; people: number }>;
+        localStorage.setItem("mova-trips", JSON.stringify(legacy.map(trip => trip.id === id ? { ...trip, people: remote.people } : trip)));
+      } catch { /* Cache opzionale. */ }
+    }
+    window.dispatchEvent(new CustomEvent("mova-participants-updated", { detail: { tripId: id } }));
+  }
+  async function persist(next: Participant[]) {
+    const previous = people;
+    setPeople(next);
+    if (await syncTripResource(id, "participants", next.filter(person => person.role !== "owner"))) await announce(next);
+    else setPeople(previous);
+  }
   function openNew() { if (!canInvite) return; setEditingId(null); setDraft({ ...emptyDraft, status: "pending" }); setShowEditor(true); }
   function openEdit(person: Participant) { setEditingId(person.id); setDraft({ name: person.name, email: person.email, role: person.role, status: person.status }); setShowEditor(true); }
   async function save() { if (!draft.email.trim() || (editingId && !draft.name.trim())) return; if (editingId) { persist(people.map((person) => person.id === editingId ? { ...person, ...draft } : person)); setShowEditor(false); return; } const response = await fetch(`/api/trips/${id}/invites`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: draft.email, role: draft.role }) }); const result = await response.json(); if (!response.ok) return; const next = [...people.filter((person) => person.email.toLowerCase() !== result.participant.email.toLowerCase()), result.participant as Participant]; setPeople(next); announce(next); setInviteCode(result.code); setInviteLink(`${window.location.origin}${result.link}`); setShowEditor(false); }

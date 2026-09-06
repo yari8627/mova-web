@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { currentUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 import { tripAccess } from "../../../lib/trip-access";
+import { countTripPeople } from "../../../lib/trip-people";
 import { normalizeTripCountry } from "../../../lib/country-names";
 
-export async function GET() { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const trips = await prisma.trip.findMany({ where: { archivedAt: null, OR: [{ ownerId: user.id }, { participants: { some: { email: user.email, status: "confirmed" } } }] }, orderBy: { startDate: "asc" } }); return NextResponse.json(trips.map(normalizeTripCountry)); }
+export async function GET() { const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const trips = await prisma.trip.findMany({ where: { archivedAt: null, OR: [{ ownerId: user.id }, { participants: { some: { email: user.email, status: "confirmed" } } }] }, include: { owner: { select: { email: true } }, participants: { select: { email: true, status: true } } }, orderBy: { startDate: "asc" } }); return NextResponse.json(trips.map(({ owner, participants, ...trip }) => ({ ...normalizeTripCountry(trip), people: countTripPeople({ ...trip, owner, participants }) }))); }
 
 export async function POST(request: Request) {
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 }); const body = await request.json();
