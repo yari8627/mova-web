@@ -275,31 +275,6 @@ export default function BookingsPage() {
             `mova-bookings-${id}`,
             JSON.stringify(remote.bookings),
           );
-          const needsRefresh = remote.bookings.some(
-            (booking: Booking) =>
-              !remote.activities.some(
-                (activity: {
-                  bookingId?: string | null;
-                  bookingEvent?: string | null;
-                }) =>
-                  activity.bookingId === booking.id &&
-                  activity.bookingEvent === "start",
-              ) ||
-              Boolean(
-                booking.endDate &&
-                  booking.type !== "activity" &&
-                  !remote.activities.some(
-                    (activity: {
-                      bookingId?: string | null;
-                      bookingEvent?: string | null;
-                    }) =>
-                      activity.bookingId === booking.id &&
-                      activity.bookingEvent === "end",
-                  ),
-              ),
-          );
-          if (needsRefresh)
-            void syncTripResource(id, "bookings", remote.bookings);
           return;
         }
       } catch {

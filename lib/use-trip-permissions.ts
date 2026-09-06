@@ -17,5 +17,5 @@ export function useTripPermissions(id: string) {
     return () => { cancelled = true; };
   }, [id, userId]);
   const role = access?.role ?? null;
-  return { role, userId: access?.userId ?? null, userName: access?.userName ?? "", canManage: role === "owner" || role === "co-organizer", canInvite: role === "owner" || role === "co-organizer", canAssignRoles: role === "owner" };
+  return { canEditItinerary: role !== null, role, userId: access?.userId ?? null, userName: access?.userName ?? "", canManage: role === "owner" || role === "co-organizer", canInvite: role === "owner" || role === "co-organizer", canAssignRoles: role === "owner" };
 }

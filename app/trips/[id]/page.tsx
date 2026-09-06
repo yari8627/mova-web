@@ -75,8 +75,11 @@ function minutesToTime(value: number) {
 export default function TripPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { canManage, canInvite } = useTripPermissions(id);
+  const { canEditItinerary, canInvite } = useTripPermissions(id);
   const [trip, setTrip] = useState<Trip | null>(null);
+  const savingActivity = useRef(false);
+  const [activitySaving, setActivitySaving] = useState(false);
+  const [activityError, setActivityError] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
   const [budget, setBudget] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -209,11 +212,27 @@ export default function TripPage() {
   }, [trip, activities.length]);
 
   async function persist(next: Activity[]) {
+    if (!canEditItinerary || savingActivity.current) return false;
+    savingActivity.current = true;
+    setActivitySaving(true);
+    setActivityError("");
+    const previous = activities;
     const ordered = sortActivities(next);
     setActivities(ordered);
-    window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered));
-    await syncTripResource(id, "activities", ordered);
-    window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
+    try {
+      const saved = await syncTripResource(id, "activities", ordered);
+      if (!saved) throw new Error();
+      window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered));
+      window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
+      return true;
+    } catch {
+      setActivities(previous);
+      setActivityError("Modifica non salvata. Controlla la connessione e riprova.");
+      return false;
+    } finally {
+      savingActivity.current = false;
+      setActivitySaving(false);
+    }
   }
 
   function openNew(day?: number) {
@@ -238,8 +257,7 @@ export default function TripPage() {
     const next = editingId
       ? activities.map((item) => item.id === editingId ? { ...item, ...draft } : item)
       : [...activities, { id: `${Date.now()}`, ...draft, done: false }];
-    await persist(next);
-    setShowEditor(false);
+    if (await persist(next)) setShowEditor(false);
   }
 
   function dropActivity(day: number, beforeId?: string) {
@@ -305,25 +323,26 @@ export default function TripPage() {
     </div></section>
 
     <TripTabs tripId={id} />
+    {activityError && !showEditor && <p className="auth-error" role="alert">{activityError}</p>}
 
     <div className="detail-grid">
       <section className="itinerary-panel">
-        <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canManage && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
+        <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2>Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
         <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
-          <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canManage && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
+          <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canEditItinerary && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
-          <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canManage} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
+          <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.photoUrl || item.photoName ? "has-photo" : ""}`}>
                 {(item.photoUrl || item.photoName) && <figure className="activity-place-photo"><img src={item.photoUrl || `/api/places/photo?name=${encodeURIComponent(item.photoName!)}`} alt={item.place} loading="lazy" onError={(event) => { if (item.photoName && !event.currentTarget.src.includes("/api/places/photo")) event.currentTarget.src = `/api/places/photo?name=${encodeURIComponent(item.photoName)}`; }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
-                    <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canManage} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
+                    <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
                   </div>
                   <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div>
-                  {canManage && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
+                  {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
                 </div>
               </div>
             </div>
@@ -345,9 +364,9 @@ export default function TripPage() {
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="button" className="primary-button" disabled={!draft.place.trim()} onClick={() => setEditorStep(2)}>Continua</button></div>
         </> : <>
           <button type="button" className="selected-place-summary" onClick={() => { setPlaceSessionToken(crypto.randomUUID()); setEditorStep(1); }}><MapPin size={19} /><span><strong>{draft.place}</strong><small>{draft.placeAddress || "Tocca per cambiare luogo"}</small></span></button>
-          <label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required /></label>
+          {activityError && <p className="auth-error" role="alert">{activityError}</p>}<label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required /></label>
           <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
-          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? setShowEditor(false) : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" className="primary-button">Salva attività</button></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? setShowEditor(false) : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" disabled={activitySaving} className="primary-button">{activitySaving ? "Salvataggio…" : "Salva attività"}</button></div>
         </>}
       </form>
     </div></div>}

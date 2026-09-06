@@ -12,11 +12,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!trip || trip.id !== id) return NextResponse.json({ error: "Dati viaggio non validi" }, { status: 400 });
   const existing = await prisma.trip.findUnique({ where: { id } });
   const access = existing ? await tripAccess(id, user, true) : null;
-  if (access && (!access.allowed || access.role === "participant")) return NextResponse.json({ error: "Non hai il permesso di modificare questi dati" }, { status: 403 });
+  if (access && !access.allowed) return NextResponse.json({ error: "Non hai il permesso di modificare questi dati" }, { status: 403 });
+  const activitiesOnly = access?.allowed && access.role === "participant";
+  if (activitiesOnly && (!Array.isArray(body.activities) || Object.keys(body).some((key) => key !== "trip" && key !== "activities")))
+    return NextResponse.json({ error: "Puoi modificare le attività, ma non gli altri dati del viaggio" }, { status: 403 });
+  if (body.activities !== undefined && !Array.isArray(body.activities)) return NextResponse.json({ error: "Attività non valide" }, { status: 400 });
+  if (Array.isArray(body.activities)) {
+    const bookingIds = [...new Set<string>(body.activities.flatMap((item: Item) => item.bookingId ? [String(item.bookingId)] : []))];
+    if (bookingIds.length && await prisma.booking.count({ where: { tripId: id, id: { in: bookingIds } } }) !== bookingIds.length)
+      return NextResponse.json({ error: "Prenotazione non appartenente al viaggio" }, { status: 400 });
+  }
   if (access?.allowed && access.role === "co-organizer" && body.participants) return NextResponse.json({ error: "Solo il proprietario può modificare ruoli o rimuovere partecipanti" }, { status: 403 });
 
   await prisma.$transaction(async (tx) => {
-    await tx.trip.upsert({ where: { id }, update: { name: trip.name, country: trip.country, countryCode: trip.countryCode, city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget === undefined ? undefined : body.budget }, create: { id, name: trip.name, country: trip.country, countryCode: trip.countryCode || "🌍", city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget ?? null, ownerId: user.id } });
+    if (!activitiesOnly) await tx.trip.upsert({ where: { id }, update: { name: trip.name, country: trip.country, countryCode: trip.countryCode, city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget === undefined ? undefined : body.budget }, create: { id, name: trip.name, country: trip.country, countryCode: trip.countryCode || "🌍", city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget ?? null, ownerId: user.id } });
     if (body.activities) { await tx.activity.deleteMany({ where: { tripId: id } }); await tx.activity.createMany({ data: body.activities.map((item: Item) => ({ id: String(item.id), tripId: id, day: Number(item.day), title: String(item.title), place: String(item.place), placeAddress: item.placeAddress ? String(item.placeAddress) : null, latitude: Number.isFinite(Number(item.latitude)) ? Number(item.latitude) : null, longitude: Number.isFinite(Number(item.longitude)) ? Number(item.longitude) : null, time: String(item.time), done: Boolean(item.done), bookingId: item.bookingId ? String(item.bookingId) : null, bookingEvent: item.bookingEvent ? String(item.bookingEvent) : null })) }); }
     if (body.bookings) {
       const bookingItems = body.bookings as Item[];
