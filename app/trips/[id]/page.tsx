@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
 import { CalendarDays, Check, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Pencil, Plus, Trash2, Users, WalletCards, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
-import { useDestinationImage } from "../../components/use-destination-image";
+import { TripCover } from "../../components/trip-cover";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
 import { useTripPermissions } from "../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard";
@@ -94,7 +94,6 @@ export default function TripPage() {
   const [placeSearching, setPlaceSearching] = useState(false);
   const [weatherDays, setWeatherDays] = useState<WeatherDay[]>([]);
   const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
-  const coverImage = useDestinationImage(trip?.country, trip?.city);
   const autoScrolledTrip = useRef<string | null>(null);
   const itineraryDaysRef = useRef<HTMLDivElement | null>(null);
   const photoLookups = useRef(new Set<string>());
@@ -317,11 +316,7 @@ export default function TripPage() {
       {canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}
     </header>
 
-    <section className={`detail-hero theme-${trip.theme}`} style={coverImage ? { backgroundImage: `linear-gradient(90deg, rgba(7,18,45,.78), rgba(7,18,45,.16)), url(${coverImage})` } : undefined}><div>
-      <p className="detail-eyebrow">{trip.countryCode} {trip.country}</p><h1>{trip.name}</h1><p>{trip.city}</p>
-      <div className="detail-meta"><span><CalendarDays size={18} /> {formatDate(trip.startDate)} – {formatDate(trip.endDate)}</span><span><Users size={18} /> {trip.people} partecipanti</span></div>
-    </div></section>
-
+    <TripCover tripId={id} />
     <TripTabs tripId={id} />
     {activityError && !showEditor && <p className="auth-error" role="alert">{activityError}</p>}
 

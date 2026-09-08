@@ -386,12 +386,12 @@ export default function DocumentsPage() {
         )}
       </header>
       <TripCover tripId={id} />
+      <TripTabs tripId={id} />
       <div className="expenses-title">
         <p className="section-kicker">ARCHIVIO</p>
         <h1>Documenti</h1>
         <p>Tutto ciò che serve prima e durante il viaggio.</p>
       </div>
-      <TripTabs tripId={id} />
       <section className="document-utility-tip">
         <div className="document-tip-icon">
           <FolderSearch size={27} />

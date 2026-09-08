@@ -205,8 +205,8 @@ export default function ExpensesPage() {
   return <main className="trip-detail-shell expenses-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
     <TripCover tripId={id} />
-    <div className="expenses-title"><p className="section-kicker">VIAGGIO</p><h1>Budget e spese</h1><p>Tieni sotto controllo i costi e dividili con il gruppo.</p></div>
     <TripTabs tripId={id} />
+    <div className="expenses-title"><p className="section-kicker">VIAGGIO</p><h1>Budget e spese</h1><p>Tieni sotto controllo i costi e dividili con il gruppo.</p></div>
 
     <section className="budget-summary">
       <article><span>Budget totale <small>(opzionale)</small></span><label><span>€</span><input type="number" min="0" value={budget ?? ""} placeholder="—" onChange={(event) => { const value = event.target.value === "" ? null : Number(event.target.value); setBudget(value); if (value === null) window.localStorage.removeItem(`mova-budget-${id}`); else window.localStorage.setItem(`mova-budget-${id}`, String(value)); void syncTripSnapshot(id, { budget: value }); }} aria-label="Budget totale opzionale" /></label></article>

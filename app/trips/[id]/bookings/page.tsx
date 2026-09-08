@@ -445,12 +445,12 @@ export default function BookingsPage() {
         </button>
       </header>
       <TripCover tripId={id} />
+      <TripTabs tripId={id} />
       <div className="expenses-title">
         <p className="section-kicker">ORGANIZZAZIONE</p>
         <h1>Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
       </div>
-      <TripTabs tripId={id} />
       <section className="bookings-panel">
         <div className="booking-overview">
           <div className="booking-kpi-total">

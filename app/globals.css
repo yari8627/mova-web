@@ -986,7 +986,7 @@ select:focus-visible {
 
 .trip-detail-shell { width: 100%; max-width: 100%; min-height: 100vh; padding: 24px clamp(18px, 5vw, 72px) 64px; overflow-x: clip; }
 .detail-loading { min-height: 100vh; display: grid; place-items: center; color: var(--text-secondary); }
-.detail-topbar { max-width: 1280px; margin: 0 auto 22px; display: flex; align-items: center; gap: 16px; }
+.detail-topbar { max-width: 1280px; min-height: 48px; margin: 0 auto 22px; display: flex; align-items: center; gap: 16px; }
 .detail-brand { flex: 1; color: var(--blue); font-size: 27px; font-weight: 900; letter-spacing: -1.5px; }
 .home-brand-button { min-height: 44px; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }.home-brand-button:hover { color: var(--blue-hover); }
 .detail-hero { max-width: 1280px; min-height: 300px; margin: 0 auto; padding: clamp(26px, 5vw, 52px); border-radius: var(--radius-xl); color: white; display: flex; align-items: flex-end; box-shadow: var(--shadow); }
