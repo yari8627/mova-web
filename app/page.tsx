@@ -123,7 +123,6 @@ export default function Page() {
   const router = useRouter();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
-  const [preloadProgress, setPreloadProgress] = useState<{ done: number; total: number } | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -174,7 +173,7 @@ export default function Page() {
           const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
           setTrips(accountTrips);
           writePageCache(userId, "trips", accountTrips);
-          await preloadTrips(session.user, accountTrips, (done, total) => { if (!cancelled) setPreloadProgress({ done, total }); }, () => cancelled);
+          await preloadTrips(session.user, accountTrips, () => {}, () => cancelled);
         }
         if (!cancelled) setAuthReady(true);
       } catch {
@@ -300,7 +299,7 @@ export default function Page() {
   }
 
   if (loadError && !currentUser) return <main className="auth-loading"><div className="brand">mova</div><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main>;
-  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account"><div className="brand">mova</div><p>Caricamento del tuo spazio di viaggio...</p>{preloadProgress && preloadProgress.total > 0 && <><p role="status">Preparazione viaggi: {preloadProgress.done} di {preloadProgress.total}</p><button className="secondary-button" onClick={() => setAuthReady(true)}>Apri MOVA mentre termina il caricamento</button></>}</main>;
+  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account" aria-busy="true"><div className="brand">mova</div></main>;
 
   return (
     <main className="app-shell">
