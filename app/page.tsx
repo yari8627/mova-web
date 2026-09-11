@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { preloadTrips, tripsPrepared } from "../lib/preload-trips";
+import { preloadTrips, tripsPrepared, priorityTrip, preloadOtherTrips } from "../lib/preload-trips";
 import { setTripCacheAccount } from "../lib/trip-client-cache";
 import { useRouter } from "next/navigation";
 import { readPageCache, writePageCache, preloadOverview } from "../lib/page-cache";
@@ -159,7 +159,7 @@ export default function Page() {
         const userId = session.user.id;
         setTripCacheAccount(userId);
         const cached = readPageCache<Trip[]>(userId, "trips");
-        if (cached) { setTrips(cached); if (tripsPrepared(userId, cached)) setAuthReady(true); }
+        if (cached) { setTrips(cached); const priority = priorityTrip(cached); if (!priority || tripsPrepared(userId, [priority])) setAuthReady(true); }
         // Notifications must never block the trip list.
         void fetch("/api/notifications", { cache: "no-store" })
           .then(async (response) => {
@@ -173,7 +173,11 @@ export default function Page() {
           const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
           setTrips(accountTrips);
           writePageCache(userId, "trips", accountTrips);
-          await preloadTrips(session.user, accountTrips, () => {}, () => cancelled);
+          const priority = priorityTrip(accountTrips);
+          if (priority) await preloadTrips(session.user, [priority], () => {}, () => cancelled);
+          if (cancelled) return;
+          setAuthReady(true);
+          preloadOtherTrips(session.user, accountTrips.filter(trip => trip.id !== priority?.id));
         }
         if (!cancelled) setAuthReady(true);
       } catch {
@@ -189,14 +193,14 @@ export default function Page() {
   function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^MOVA-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice MOVA valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
   async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "MOVA — Travel together", text: "Organizza e condividi i tuoi viaggi con MOVA. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("MOVA condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
 
-  useEffect(() => { let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips]);
+  useEffect(() => { if (!authReady) return; let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips, authReady]);
 
   const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
   const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
   const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
   useEffect(() => {
-    if (currentUser && selectedTrip) void preloadOverview(currentUser.id, selectedTrip.id);
-  }, [currentUser?.id, selectedTrip?.id]);
+    if (authReady && currentUser && selectedTrip) void preloadOverview(currentUser.id, selectedTrip.id);
+  }, [authReady, currentUser?.id, selectedTrip?.id]);
   function warmOverview(tripId: string) {
     if (currentUser) void preloadOverview(currentUser.id, tripId);
   }

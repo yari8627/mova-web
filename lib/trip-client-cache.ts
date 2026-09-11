@@ -87,3 +87,8 @@ export function removeTripSnapshot(id: string) {
   inflight.delete(id);
   try { window.localStorage.removeItem(storageKey(id)); } catch { /* Nessuna cache da rimuovere. */ }
 }
+
+export function tripCacheSessionGuard() {
+  const currentGeneration = generation;
+  return () => generation === currentGeneration;
+}

@@ -131,3 +131,26 @@ test('startup queue limits concurrency, survives failures and honors cancellatio
   assert.equal(attempted.length, 4);
   await startup.runPreloadQueue([5], async () => assert.fail('cancelled work started'), () => {}, () => true);
 });
+
+test('startup prioritizes an active trip, then the nearest future trip, never past trips', () => {
+  const startup = load('lib/preload-trips.ts');
+  const past = { id: 'past', startDate: '2026-08-01', endDate: '2026-08-10' };
+  const next = { id: 'next', startDate: '2026-09-15', endDate: '2026-09-20' };
+  const later = { id: 'later', startDate: '2026-12-01', endDate: '2026-12-10' };
+  const active = { id: 'active', startDate: '2026-09-10', endDate: '2026-09-11' };
+  assert.equal(startup.priorityTrip([later, past, next, active], '2026-09-11').id, 'active');
+  assert.equal(startup.priorityTrip([later, past, next], '2026-09-11').id, 'next');
+  assert.equal(startup.priorityTrip([past], '2026-09-11'), undefined);
+  assert.equal(startup.priorityTrip([], '2026-09-11'), undefined);
+});
+
+test('background session guard survives navigation but stops after account changes', () => {
+  const cache = load('lib/trip-client-cache.ts');
+  cache.setTripCacheAccount('alice');
+  const valid = cache.tripCacheSessionGuard();
+  cache.setTripCacheAccount('alice');
+  assert.equal(valid(), true);
+  cache.setTripCacheAccount('bob');
+  cache.setTripCacheAccount('alice');
+  assert.equal(valid(), false);
+});

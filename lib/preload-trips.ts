@@ -1,7 +1,7 @@
 "use client";
 
 import { fetchPageCache, preloadOverview, readPageCache, writePageCache } from "./page-cache";
-import { fetchTripSnapshot, readTripSnapshot, setTripCacheAccount } from "./trip-client-cache";
+import { fetchTripSnapshot, readTripSnapshot, setTripCacheAccount, tripCacheSessionGuard } from "./trip-client-cache";
 
 export function tripsPrepared(userId: string, trips: { id: string }[]) {
   return readPageCache(userId, "packing-template") !== null && trips.every(({ id }) =>
@@ -40,4 +40,29 @@ export async function preloadTrips(user: { id: string; name: string }, trips: { 
       ]);
     }, progress, cancelled),
   ]);
+}
+
+type DatedTrip = { id: string; startDate: string; endDate: string };
+
+export function priorityTrip<T extends DatedTrip>(trips: T[], today = new Date().toLocaleDateString("sv-SE")): T | undefined {
+  return trips.filter(trip => trip.endDate.slice(0, 10) >= today).sort((a, b) => {
+    const activeA = a.startDate.slice(0, 10) <= today;
+    const activeB = b.startDate.slice(0, 10) <= today;
+    return activeA !== activeB ? (activeA ? -1 : 1) : a.startDate.localeCompare(b.startDate);
+  })[0];
+}
+
+let backgroundGeneration = 0;
+// This queue survives Home unmounting, but never a change of account.
+export function preloadOtherTrips(user: { id: string; name: string }, trips: { id: string }[]) {
+  const run = ++backgroundGeneration;
+  const sameSession = tripCacheSessionGuard();
+  const cancelled = () => run !== backgroundGeneration || !sameSession();
+  void (async () => {
+    for (const trip of trips) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (cancelled()) return;
+      await preloadTrips(user, [trip], () => {}, cancelled);
+    }
+  })().catch(() => undefined);
 }
