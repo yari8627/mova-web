@@ -81,6 +81,9 @@ export default function ExpensesPage() {
   const perPerson = participants.length ? total / participants.length : 0;
   const { transfers } = useMemo(() => calculateGroupBalances(expenses, participants), [expenses, participants]);
 
+  const toPay = transfers.filter(item => Boolean(userName) && item.from === userName);
+  const toReceive = transfers.filter(item => Boolean(userName) && item.to === userName);
+
   function remember(next: Expense[]) {
     removeTripSnapshot(id);
     setExpenses(next);
@@ -148,13 +151,22 @@ export default function ExpensesPage() {
       <article><span>Quota a persona</span><strong>{money.format(perPerson)}</strong></article>
     </section>
 
-    <div className="expenses-grid">
+    <div className="expenses-grid personal-expenses-grid">
+      <section className="balances-panel"><p className="section-kicker">I TUOI SALDI</p><h2>Saldi da regolare</h2>
+        {!userName ? <p>Caricamento…</p> : <>
+          <h3 className="balance-subtitle receiving">Devi ricevere</h3>
+          {toReceive.length ? <div className="balance-list transfer-list">{toReceive.map(item => <div key={item.from}><div className="balance-avatar receiving">{item.from.slice(0, 1)}</div><span><b>{item.from}</b><small>Devi ricevere {money.format(item.amount)} da {item.from}</small></span><strong className="positive">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da ricevere.</p>}
+          <h3 className="balance-subtitle receiving">Devi pagare</h3>
+          {toPay.length ? <div className="balance-list transfer-list">{toPay.map(item => <div key={item.to}><div className="balance-avatar">{item.to.slice(0, 1)}</div><span><b>{item.to}</b><small>Devi pagare {money.format(item.amount)} a {item.to}</small></span><strong className="negative">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da pagare.</p>}
+        </>}
+      </section>
+
       <section className="expenses-list-panel"><div className="panel-heading"><div><p className="section-kicker">MOVIMENTI</p><h2>Spese</h2></div><button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Nuova spesa</button></div>
         {saveError && <div className="auth-error security-feedback">{saveError}</div>}
         <div className="expense-list">{sortedExpenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; const visualCategory = expenseTravelCategory(expense); return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : visualCategory ? `booking-icon-${visualCategory}` : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
       </section>
 
-      <aside className="balances-panel"><p className="section-kicker">SALDI DEL GRUPPO</p><h2>Saldi da regolare</h2>{transfers.length ? <><h3 className="balance-subtitle">Chi deve pagare</h3><div className="balance-list transfer-list">{transfers.map((item, index) => <div key={`pay-${item.from}-${item.to}-${index}`}><div className="balance-avatar">{item.from.slice(0, 1)}</div><span><b>{item.from}</b><small>Deve pagare {money.format(item.amount)} a {item.to}</small></span><strong className="negative">{money.format(item.amount)}</strong></div>)}</div><h3 className="balance-subtitle receiving">Chi deve ricevere</h3><div className="balance-list transfer-list">{transfers.map((item, index) => <div key={`receive-${item.from}-${item.to}-${index}`}><div className="balance-avatar receiving">{item.to.slice(0, 1)}</div><span><b>{item.to}</b><small>Deve ricevere {money.format(item.amount)} da {item.from}</small></span><strong className="positive">{money.format(item.amount)}</strong></div>)}</div></> : <div className="balances-settled"><CircleDollarSign size={22} /><strong>Tutti i saldi sono in pareggio</strong><span>Non sono necessari altri pagamenti.</span></div>}<div className="split-note"><Users size={19} /><p>Ogni spesa viene calcolata solo tra i partecipanti selezionati. I debiti reciproci vengono compensati solo tra le stesse due persone. Le regolazioni registrate riducono il relativo saldo.</p></div></aside>
+
     </div>
 
     {showAdd && <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}><div className="modal expense-modal" role="dialog" aria-modal="true" aria-labelledby="expense-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="section-kicker">{draft.kind === "expense" ? "SPESA CONDIVISA" : "REGOLAZIONE SALDO"}</p><h2 id="expense-title">{editingId ? "Modifica movimento" : draft.kind === "expense" ? "Aggiungi spesa" : "Regola saldo"}</h2></div><button className="icon-button" onClick={() => setShowAdd(false)} aria-label="Chiudi"><X size={20} /></button></div><form className="trip-form" onSubmit={(event) => { event.preventDefault(); saveExpense(); }}>

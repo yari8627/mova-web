@@ -1553,3 +1553,5 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
 .ios-guide-ready { display: flex; align-items: flex-start; gap: 8px; }
 .ios-guide-ready svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
 .ios-guide-done { margin-top: 18px; width: 100%; justify-content: center; }
+
+.expenses-grid.personal-expenses-grid { grid-template-columns: minmax(0, 1fr); }
