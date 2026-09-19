@@ -47,7 +47,8 @@ export function remoteStorageConfigured() { return Boolean(configuration()); }
 
 function authenticationHeaders(config: NonNullable<ReturnType<typeof configuration>>): Record<string, string> {
   const headers: Record<string, string> = { apikey: config.key };
-  if (!config.key.startsWith("sb_secret_")) headers.Authorization = `Bearer ${config.key}`;
+  // Storage requires the same bearer fallback used by the Supabase client.
+  headers.Authorization = `Bearer ${config.key}`;
   return headers;
 }
 
