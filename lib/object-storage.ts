@@ -1,8 +1,9 @@
+import type { Prisma } from "@prisma/client";
 import { Buffer } from "buffer";
 import { prisma } from "./prisma";
 
-async function ensureDatabaseStorage() {
-  await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "MovaStoredFile" (
+async function ensureDatabaseStorage(db: Prisma.TransactionClient = prisma) {
+  await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "MovaStoredFile" (
     "key" TEXT PRIMARY KEY,
     "data" BYTEA NOT NULL,
     "contentType" TEXT NOT NULL,
@@ -24,9 +25,9 @@ async function getDatabaseObject(key: string) {
   return Buffer.from(rows[0].data);
 }
 
-async function removeDatabaseObject(key: string) {
-  await ensureDatabaseStorage();
-  await prisma.$executeRaw`DELETE FROM "MovaStoredFile" WHERE "key" = ${key}`;
+async function removeDatabaseObject(key: string, db: Prisma.TransactionClient = prisma) {
+  await ensureDatabaseStorage(db);
+  await db.$executeRaw`DELETE FROM "MovaStoredFile" WHERE "key" = ${key}`;
 }
 
 function configuration() {
@@ -92,7 +93,7 @@ export async function getObject(key: string) {
   return getDatabaseObject(key);
 }
 
-export async function removeObject(key: string, strict = false) {
+export async function removeObject(key: string, strict = false, db: Prisma.TransactionClient = prisma) {
   const config = configuration();
   if (config) {
     try {
@@ -100,5 +101,5 @@ export async function removeObject(key: string, strict = false) {
       if (strict && !response.ok && response.status !== 404) throw new Error("Eliminazione archivio non riuscita");
     } catch (error) { if (strict) throw error; }
   }
-  await removeDatabaseObject(key);
+  await removeDatabaseObject(key, db);
 }

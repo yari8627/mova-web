@@ -25,7 +25,7 @@ export async function cleanupExpiredAttachments(now = new Date()) {
           where: { id: candidate.id, storageKey: { not: null }, trip: { endDate: { lt: cutoff } } },
         });
         if (!document?.storageKey) return false;
-        await deleteDocumentFile(document.storageKey, true);
+        await deleteDocumentFile(document.storageKey, true, tx);
         await tx.document.delete({ where: { id: document.id } });
         return true;
       }, { timeout: 15000 });
