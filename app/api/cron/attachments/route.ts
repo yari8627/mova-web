@@ -11,5 +11,5 @@ export async function GET(request: Request) {
     return new Response(null, { status: 401 });
   }
   const result = await cleanupExpiredAttachments();
-  return new Response(null, { status: result.failed ? 503 : 204 });
+  return new Response(null, { status: result.failed ? 503 : 204, headers: result.failed ? { "X-Cleanup-Error": result.failureCode } : {} });
 }

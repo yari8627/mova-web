@@ -15,6 +15,7 @@ export async function cleanupExpiredAttachments(now = new Date()) {
   const started = Date.now();
   let deleted = 0;
   let failed = 0;
+  let failureCode = "";
   for (const candidate of candidates) {
     if (Date.now() - started > 40000) break;
     try {
@@ -30,7 +31,7 @@ export async function cleanupExpiredAttachments(now = new Date()) {
         return true;
       }, { timeout: 15000 });
       if (removed) deleted++;
-    } catch { failed++; }
+    } catch (error) { failed++; const code = (error as { code?: string }).code; failureCode = code && /^[A-Z0-9_]{1,40}$/.test(code) ? code : "STORAGE_FAILURE"; }
   }
-  return { deleted, failed };
+  return { deleted, failed, failureCode };
 }
