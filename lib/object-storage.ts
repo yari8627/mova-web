@@ -92,12 +92,13 @@ export async function getObject(key: string) {
   return getDatabaseObject(key);
 }
 
-export async function removeObject(key: string) {
+export async function removeObject(key: string, strict = false) {
   const config = configuration();
   if (config) {
     try {
-      await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { method: "DELETE", headers: { ...authenticationHeaders(config), "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
-    } catch { /* Prosegue con la pulizia del database. */ }
+      const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}`, { signal: AbortSignal.timeout(8000), method: "DELETE", headers: { ...authenticationHeaders(config), "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [key] }) });
+      if (strict && !response.ok && response.status !== 404) throw new Error("Eliminazione archivio non riuscita");
+    } catch (error) { if (strict) throw error; }
   }
   await removeDatabaseObject(key);
 }
