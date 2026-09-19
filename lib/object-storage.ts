@@ -102,7 +102,7 @@ export async function removeObject(key: string, strict = false, db: Prisma.Trans
         const error = await response.json().catch(() => ({})) as { statusCode?: string | number; message?: string; error?: string };
         // Supabase can return HTTP 400 with an embedded 404 for a missing bucket.
         const missing = Number(error.statusCode) === 404 || /^(bucket|object|the resource) (not found|does not exist)\.?$/i.test(error.message || "");
-        if (!missing) throw Object.assign(new Error("Eliminazione archivio non riuscita"), { code: `STORAGE_HTTP_${response.status}` });
+        if (!missing) throw Object.assign(new Error("Eliminazione archivio non riuscita"), { code: `STORAGE_${response.status}_${Number(error.statusCode) || 0}_${/jwt|token|signature|api.key|unauthor/i.test(error.message || "") ? "AUTH" : /bucket/i.test(error.message || "") ? "BUCKET" : /permission|denied|policy/i.test(error.message || "") ? "PERMISSION" : "OTHER"}` });
       }
     } catch (error) { if (strict) throw error; }
   }
