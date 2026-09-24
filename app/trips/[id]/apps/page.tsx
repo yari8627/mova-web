@@ -307,7 +307,7 @@ export default function UsefulAppsPage() {
           className="detail-brand home-brand-button"
           onClick={() => router.push("/")}
         >
-          mova
+          NAMI
         </button>
       </header>
       <TripCover tripId={id} />

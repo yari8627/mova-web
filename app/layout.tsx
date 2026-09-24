@@ -5,13 +5,13 @@ import { PwaInstall } from "./components/pwa-install";
 import { AppBottomNav } from "./components/app-bottom-nav";
 
 export const metadata: Metadata = {
-  title: "Mova — Travel together",
+  title: "NAMI — Travel together",
   description: "Organizza e vivi i tuoi viaggi insieme.",
-  applicationName: "MOVA",
+  applicationName: "NAMI",
   manifest: "/manifest.webmanifest",
   formatDetection: { telephone: false },
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "MOVA" },
-  icons: { icon: [{ url: "/icons/mova-192.png", sizes: "192x192", type: "image/png" }, { url: "/icons/mova-512.png", sizes: "512x512", type: "image/png" }], apple: [{ url: "/icons/mova-180.png", sizes: "180x180", type: "image/png" }] },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "NAMI" },
+  icons: { icon: [{ url: "/icons/nami-192.png", sizes: "192x192", type: "image/png" }, { url: "/icons/nami-512.png", sizes: "512x512", type: "image/png" }], apple: [{ url: "/icons/nami-180.png", sizes: "180x180", type: "image/png" }] },
 };
 
 export const viewport: Viewport = { themeColor: "#145cff", width: "device-width", initialScale: 1, viewportFit: "cover" };

@@ -139,7 +139,7 @@ export default function ExpensesPage() {
   }
 
   return <main className="trip-detail-shell expenses-shell">
-    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
+    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
     <TripCover tripId={id} />
     <TripTabs tripId={id} />
     <div className="expenses-title"><p className="section-kicker">VIAGGIO</p><h1>Budget e spese</h1><p>Tieni sotto controllo i costi e dividili con il gruppo.</p></div>

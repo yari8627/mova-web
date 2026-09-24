@@ -190,8 +190,8 @@ export default function Page() {
 
   async function openNotification(item: AppNotification) { if (!item.readAt) { await fetch(`/api/notifications/${item.id}`, { method: "PATCH" }); setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification)); } setNotificationsOpen(false); if (item.link) router.push(item.link); }
   async function markAllNotificationsRead() { await fetch("/api/notifications", { method: "PATCH" }); setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))); }
-  function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^MOVA-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice MOVA valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
-  async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "MOVA — Travel together", text: "Organizza e condividi i tuoi viaggi con MOVA. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("MOVA condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
+  function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^(?:NAMI|MOVA)-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice NAMI valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
+  async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "NAMI — Travel together", text: "Organizza e condividi i tuoi viaggi con NAMI. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("NAMI condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
 
   useEffect(() => { if (!authReady) return; let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips, authReady]);
 
@@ -302,15 +302,15 @@ export default function Page() {
     }
   }
 
-  if (loadError && !currentUser) return <main className="auth-loading"><div className="brand">mova</div><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main>;
-  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account" aria-busy="true"><div className="brand">mova</div></main>;
+  if (loadError && !currentUser) return <main className="auth-loading"><div className="brand">NAMI</div><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main>;
+  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account" aria-busy="true"><div className="brand">NAMI</div></main>;
 
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <div>
-            <div className="brand">mova</div>
+            <div className="brand">NAMI</div>
             <div className="brand-subtitle">Travel together</div>
           </div>
           <button className="icon-button mobile-only" onClick={() => setMobileMenu(false)} aria-label="Chiudi menu">
@@ -465,14 +465,14 @@ export default function Page() {
             </div>
 
             <div className="tip-card home-invite-card">
-              <div className="home-tip-copy"><Plane size={22} /><div><strong>Consiglio Mova</strong><p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p></div></div>
+              <div className="home-tip-copy"><Plane size={22} /><div><strong>Consiglio NAMI</strong><p>Invita gli altri partecipanti per organizzare il viaggio insieme.</p></div></div>
               <form className="home-invite-entry" onSubmit={openInvite}>
                 <label htmlFor="home-invite-code"><KeyRound size={18} /><span><strong>Hai già un codice invito?</strong><small>Inserisci il codice ricevuto per partecipare al viaggio.</small></span></label>
-                <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="MOVA-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
+                <div><input id="home-invite-code" value={inviteEntry} onChange={(event) => { setInviteEntry(event.target.value); setInviteEntryError(""); }} placeholder="NAMI-XXXXXXXXXX" autoCapitalize="characters" autoCorrect="off" spellCheck={false} /><button type="submit" className="primary-button" disabled={!inviteEntry.trim()}>Continua</button></div>
                 {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
               </form>
             </div>
-            <div className="share-app-card"><span><Share2 size={21} /></span><div><strong>Condividi MOVA</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
+            <div className="share-app-card"><span><Share2 size={21} /></span><div><strong>Condividi NAMI</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
           </aside>
         </div>
       </section>

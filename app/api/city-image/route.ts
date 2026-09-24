@@ -9,7 +9,7 @@ function normalized(value: string) { return value.normalize("NFD").replace(/[\u0
 
 async function wikiImage(title: string, language: "it" | "en") {
   const params = new URLSearchParams({ action: "query", titles: title, redirects: "1", prop: "pageimages|pageprops", piprop: "thumbnail", pithumbsize: "1600", format: "json", origin: "*" });
-  const response = await fetch(`https://${language}.wikipedia.org/w/api.php?${params}`, { headers: { "User-Agent": "MOVA travel planner/0.1" }, next: { revalidate: 2592000 } });
+  const response = await fetch(`https://${language}.wikipedia.org/w/api.php?${params}`, { headers: { "User-Agent": "NAMI travel planner/0.1" }, next: { revalidate: 2592000 } });
   if (!response.ok) return null;
   const result = await response.json() as WikiResponse;
   const page = Object.values(result.query?.pages || {})[0];
@@ -21,7 +21,7 @@ async function wikiImage(title: string, language: "it" | "en") {
 
 async function commonsImage(query: string) {
   const params = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query, gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|mime", iiurlwidth: "1600", format: "json", origin: "*" });
-  const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, { headers: { "User-Agent": "MOVA travel planner/0.1" }, next: { revalidate: 2592000 } });
+  const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, { headers: { "User-Agent": "NAMI travel planner/0.1" }, next: { revalidate: 2592000 } });
   if (!response.ok) return null;
   const result = await response.json() as CommonsResponse;
   const excluded = /\b(flag|map|coat of arms|locator|location|emblem|logo|satellite)\b/i;

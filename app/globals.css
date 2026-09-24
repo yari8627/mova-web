@@ -60,7 +60,7 @@ svg {
 
 @media (orientation: landscape) and (max-height: 600px) {
   body::before {
-    content: "mova\A\A Ruota il dispositivo in verticale";
+    content: "NAMI\A\A Ruota il dispositivo in verticale";
     position: fixed;
     inset: 0;
     z-index: 10000;

@@ -374,7 +374,7 @@ export default function OverviewPage() {
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          mova
+          NAMI
         </button>
         <button
           className="secondary-button"

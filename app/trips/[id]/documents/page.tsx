@@ -367,7 +367,7 @@ export default function DocumentsPage() {
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          mova
+          NAMI
         </button>
         {role && (
           <label
@@ -518,7 +518,7 @@ export default function DocumentsPage() {
           <section className="entry-requirements requirements-fallback">
             <h2>Requisiti per {country}</h2>
             <p>
-              La scheda dettagliata non è ancora disponibile in MOVA. Verifica
+              La scheda dettagliata non è ancora disponibile in NAMI. Verifica
               sempre i requisiti aggiornati sulla fonte ufficiale.
             </p>
             <a

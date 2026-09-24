@@ -441,7 +441,7 @@ export default function BookingsPage() {
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          mova
+          NAMI
         </button>
       </header>
       <TripCover tripId={id} />

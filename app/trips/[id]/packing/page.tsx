@@ -142,7 +142,7 @@ export default function PackingPage() {
   }
 
   return <main className="trip-detail-shell packing-shell">
-    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button></header>
+    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button></header>
     <TripCover tripId={id} />
     <TripTabs tripId={id} />
     <div className="expenses-title"><p className="section-kicker">CHECKLIST PERSONALE</p><h1>Cosa Portare</h1><p>Prepara la valigia e tieni sotto controllo tutto ciò che serve per il viaggio.</p></div>

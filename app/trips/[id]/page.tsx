@@ -312,7 +312,7 @@ export default function TripPage() {
 
   return <main className="trip-detail-shell">
     <header className="detail-topbar">
-      <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">mova</button>
+      <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>
       {canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}
     </header>
 

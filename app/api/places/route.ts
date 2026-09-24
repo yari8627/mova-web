@@ -43,7 +43,7 @@ async function googleAutocomplete(query: string, countryCode: string, sessionTok
 async function nominatimAutocomplete(query: string, countryCode: string) {
   const search = new URLSearchParams({ q: query, format: "jsonv2", addressdetails: "1", namedetails: "1", limit: "8", accept_language: "it" });
   if (/^[a-z]{2}$/.test(countryCode)) search.set("countrycodes", countryCode);
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?${search}`, { headers: { "User-Agent": "MovaTravel/0.1 (travel itinerary place search)" }, next: { revalidate: 86400 } });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${search}`, { headers: { "User-Agent": "NAMITravel/0.1 (travel itinerary place search)" }, next: { revalidate: 86400 } });
   if (!response.ok) return [];
   const results = await response.json() as NominatimPlace[];
   return results.map((place) => { const parts = place.display_name.split(",").map((part) => part.trim()); return { id: String(place.place_id), provider: "openstreetmap", name: place.name || parts[0] || place.display_name, address: parts.slice(1).join(", "), latitude: Number(place.lat), longitude: Number(place.lon), type: place.type || place.category || "place" }; });

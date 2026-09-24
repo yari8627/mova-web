@@ -23,7 +23,7 @@ export async function PATCH(request: Request) {
     prisma.participant.updateMany({ where: { email: user.email }, data: { name } })
   ]);
   let previewUrl: string | undefined;
-  if (emailChanged) { const token = await createEmailToken(user.id, "verify_email", 24); const path = `/verify-email/${token}`; const delivery = await sendMovaEmail({ to: email, subject: "Conferma la nuova email MOVA", title: "Conferma il nuovo indirizzo", intro: "Hai richiesto di usare questo indirizzo per il tuo account MOVA. Confermalo entro 24 ore.", actionLabel: "Conferma nuova email", actionUrl: `${appUrl(request)}${path}`, idempotencyKey: `email-change-${user.id}-${token.slice(0, 12)}` }); if (delivery.development) previewUrl = path; }
+  if (emailChanged) { const token = await createEmailToken(user.id, "verify_email", 24); const path = `/verify-email/${token}`; const delivery = await sendMovaEmail({ to: email, subject: "Conferma la nuova email NAMI", title: "Conferma il nuovo indirizzo", intro: "Hai richiesto di usare questo indirizzo per il tuo account NAMI. Confermalo entro 24 ore.", actionLabel: "Conferma nuova email", actionUrl: `${appUrl(request)}${path}`, idempotencyKey: `email-change-${user.id}-${token.slice(0, 12)}` }); if (delivery.development) previewUrl = path; }
   return NextResponse.json({ updated: true, emailChanged, previewUrl });
 }
 

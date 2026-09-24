@@ -35,16 +35,16 @@ export function PwaInstall() {
   async function install() { if (ios) return setIosHelp(true); if (!prompt) return; await prompt.prompt(); const result = await prompt.userChoice; if (result.outcome === "accepted") setHidden(true); setPrompt(null); }
   if (hidden && !iosHelp) return null;
   return <>
-    {!hidden && <aside className="pwa-install" aria-label="Installa MOVA"><button className="pwa-install-close" onClick={dismiss} aria-label="Non mostrare più"><X size={15} /></button><span className="pwa-install-icon"><Download size={19} /></span><div><strong>Installa MOVA</strong><p>Aprila dalla Home come una vera app.</p></div><button className="pwa-install-action" onClick={install}>Installa</button></aside>}
+    {!hidden && <aside className="pwa-install" aria-label="Installa NAMI"><button className="pwa-install-close" onClick={dismiss} aria-label="Non mostrare più"><X size={15} /></button><span className="pwa-install-icon"><Download size={19} /></span><div><strong>Installa NAMI</strong><p>Aprila dalla Home come una vera app.</p></div><button className="pwa-install-action" onClick={install}>Installa</button></aside>}
     <dialog ref={guide} className="ios-install-guide" aria-labelledby="ios-install-title" onCancel={() => setIosHelp(false)} onClick={(event) => { if (event.target === event.currentTarget) { const box = event.currentTarget.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) setIosHelp(false); } }}>
       <button className="ios-guide-close" aria-label="Chiudi la guida" onClick={() => setIosHelp(false)}><X size={22} /></button>
-      <header><span className="ios-guide-brand">mova</span><h2 id="ios-install-title">MOVA sulla tua Home</h2><p>Apri MOVA in Safari sul tuo iPhone.<br />Poi segui questi tre passaggi.</p></header>
+      <header><span className="ios-guide-brand">NAMI</span><h2 id="ios-install-title">NAMI sulla tua Home</h2><p>Apri NAMI in Safari sul tuo iPhone.<br />Poi segui questi tre passaggi.</p></header>
       <ol className="ios-guide-steps">
         <li><span className="ios-guide-number">1</span><div><h3>Tocca Condividi</h3><p>Cerca il quadrato con la freccia verso l’alto. Se non lo vedi, apri il menu di Safari.</p><div className="ios-guide-example" aria-hidden="true"><span>mova-web-flax.vercel.app</span><Share size={25} /></div></div></li>
         <li><span className="ios-guide-number">2</span><div><h3>Aggiungi alla schermata Home</h3><p>Scorri le opzioni del menu e seleziona questa voce.</p><div className="ios-guide-example ios-guide-menu" aria-hidden="true"><span>Aggiungi alla schermata Home</span><SquarePlus size={24} /></div></div></li>
-        <li><span className="ios-guide-number">3</span><div><h3>Conferma con Aggiungi</h3><p>Se compare “Apri come app web”, lascialo attivo.</p><div className="ios-guide-example ios-guide-confirm" aria-hidden="true"><span className="ios-guide-app-icon">m</span><strong>MOVA</strong><span className="ios-guide-add">Aggiungi</span></div></div></li>
+        <li><span className="ios-guide-number">3</span><div><h3>Conferma con Aggiungi</h3><p>Se compare “Apri come app web”, lascialo attivo.</p><div className="ios-guide-example ios-guide-confirm" aria-hidden="true"><span className="ios-guide-app-icon">N</span><strong>NAMI</strong><span className="ios-guide-add">Aggiungi</span></div></div></li>
       </ol>
-      <p className="ios-guide-ready"><Check size={19} /> L’icona MOVA apparirà sulla schermata Home.</p>
+      <p className="ios-guide-ready"><Check size={19} /> L’icona NAMI apparirà sulla schermata Home.</p>
       <button className="primary-button ios-guide-done" onClick={() => setIosHelp(false)}>Ho capito</button>
     </dialog>
   </>;
