@@ -4,7 +4,7 @@ import { CSSProperties, ReactNode, useEffect, useState } from "react";
 import styles from "./nami-animated-splash.module.css";
 
 // Shared by the CSS timeline and the readiness gate. Geometry lives in the CSS module.
-export const SPLASH_TIMING = { intro: 4000, entrance: 1950, wordmarkDelay: 1950, wordmarkFade: 500, straighten: 500, departureDelay: 2600, departure: 1200, transition: 350, reduced: 300 };
+export const SPLASH_TIMING = { intro: 4500, entrance: 2200, wordmarkDelay: 1950, wordmarkFade: 500, straighten: 1100, departureDelay: 2750, departure: 1550, transition: 350, reduced: 300 };
 let introShown = false;
 
 export function NamiAnimatedSplash({ ready, children, onComplete }: { ready: boolean; children?: ReactNode; onComplete?: () => void }) {
@@ -40,9 +40,9 @@ export function NamiAnimatedSplash({ ready, children, onComplete }: { ready: boo
     <div className={styles.content} inert={!dismissed} style={{ opacity: exiting || dismissed ? 1 : 0, transition: `opacity ${SPLASH_TIMING.transition}ms ease` }}>{children}</div>
     {!dismissed && <div className={`${styles.splash} ${imageReady ? styles.play : ""} ${skipFlight ? styles.static : ""} ${exiting ? styles.exit : ""}`} style={variables} role="status" aria-label="Caricamento NAMI Travel" aria-busy={!ready}>
       <div className={styles.composition} aria-hidden="true">
-        <div className={styles.departure}><div className={styles.flight}><div className={styles.upright}>
+        <div className={styles.departure}><div className={styles.flight}><div className={styles.rise}><div className={styles.upright}>
           <img src="/images/nami-balloon.png" width="1261" height="1247" alt="" fetchPriority="high" loading="eager" onLoad={() => setImageReady(true)} onError={() => setImageReady(true)} />
-        </div></div></div>
+        </div></div></div></div>
         <div className={styles.wordmark}><strong>NAMI</strong><span>Travel</span></div>
       </div>
     </div>}
