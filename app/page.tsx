@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { preloadTrips, tripsPrepared, priorityTrip, preloadOtherTrips } from "../lib/preload-trips";
 import { setTripCacheAccount } from "../lib/trip-client-cache";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,8 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+
+import { NamiAnimatedSplash } from "./components/nami-animated-splash";
 
 type Trip = {
   id: string;
@@ -125,6 +127,9 @@ export default function Page() {
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [startupDismissed, setStartupDismissed] = useState(false);
+  const completeStartup = useCallback(() => setStartupDismissed(true), []);
+  useEffect(() => { if (startupDismissed && authReady && !currentUser && !loadError) router.replace("/auth"); }, [startupDismissed, authReady, currentUser, loadError, router]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [inviteEntry, setInviteEntry] = useState("");
@@ -154,7 +159,7 @@ export default function Page() {
         const sessionResponse = await fetch("/api/auth/me", { cache: "no-store" });
         const session = await sessionResponse.json() as { user: SessionUser | null };
         if (cancelled) return;
-        if (!session.user) { router.replace("/auth"); return; }
+        if (!session.user) { setAuthReady(true); return; }
         setCurrentUser(session.user);
         const userId = session.user.id;
         setTripCacheAccount(userId);
@@ -302,10 +307,9 @@ export default function Page() {
     }
   }
 
-  if (loadError && !currentUser) return <main className="auth-loading"><div className="brand">NAMI</div><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main>;
-  if (!authReady || !currentUser) return <main className="auth-loading" aria-label="Caricamento account" aria-busy="true"><div className="brand">NAMI</div></main>;
-
   return (
+    <NamiAnimatedSplash ready={authReady} onComplete={completeStartup}>
+    {loadError && !currentUser ? <main className="auth-loading"><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main> : !currentUser ? null : (
     <main className="app-shell">
       <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
         <div className="brand-row">
@@ -533,5 +537,7 @@ export default function Page() {
       )}
 
     </main>
+    )}
+    </NamiAnimatedSplash>
   );
 }
