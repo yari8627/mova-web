@@ -1555,3 +1555,9 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
 .ios-guide-done { margin-top: 18px; width: 100%; justify-content: center; }
 
 .expenses-grid.personal-expenses-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* Match trip page titles to the Overview departure heading, at every width. */
+.trip-detail-shell :is(h1, h2).trip-section-title { font-size: clamp(21px, 2.4vw, 28px); }
+@media (max-width: 700px) {
+  .trip-detail-shell :is(h1, h2).trip-section-title { font-size: 21px; }
+}

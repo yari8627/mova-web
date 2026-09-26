@@ -448,7 +448,7 @@ export default function BookingsPage() {
       <TripTabs tripId={id} />
       <div className="expenses-title">
         <p className="section-kicker">ORGANIZZAZIONE</p>
-        <h1>Prenotazioni</h1>
+        <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
       </div>
       <section className="bookings-panel">

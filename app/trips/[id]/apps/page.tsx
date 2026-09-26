@@ -318,7 +318,7 @@ export default function UsefulAppsPage() {
         </div>
         <div>
           <p className="section-kicker">PRIMA DI PARTIRE</p>
-          <h1>App Utili {trip ? `in ${trip.country}` : "per il viaggio"}</h1>
+          <h1 className="trip-section-title">App Utili {trip ? `in ${trip.country}` : "per il viaggio"}</h1>
           <p>
             Installa e configura le app essenziali prima della partenza, quando
             hai ancora una connessione stabile.

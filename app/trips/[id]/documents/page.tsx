@@ -389,7 +389,7 @@ export default function DocumentsPage() {
       <TripTabs tripId={id} />
       <div className="expenses-title">
         <p className="section-kicker">ARCHIVIO</p>
-        <h1>Documenti</h1>
+        <h1 className="trip-section-title">Documenti</h1>
         <p>Tutto ciò che serve prima e durante il viaggio.</p>
       </div>
       <section className="document-utility-tip">
