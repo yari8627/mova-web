@@ -20,7 +20,7 @@ function harness(reduced = false) {
   render();
   return { advance, load() { find(tree, 'img').props.onLoad(); render(); }, ready() { ready = true; render(); }, completed: () => completed };
 }
-test('fast initialization waits for intro and crossfade', () => { const h = harness(); h.load(); h.ready(); h.advance(2699); assert.equal(h.completed(), 0); h.advance(351); assert.equal(h.completed(), 1); });
+test('fast initialization waits for intro and crossfade', () => { const h = harness(); h.load(); h.ready(); h.advance(3999); assert.equal(h.completed(), 0); h.advance(351); assert.equal(h.completed(), 1); });
 test('slow initialization waits without replaying entrance', () => { const h = harness(); h.load(); h.advance(8000); assert.equal(h.completed(), 0); h.ready(); h.advance(350); assert.equal(h.completed(), 1); });
 test('reduced motion shortens the intro', () => { const h = harness(true); h.load(); h.ready(); h.advance(650); assert.equal(h.completed(), 1); });
-test('unavailable image cannot block startup forever', () => { const h = harness(); h.ready(); h.advance(7050); assert.equal(h.completed(), 1); });
+test('unavailable image cannot block startup forever', () => { const h = harness(); h.ready(); h.advance(8350); assert.equal(h.completed(), 1); });

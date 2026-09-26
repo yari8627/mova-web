@@ -4,6 +4,8 @@
   --balloon-size: min(76vw, 45svh, 380px);
   --start-x: calc(-50vw - var(--balloon-size));
   --start-y: 20svh;
+  --upright-angle: 20deg;
+  --exit-x: calc(50vw + var(--balloon-size));
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -15,12 +17,13 @@
 }
 .composition { display: flex; flex-direction: column; align-items: center; transform: translateY(-4svh); }
 .flight { width: var(--balloon-size); opacity: 0; transform: translate(var(--start-x), var(--start-y)) scale(.97) rotate(-2deg); }
-.float img { display: block; width: 100%; height: auto; object-fit: contain; }
+.upright img { display: block; width: 100%; height: auto; object-fit: contain; }
 .wordmark { text-align: center; color: #145cff; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); }
 .wordmark strong { display: block; font-size: clamp(40px, 11vw, 62px); font-weight: 800; line-height: 1.08; letter-spacing: .025em; }
 .wordmark span { display: block; font-size: clamp(17px, 4.5vw, 22px); font-weight: 500; letter-spacing: .12em; margin-top: 5px; }
 .play .flight { animation: arrive var(--entrance) 150ms both; }
-.play .float { animation: float var(--float) 2100ms ease-in-out infinite; }
+.play .upright { animation: straighten var(--straighten) var(--wordmarkDelay) ease-in-out both; }
+.play .departure { animation: depart var(--departure) var(--departureDelay) cubic-bezier(.42, 0, .7, 1) both; }
 .play .wordmark { animation: reveal var(--wordmarkFade) var(--wordmarkDelay) ease-out both; }
 .exit { opacity: 0; pointer-events: none; }
 .content { min-height: 100svh; }
@@ -32,12 +35,15 @@
   80% { opacity: 1; transform: translate(-3vw, .7svh) rotate(.7deg) scale(.997); animation-timing-function: ease-out; }
   100% { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
 }
-@keyframes float { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-3px) rotate(-.6deg); } 75% { transform: translateY(3px) rotate(.6deg); } }
+@keyframes straighten { from { transform: rotate(0); } to { transform: rotate(var(--upright-angle)); } }
+@keyframes depart { 0% { transform: translate(0, 0); } 45% { transform: translate(16vw, -2svh); } 100% { transform: translate(var(--exit-x), -8svh); } }
 @keyframes reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .static.play .flight, .static.play .wordmark { transform: none; animation: fade var(--reduced) ease both; }
-.static .float { animation: none; }
+.static .upright { animation: none; transform: rotate(var(--upright-angle)); }
+.static .departure { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .play .flight, .play .wordmark { transform: none; animation: fade var(--reduced) ease both; }
-  .play .float { animation: none; }
+  .play .upright { animation: none; transform: rotate(var(--upright-angle)); }
+  .play .departure { animation: none; }
 }
