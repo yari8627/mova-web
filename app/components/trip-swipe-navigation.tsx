@@ -1,26 +1,29 @@
 "use client";
-import { ReactNode, Suspense, useEffect, useLayoutEffect, useRef } from "react";
+import { ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { tripTabs, swipeCommit } from "../../lib/trip-navigation";
 import { TripPanePath } from "./trip-pane-path";
 import styles from "./trip-swipe-navigation.module.css";
-const pages = [
-  dynamic(() => import("../trips/[id]/overview/page")),
-  dynamic(() => import("../trips/[id]/packing/page")),
-  dynamic(() => import("../trips/[id]/page")),
-  dynamic(() => import("../trips/[id]/bookings/page")),
-  dynamic(() => import("../trips/[id]/documents/page")),
-  dynamic(() => import("../trips/[id]/expenses/page")),
-  dynamic(() => import("../trips/[id]/participants/page")),
-  dynamic(() => import("../trips/[id]/apps/page")),
+const loaders = [
+  () => import("../trips/[id]/overview/page"),
+  () => import("../trips/[id]/packing/page"),
+  () => import("../trips/[id]/page"),
+  () => import("../trips/[id]/bookings/page"),
+  () => import("../trips/[id]/documents/page"),
+  () => import("../trips/[id]/expenses/page"),
+  () => import("../trips/[id]/participants/page"),
+  () => import("../trips/[id]/apps/page"),
 ];
+const pages = loaders.map(loader => dynamic(loader));
 export function TripSwipeNavigation({ tripId, children }: { tripId: string; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null), track = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const [clickedPage, setClickedPage] = useState<number | null>(null);
   const routes = tripTabs.map(tab => `/trips/${tripId}${tab.path ? `/${tab.path}` : ""}`);
   const index = routes.indexOf(pathname);
   useLayoutEffect(() => {
+    setClickedPage(null);
     if (track.current) { track.current.removeAttribute("data-swiping"); track.current.style.setProperty("--swipe-x", "0px"); track.current.style.setProperty("--swipe-duration", "0ms"); }
   }, [pathname]);
   useEffect(() => {
@@ -28,6 +31,7 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
     if (!element || !slider || index < 0) return;
     let gesture: { x: number; y: number; lastX: number; lastTime: number; velocity: number; axis: "x" | "y" | null } | null = null;
     let settling = false, offset = 0, frame = 0;
+    let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const paint = () => { frame = 0; slider.setAttribute("data-swiping", "true"); slider.style.setProperty("--swipe-x", `${offset}px`); };
@@ -86,22 +90,40 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
       settle(swipeCommit(index, pages.length, dx, element.clientWidth, velocity));
     };
     const cancel = () => { if (gesture) settle(null); };
+    const choose = (event: Event) => {
+      const destination = routes.indexOf((event as CustomEvent<string>).detail);
+      if (settling || destination < 0 || destination === index) return;
+      settling = true;
+      gesture = null;
+      void loaders[destination]().then(() => { if (alive) setClickedPage(destination); }).catch(() => { settling = false; });
+    };
+    element.addEventListener("nami-select-trip-tab", choose);
+    if (clickedPage !== null && clickedPage !== index) {
+      settling = true;
+      slider.setAttribute("data-swiping", "true");
+      slider.style.setProperty("--swipe-duration", "0ms");
+      slider.style.setProperty("--swipe-x", "0px");
+      // Paint the selected pane alongside the current one before starting.
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => settle(clickedPage)); });
+    }
     element.addEventListener("touchstart", begin, { passive: true });
     element.addEventListener("touchmove", move, { passive: false });
     element.addEventListener("touchend", end, { passive: true });
     element.addEventListener("touchcancel", cancel, { passive: true });
     window.addEventListener("resize", cancel);
     return () => {
+      alive = false;
+      element.removeEventListener("nami-select-trip-tab", choose);
       clearTimeout(timer); cancelAnimationFrame(frame);
       element.removeEventListener("touchstart", begin); element.removeEventListener("touchmove", move);
       element.removeEventListener("touchend", end); element.removeEventListener("touchcancel", cancel);
       window.removeEventListener("resize", cancel);
       slider.removeAttribute("data-swiping"); slider.style.setProperty("--swipe-x", "0px"); slider.style.setProperty("--swipe-duration", "0ms");
     };
-  }, [tripId, pathname, index]);
+  }, [tripId, pathname, index, clickedPage]);
   if (index < 0) return <>{children}</>;
   return <div ref={root} className={styles.viewport}><div ref={track} className={styles.track}>
-    {pages.map((Page, i) => Math.abs(i - index) <= 1 && <div key={i} className={i === index ? styles.active : styles.neighbor} style={{ left: `${(i - index) * 100}%` }} inert={i !== index} aria-hidden={i !== index}>
+    {pages.map((Page, i) => (clickedPage === null ? Math.abs(i - index) <= 1 : i === index || i === clickedPage) && <div key={i} className={i === index ? styles.active : styles.neighbor} style={{ left: `${(clickedPage === null ? i - index : Math.sign(i - index)) * 100}%` }} inert={i !== index} aria-hidden={i !== index}>
       <TripPanePath.Provider value={routes[i]}><Suspense fallback={<div className={styles.placeholder}>{tripTabs[i].label}</div>}><Page /></Suspense></TripPanePath.Provider>
     </div>)}
   </div></div>;

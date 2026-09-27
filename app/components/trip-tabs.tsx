@@ -29,7 +29,7 @@ export function TripTabs({ tripId }: { tripId: string }) {
     {tabs.map((tab) => {
       const href = `/trips/${tripId}${tab.path ? `/${tab.path}` : ""}`;
       const active = pathname === href;
-      return <button key={tab.label} draggable={false} className={active ? "active" : undefined} onClick={() => router.push(href)} aria-current={active ? "page" : undefined}>{tab.label}</button>;
+      return <button key={tab.label} draggable={false} className={active ? "active" : undefined} onClick={() => { if (active) return; if (panePath) navRef.current?.dispatchEvent(new CustomEvent("nami-select-trip-tab", { bubbles: true, detail: href })); else router.push(href); }} aria-current={active ? "page" : undefined}>{tab.label}</button>;
     })}
   </nav>;
 }
