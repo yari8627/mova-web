@@ -10,3 +10,8 @@
 .neighbor :global(.shared-trip-cover), .neighbor :global(.detail-topbar) { visibility: hidden; }
 
 .track :global(.trip-detail-shell) { overflow: visible; }
+
+/* Adjacent content must paint above the current pane's stationary background,
+   including the preceding pane which appears earlier in DOM order. */
+.track[data-swiping] :global(.trip-swipe-body) { position: relative; z-index: 1; background: var(--background); }
+.active :global(.shared-trip-cover), .active :global(.detail-topbar) { position: relative; z-index: 2; }
