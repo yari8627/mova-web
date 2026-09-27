@@ -5,16 +5,7 @@ import { preloadOverview } from "../../lib/page-cache";
 import { useTripUserId } from "./trip-session";
 import { usePathname, useRouter } from "next/navigation";
 
-const tabs = [
-  { label: "Panoramica", path: "overview" },
-  { label: "Cosa Portare", path: "packing" },
-  { label: "Itinerario", path: "" },
-  { label: "Prenotazioni", path: "bookings" },
-  { label: "Documenti", path: "documents" },
-  { label: "Spese", path: "expenses" },
-  { label: "Partecipanti", path: "participants" },
-  { label: "App Utili", path: "apps" },
-];
+import { tripTabs as tabs } from "../../lib/trip-navigation";
 
 export function TripTabs({ tripId }: { tripId: string }) {
   const router = useRouter();
