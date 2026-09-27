@@ -72,6 +72,7 @@ export default function ParticipantsPage() {
   return <main className="trip-detail-shell participants-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>{canInvite && <button className="primary-button" onClick={openNew}><Plus size={18} /> Invita</button>}</header>
     <TripCover tripId={id} />
+    <div className="trip-swipe-body">
     <TripTabs tripId={id} />
     <div className="expenses-title"><p className="section-kicker">COLLABORAZIONE</p><h1 className="trip-section-title">Partecipanti</h1><p>Invita il gruppo e assegna i permessi di organizzazione.</p></div>
     <div className="participants-grid">
@@ -79,5 +80,6 @@ export default function ParticipantsPage() {
       <aside className="invite-panel"><div className="invite-icon"><Users size={27} /></div><h2>Invita al viaggio</h2><p>{inviteCode ? "L’invito è stato inviato nell’app. Puoi anche copiare il link personale." : "Inserisci l’email e scegli il ruolo. Il nome arriverà dal profilo quando l’invito sarà accettato."}</p>{inviteCode ? <><div className="invite-code"><strong>{inviteCode}</strong><button onClick={copyCode} aria-label="Copia link invito"><Copy size={18} /></button></div>{copied && <span className="copy-feedback"><Check size={14} /> Link copiato</span>}</> : <button className="secondary-button invite-email" onClick={openNew}><Plus size={18} /> Crea invito</button>}</aside>
     </div>
     {showEditor && <div className="modal-backdrop" onMouseDown={() => setShowEditor(false)}><div className="modal participant-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="section-kicker">PARTECIPANTE</p><h2>{editingId ? "Modifica persona" : "Nuovo invito"}</h2></div><button className="icon-button" onClick={() => setShowEditor(false)} aria-label="Chiudi"><X size={20} /></button></div><form className="trip-form" onSubmit={(event) => { event.preventDefault(); save(); }}>{editingId && <label>Nome<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Nome del partecipante" required /></label>}<label>Email<input type="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="nome@email.com" required /></label><label>Ruolo<select value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as Participant["role"] })}><option value="participant">Partecipante</option><option value="co-organizer">Co-organizzatore</option></select></label>{!editingId && <div className="invite-status-note"><Clock3 size={18} /><span>Il nome verrà caricato dal profilo NAMI quando l’utente accetterà.</span></div>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="submit" className="primary-button"><UserRound size={18} /> {editingId ? "Salva" : "Invia invito"}</button></div></form></div></div>}
-  </main>;
+  </div>
+</main>;
 }

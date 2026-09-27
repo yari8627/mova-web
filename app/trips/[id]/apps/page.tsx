@@ -311,7 +311,8 @@ export default function UsefulAppsPage() {
         </button>
       </header>
       <TripCover tripId={id} />
-      <TripTabs tripId={id} />
+      <div className="trip-swipe-body">
+    <TripTabs tripId={id} />
       <section className="useful-apps-heading">
         <div className="useful-apps-icon">
           <Smartphone size={25} />
@@ -398,6 +399,7 @@ export default function UsefulAppsPage() {
         requisiti, copertura e condizioni sul sito ufficiale prima della
         partenza.
       </p>
-    </main>
+    </div>
+</main>
   );
 }

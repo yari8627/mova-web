@@ -447,7 +447,8 @@ export default function BookingsPage() {
         </button>
       </header>
       <TripCover tripId={id} />
-      <TripTabs tripId={id} />
+      <div className="trip-swipe-body">
+    <TripTabs tripId={id} />
       <div className="expenses-title">
         <p className="section-kicker">ORGANIZZAZIONE</p>
         <h1 className="trip-section-title">Prenotazioni</h1>
@@ -784,6 +785,7 @@ export default function BookingsPage() {
           </div>
         </div>
       )}
-    </main>
+    </div>
+</main>
   );
 }

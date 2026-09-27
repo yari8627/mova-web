@@ -141,6 +141,7 @@ export default function ExpensesPage() {
   return <main className="trip-detail-shell expenses-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
     <TripCover tripId={id} />
+    <div className="trip-swipe-body">
     <TripTabs tripId={id} />
     <div className="expenses-title"><p className="section-kicker">VIAGGIO</p><h1 className="trip-section-title">Budget e spese</h1><p>Tieni sotto controllo i costi e dividili con il gruppo.</p></div>
 
@@ -180,5 +181,6 @@ export default function ExpensesPage() {
       {saveError && <div className="auth-error security-feedback">{saveError}</div>}
       <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowAdd(false)} disabled={saving}>Annulla</button><button type="submit" className="primary-button" disabled={saving}><WalletCards size={18} /> {saving ? "Salvataggio…" : editingId ? "Salva modifiche" : "Salva spesa"}</button></div>
     </form></div></div>}
-  </main>;
+  </div>
+</main>;
 }

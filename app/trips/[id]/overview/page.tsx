@@ -392,7 +392,8 @@ export default function OverviewPage() {
         )}
       </header>
       <TripCover tripId={id} />
-      <TripTabs tripId={id} />
+      <div className="trip-swipe-body">
+    <TripTabs tripId={id} />
       <section className="today-dashboard">
         <header>
           <div>
@@ -679,6 +680,7 @@ export default function OverviewPage() {
           <ChevronRight size={20} />
         </button>
       </section>
-    </main>
+    </div>
+</main>
   );
 }

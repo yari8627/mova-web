@@ -144,6 +144,7 @@ export default function PackingPage() {
   return <main className="trip-detail-shell packing-shell">
     <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button></header>
     <TripCover tripId={id} />
+    <div className="trip-swipe-body">
     <TripTabs tripId={id} />
     <div className="expenses-title"><p className="section-kicker">CHECKLIST PERSONALE</p><h1 className="trip-section-title">Cosa Portare</h1><p>Prepara la valigia e tieni sotto controllo tutto ciò che serve per il viaggio.</p></div>
     <nav className="packing-scope-tabs" aria-label="Tipo di checklist"><button disabled={saving} className={scope === "personal" ? "active" : undefined} onClick={() => setScope("personal")}><strong>Personale</strong><span>Visibile solo a te</span></button><button disabled={saving} className={scope === "shared" ? "active" : undefined} onClick={() => setScope("shared")}><strong>Condivisa</strong><span>Visibile ai partecipanti</span></button><button disabled={saving} className={scope === "template" ? "active" : undefined} onClick={() => setScope("template")}><strong>Lista Standard</strong><span>Oggetti utili per tutti i tuoi viaggi</span></button></nav>
@@ -153,5 +154,6 @@ export default function PackingPage() {
       {error && <div className="auth-error packing-error" role="alert">{error}</div>}
       {loading ? <p role="status">Caricamento della lista…</p> : items.length > 0 ? <div className="packing-list">{items.map((item) => { const label = titleCaseItalian(item.label); return <article key={item.id} className={item.packed ? "packed" : ""}>{scope === "template" ? <span className="packing-template-marker"><Sparkles size={15} /></span> : <button disabled={saving || loading} className="packing-toggle" onClick={() => toggleItem(item)} aria-label={item.packed ? `Segna ${label} come non pronto` : `Segna ${label} come pronto`} aria-pressed={item.packed}>{item.packed && <Check size={15} />}</button>}<span className="packing-item-icon"><PackingIcon label={label} /></span><span className="packing-item-copy"><span className="packing-item-label">{label}</span>{scope === "shared" && item.createdBy && <small>Aggiunto da {item.createdBy}</small>}</span><button disabled={saving || loading} className="packing-remove" onClick={() => removeItem(item.id)} aria-label={`Rimuovi ${label}`}><Trash2 size={17} /></button></article>; })}</div> : <div className="packing-empty"><Luggage size={25} /><div><strong>{scope === "personal" ? "La tua checklist è vuota" : scope === "shared" ? "La checklist condivisa è vuota" : "La Lista Standard è vuota"}</strong><p>{scope === "personal" ? "Inizia aggiungendo il primo oggetto da portare." : scope === "shared" ? "Aggiungi qualcosa che può servire al gruppo." : "Aggiungi le cose che porti abitualmente in viaggio."}</p></div></div>}
     </section>
-  </main>;
+  </div>
+</main>;
 }

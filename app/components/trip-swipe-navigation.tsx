@@ -21,7 +21,7 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
   const routes = tripTabs.map(tab => `/trips/${tripId}${tab.path ? `/${tab.path}` : ""}`);
   const index = routes.indexOf(pathname);
   useLayoutEffect(() => {
-    if (track.current) { track.current.style.transition = "none"; track.current.style.transform = "none"; }
+    if (track.current) { track.current.removeAttribute("data-swiping"); track.current.style.setProperty("--swipe-x", "0px"); track.current.style.setProperty("--swipe-duration", "0ms"); }
   }, [pathname]);
   useEffect(() => {
     const element = root.current, slider = track.current;
@@ -30,23 +30,23 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
     let settling = false, offset = 0, frame = 0;
     let timer: ReturnType<typeof setTimeout>;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const paint = () => { frame = 0; slider.style.transform = `translate3d(${offset}px,0,0)`; };
+    const paint = () => { frame = 0; slider.setAttribute("data-swiping", "true"); slider.style.setProperty("--swipe-x", `${offset}px`); };
     const settle = (destination: number | null) => {
       gesture = null; settling = true;
       cancelAnimationFrame(frame); frame = 0;
       const duration = reduced ? 0 : 280;
-      slider.style.transition = `transform ${duration}ms cubic-bezier(.22,.75,.25,1)`;
+      slider.style.setProperty("--swipe-duration", `${duration}ms`);
       offset = destination === null ? 0 : (destination > index ? -element.clientWidth : element.clientWidth);
       paint();
       timer = setTimeout(() => {
         if (destination !== null) window.history.pushState(null, "", routes[destination]);
-        else { slider.style.transform = "none"; slider.style.transition = "none"; }
+        else { slider.removeAttribute("data-swiping"); slider.style.setProperty("--swipe-x", "0px"); slider.style.setProperty("--swipe-duration", "0ms"); }
         settling = false;
       }, duration);
     };
     const blocked = (target: EventTarget | null) => {
       if (!(target instanceof Element) || document.querySelector('[role="dialog"], .modal-backdrop')) return true;
-      if (target.closest('input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"], [draggable="true"], .leaflet-container, .detail-tabs, [data-no-swipe]')) return true;
+      if (target.closest('input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="slider"], [draggable="true"], .leaflet-container, .detail-tabs, .shared-trip-cover, .detail-topbar, [data-no-swipe]')) return true;
       for (let node: Element | null = target; node && node !== element; node = node.parentElement) {
         const style = getComputedStyle(node);
         if (style.touchAction === "none" || (/(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1)) return true;
@@ -59,7 +59,7 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
       if (blocked(event.target)) return;
       const touch = event.touches[0];
       if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
-      slider.style.transition = "none";
+      slider.style.setProperty("--swipe-duration", "0ms");
       gesture = { x: touch.clientX, y: touch.clientY, lastX: touch.clientX, lastTime: performance.now(), velocity: 0, axis: null };
     };
     const move = (event: TouchEvent) => {
@@ -96,7 +96,7 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
       element.removeEventListener("touchstart", begin); element.removeEventListener("touchmove", move);
       element.removeEventListener("touchend", end); element.removeEventListener("touchcancel", cancel);
       window.removeEventListener("resize", cancel);
-      slider.style.transform = "none"; slider.style.transition = "none";
+      slider.removeAttribute("data-swiping"); slider.style.setProperty("--swipe-x", "0px"); slider.style.setProperty("--swipe-duration", "0ms");
     };
   }, [tripId, pathname, index]);
   if (index < 0) return <>{children}</>;

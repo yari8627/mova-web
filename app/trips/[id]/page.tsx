@@ -319,6 +319,7 @@ export default function TripPage() {
     </header>
 
     <TripCover tripId={id} />
+    <div className="trip-swipe-body">
     <TripTabs tripId={id} />
     {activityError && !showEditor && <p className="auth-error" role="alert">{activityError}</p>}
 
@@ -367,5 +368,6 @@ export default function TripPage() {
         </>}
       </form>
     </div></div>}
-  </main>;
+  </div>
+</main>;
 }

@@ -1,6 +1,12 @@
-.viewport { position: relative; overflow-x: clip; }
+.viewport { position: relative; overflow: clip; }
 .track { position: relative; }
 .active, .neighbor { width: 100%; background: var(--background); }
 .active { position: relative; }
-.neighbor { position: absolute; top: 0; height: 100%; overflow: hidden; pointer-events: none; }
+.neighbor { position: absolute; top: 0; height: 100%; overflow: visible; pointer-events: none; }
 .placeholder { min-height: 100svh; display: grid; place-items: center; color: var(--text-secondary); }
+
+/* Only the section beneath the destination cover follows the finger. */
+.track[data-swiping] :global(.trip-swipe-body) { transform: translate3d(var(--swipe-x, 0px), 0, 0); transition: transform var(--swipe-duration, 0ms) cubic-bezier(.22,.75,.25,1); will-change: transform; }
+.neighbor :global(.shared-trip-cover), .neighbor :global(.detail-topbar) { visibility: hidden; }
+
+.track :global(.trip-detail-shell) { overflow: visible; }
