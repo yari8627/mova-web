@@ -16,3 +16,11 @@ export function swipeDestination(tripId: string, pathname: string, dx: number, d
   if (index < 0) return null;
   return routes[index + (dx < 0 ? 1 : -1)] ?? null;
 }
+
+export function swipeCommit(index: number, count: number, dx: number, width: number, velocity: number) {
+  const deliberate = Math.abs(dx) >= Math.max(64, width * .24);
+  const flick = Math.abs(dx) >= 40 && Math.abs(velocity) >= .5 && Math.sign(velocity) === Math.sign(dx);
+  if (!deliberate && !flick) return null;
+  const next = index + (dx < 0 ? 1 : -1);
+  return next >= 0 && next < count ? next : null;
+}

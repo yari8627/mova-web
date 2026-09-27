@@ -1,4 +1,5 @@
 "use client";
+import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -73,6 +74,7 @@ function minutesToTime(value: number) {
 }
 
 export default function TripPage() {
+  const paneActive = useTripPaneActive();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { canEditItinerary, canInvite } = useTripPermissions(id);
@@ -186,7 +188,7 @@ export default function TripPage() {
   }, [id, trip]);
 
   useEffect(() => {
-    if (!trip || autoScrolledTrip.current === trip.id) return;
+    if (!paneActive || !trip || autoScrolledTrip.current === trip.id) return;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
     const start = new Date(`${trip.startDate}T12:00:00`);
@@ -197,10 +199,10 @@ export default function TripPage() {
     autoScrolledTrip.current = trip.id;
     const timer = window.setTimeout(() => document.getElementById(`itinerary-day-${currentDay}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }), 250);
     return () => window.clearTimeout(timer);
-  }, [trip]);
+  }, [trip, paneActive]);
 
   useEffect(() => {
-    if (!trip) return;
+    if (!paneActive || !trip) return;
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
       if (visible) setActiveDay(Number(visible.target.id.replace("itinerary-day-", "")));
@@ -208,7 +210,7 @@ export default function TripPage() {
     const elements = document.querySelectorAll<HTMLElement>(".itinerary-day");
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, [trip, activities.length]);
+  }, [trip, activities.length, paneActive]);
 
   async function persist(next: Activity[]) {
     if (!canEditItinerary || savingActivity.current) return false;

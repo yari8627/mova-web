@@ -1,0 +1,6 @@
+.viewport { position: relative; overflow-x: clip; }
+.track { position: relative; }
+.active, .neighbor { width: 100%; background: var(--background); }
+.active { position: relative; }
+.neighbor { position: absolute; top: 0; height: 100%; overflow: hidden; pointer-events: none; }
+.placeholder { min-height: 100svh; display: grid; place-items: center; color: var(--text-secondary); }

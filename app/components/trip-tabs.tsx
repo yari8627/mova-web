@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { preloadOverview } from "../../lib/page-cache";
 import { useTripUserId } from "./trip-session";
 import { usePathname, useRouter } from "next/navigation";
+
+import { TripPanePath } from "./trip-pane-path";
 
 import { tripTabs as tabs } from "../../lib/trip-navigation";
 
@@ -11,7 +13,9 @@ export function TripTabs({ tripId }: { tripId: string }) {
   const router = useRouter();
   const userId = useTripUserId();
   useEffect(() => { void preloadOverview(userId, tripId); }, [userId, tripId]);
-  const pathname = usePathname();
+  const routePath = usePathname();
+  const panePath = useContext(TripPanePath);
+  const pathname = panePath ?? routePath;
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {

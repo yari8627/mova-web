@@ -1,4 +1,5 @@
 "use client";
+import { useTripPaneActive } from "../../../components/trip-pane-path";
 
 import { ChangeEvent, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -209,6 +210,7 @@ const requirementKey = (title: string) =>
     .replace(/^-|-$/g, "");
 
 export default function DocumentsPage() {
+  const paneActive = useTripPaneActive();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const userId = useTripUserId();
@@ -230,7 +232,7 @@ export default function DocumentsPage() {
   const [uploadError, setUploadError] = useState("");
   useEffect(() => {
     if (
-      !targetBookingId ||
+      !paneActive || !targetBookingId ||
       !documents.some((document) => document.bookingId === targetBookingId)
     )
       return;
@@ -242,7 +244,7 @@ export default function DocumentsPage() {
       180,
     );
     return () => window.clearTimeout(timer);
-  }, [documents, targetBookingId]);
+  }, [documents, targetBookingId, paneActive]);
   useEffect(() => {
     let cancelled = false;
     const snapshot = readTripSnapshot(id);

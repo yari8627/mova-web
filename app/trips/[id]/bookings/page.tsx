@@ -1,4 +1,5 @@
 "use client";
+import { useTripPaneActive } from "../../../components/trip-pane-path";
 
 import { ChangeEvent, useEffect, useLayoutEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -224,6 +225,7 @@ function AirportField({
 }
 
 export default function BookingsPage() {
+  const paneActive = useTripPaneActive();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const highlightedBookingId = useSearchParams().get("booking");
@@ -419,7 +421,7 @@ export default function BookingsPage() {
   const activityCount = bookings.filter((item) => item.type === "activity").length;
   useEffect(() => {
     if (
-      !highlightedBookingId ||
+      !paneActive || !highlightedBookingId ||
       !bookings.some((item) => item.id === highlightedBookingId)
     )
       return;
@@ -431,7 +433,7 @@ export default function BookingsPage() {
       180,
     );
     return () => window.clearTimeout(timer);
-  }, [bookings, highlightedBookingId]);
+  }, [bookings, highlightedBookingId, paneActive]);
 
   return (
     <main className="trip-detail-shell bookings-shell">
