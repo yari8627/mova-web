@@ -1561,3 +1561,5 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
 @media (max-width: 700px) {
   .trip-detail-shell :is(h1, h2).trip-section-title { font-size: 21px; }
 }
+
+.detail-grid.itinerary-only-grid { grid-template-columns: minmax(0, 1fr); }

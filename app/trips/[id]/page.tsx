@@ -4,7 +4,7 @@ import { useTripPaneActive } from "../../components/trip-pane-path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
-import { CalendarDays, Check, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Pencil, Plus, Trash2, Users, WalletCards, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
 import { TripCover } from "../../components/trip-cover";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
@@ -83,7 +83,6 @@ export default function TripPage() {
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [budget, setBudget] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [editorStep, setEditorStep] = useState<1 | 2>(1);
   const [activeDay, setActiveDay] = useState(1);
@@ -157,14 +156,12 @@ export default function TripPage() {
     const stored = window.localStorage.getItem("mova-trips");
     const trips = stored ? (JSON.parse(stored) as Trip[]) : [];
     const savedActivities = window.localStorage.getItem(`mova-itinerary-${id}`);
-    const savedBudget = window.localStorage.getItem(`mova-budget-${id}`);
     const fallbackTrip = trips.find((item) => item.id === id) ?? null;
     const cachedTrip = readTripSnapshot(id) as Trip | null;
     setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
     const snapshot = readTripSnapshot(id);
     setActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
-    setBudget(snapshot ? snapshot.budget : savedBudget ? Number(savedBudget) : null);
-    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); setBudget(remote.budget); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
 
@@ -323,7 +320,7 @@ export default function TripPage() {
     <TripTabs tripId={id} />
     {activityError && !showEditor && <p className="auth-error" role="alert">{activityError}</p>}
 
-    <div className="detail-grid">
+    <div className="detail-grid itinerary-only-grid">
       <section className="itinerary-panel">
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2 className="trip-section-title">Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
@@ -349,7 +346,6 @@ export default function TripPage() {
         </section>; })}</div>
       </section>
 
-      <aside className="detail-aside"><article className="quick-card"><p className="section-kicker">ORGANIZZAZIONE</p><h3>{activities.filter((item) => item.done).length} di {activities.length} completate</h3><div className="progress-track"><span style={{ width: `${activities.length ? activities.filter((item) => item.done).length / activities.length * 100 : 0}%` }} /></div><p className="aside-copy">Completa le attività principali prima della partenza.</p></article><article className="quick-card"><p className="section-kicker">BUDGET</p><div className="budget-row"><WalletCards size={24} /><div><strong>{budget === null ? "Non impostato" : new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(budget)}</strong><span>{budget === null ? "Puoi aggiungerlo nella sezione Spese" : "budget totale del viaggio"}</span></div></div></article></aside>
     </div>
 
     {showEditor && <div className="modal-backdrop activity-backdrop" onMouseDown={() => setShowEditor(false)}><div className="modal activity-modal" role="dialog" aria-modal="true" aria-labelledby="activity-title" onMouseDown={(event) => event.stopPropagation()}>
