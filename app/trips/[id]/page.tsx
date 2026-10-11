@@ -1,4 +1,5 @@
 "use client";
+import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +14,7 @@ import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard"
 import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-cache";
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
-type Activity = { id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
+type Activity = { sortOrder?: number; id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
 type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
 type WeatherDay = { date: string; code: number };
 
@@ -23,7 +24,7 @@ const starterActivities: Activity[] = [
   { id: "excursion", day: 3, title: "Escursione fuori città", place: "Punto di incontro", time: "08:15", done: false },
 ];
 
-const emptyActivity: Omit<Activity, "id" | "done"> = { day: 1, title: "", place: "", time: "09:00" };
+const emptyActivity: Omit<Activity, "id" | "done"> = { day: 1, title: "", place: "", time: "" };
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${value}T12:00:00`));
@@ -57,20 +58,6 @@ function WeatherIcon({ code }: { code: number }) {
             ? { icon: "⛈️", label: "Temporale" }
             : { icon: "🌧️", label: "Pioggia" };
   return <span className="itinerary-weather-icon" role="img" aria-label={weather.label} title={weather.label}>{weather.icon}</span>;
-}
-
-function sortActivities(items: Activity[]) {
-  return [...items].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
-}
-
-function timeToMinutes(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-function minutesToTime(value: number) {
-  const safe = Math.max(0, Math.min(1439, Math.round(value)));
-  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 }
 
 export default function TripPage() {
@@ -215,7 +202,7 @@ export default function TripPage() {
     setActivitySaving(true);
     setActivityError("");
     const previous = activities;
-    const ordered = sortActivities(next);
+    const ordered = numberActivities(next);
     setActivities(ordered);
     try {
       const saved = await syncTripResource(id, "activities", ordered);
@@ -260,30 +247,7 @@ export default function TripPage() {
 
   function dropActivity(day: number, beforeId?: string) {
     if (!draggedId) return;
-    const dragged = activities.find((item) => item.id === draggedId);
-    if (!dragged) return;
-    const destination = sortActivities(activities.filter((item) => item.id !== draggedId && item.day === day));
-    const insertionIndex = beforeId ? Math.max(0, destination.findIndex((item) => item.id === beforeId)) : destination.length;
-    const previous = destination[insertionIndex - 1];
-    const following = destination[insertionIndex];
-    let minutes = 9 * 60;
-    if (previous && following) {
-      const previousMinutes = timeToMinutes(previous.time);
-      const followingMinutes = timeToMinutes(following.time);
-      if (followingMinutes - previousMinutes <= 1) {
-        const reordered = [...destination];
-        reordered.splice(insertionIndex, 0, dragged);
-        const firstTime = Math.min(timeToMinutes(reordered[0].time), 20 * 60);
-        const normalized = new Map(reordered.map((item, index) => [item.id, minutesToTime(firstTime + index * 5)]));
-        persist(activities.map((item) => item.id === draggedId ? { ...item, day, time: normalized.get(item.id)! } : normalized.has(item.id) ? { ...item, time: normalized.get(item.id)! } : item));
-        setDraggedId(null);
-        setDropTarget(null);
-        return;
-      }
-      minutes = (previousMinutes + followingMinutes) / 2;
-    } else if (following) minutes = timeToMinutes(following.time) - 1;
-    else if (previous) minutes = timeToMinutes(previous.time) + 1;
-    persist(activities.map((item) => item.id === draggedId ? { ...item, day, time: minutesToTime(minutes) } : item));
+    void persist(moveActivity(activities, draggedId, day, beforeId));
     setDraggedId(null);
     setDropTarget(null);
   }
@@ -336,7 +300,7 @@ export default function TripPage() {
                   <div className="timeline-card-heading">
                     <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
                   </div>
-                  <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span><span><Clock3 size={16} /> {item.time}</span></div>
+                  <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span>{item.time && <span><Clock3 size={16} /> {item.time}</span>}</div>
                   {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
                 </div>
               </div>
@@ -359,7 +323,7 @@ export default function TripPage() {
         </> : <>
           <button type="button" className="selected-place-summary" onClick={() => { setPlaceSessionToken(crypto.randomUUID()); setEditorStep(1); }}><MapPin size={19} /><span><strong>{draft.place}</strong><small>{draft.placeAddress || "Tocca per cambiare luogo"}</small></span></button>
           {activityError && <p className="auth-error" role="alert">{activityError}</p>}<label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required /></label>
-          <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
+          <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario (facoltativo)<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? setShowEditor(false) : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" disabled={activitySaving} className="primary-button">{activitySaving ? "Salvataggio…" : "Salva attività"}</button></div>
         </>}
       </form>

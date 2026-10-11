@@ -84,3 +84,9 @@ test('notifications target confirmed members and owner, excluding the actor', as
   assert.equal(userQuery.where.OR[1].email.in[0], 'other@example.com');
   assert.equal(sent.length, 2);
 });
+
+test('activity sync persists submitted positions independently of optional times', async () => {
+  const api = route();
+  await api.post({ activities: [{ ...activity, id: 'first', time: '22:00' }, { ...activity, id: 'second', time: '' }, { ...activity, id: 'third', time: '07:00' }] });
+  assert.deepEqual(Array.from(api.calls.activities, item => [item.id, item.sortOrder, item.time]), [['first', 0, '22:00'], ['second', 1, ''], ['third', 2, '07:00']]);
+});

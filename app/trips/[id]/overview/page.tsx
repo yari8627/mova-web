@@ -1,5 +1,6 @@
 "use client";
 
+import { sortActivities } from "../../../../lib/activity-order";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
@@ -25,6 +26,7 @@ import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
 type Activity = {
+  sortOrder?: number;
   id: string;
   day: number;
   title: string;
@@ -251,8 +253,7 @@ export default function OverviewPage() {
         if (current > end) firstAvailableDay = Number.POSITIVE_INFINITY;
         else if (current >= start) firstAvailableDay = Math.floor((current.getTime() - start.getTime()) / 86400000) + 1;
       }
-      return [...activities]
-        .sort((a, b) => a.day - b.day || a.time.localeCompare(b.time))
+      return sortActivities(activities)
         .find((item) => !item.done && item.day >= firstAvailableDay);
     },
     [activities, tripDates],
@@ -303,9 +304,7 @@ export default function OverviewPage() {
       phase: "active" as const,
       day,
       distance: 0,
-      activities: activities
-        .filter((item) => item.day === day)
-        .sort((a, b) => a.time.localeCompare(b.time)),
+      activities: sortActivities(activities).filter((item) => item.day === day),
     };
   }, [activities, tripDates]);
 
@@ -439,7 +438,7 @@ export default function OverviewPage() {
                 );
                 return (
                   <article key={activity.id}>
-                    <time>{activity.time}</time>
+                    {activity.time && <time>{activity.time}</time>}
                     <span className={activity.done ? "done" : ""}>
                       {activity.done ? (
                         <CheckCircle2 size={16} />
@@ -594,7 +593,7 @@ export default function OverviewPage() {
                 <strong>{nextActivity.title}</strong>
                 <p>
                   <Clock3 size={15} /> Giorno {nextActivity.day} ·{" "}
-                  {nextActivity.time} · {nextActivity.place}
+                  {nextActivity.time ? `${nextActivity.time} · ` : ""}{nextActivity.place}
                 </p>
               </>
             ) : (
