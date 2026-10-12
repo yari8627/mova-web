@@ -6,7 +6,7 @@ import { useTripPaneActive } from "../../components/trip-pane-path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
-import { CalendarDays, Check, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { CalendarDays, Check, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Sun, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
 import { TripCover } from "../../components/trip-cover";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
@@ -47,18 +47,19 @@ function formatDay(date: Date) {
 }
 
 function WeatherIcon({ code }: { code: number }) {
-  const weather = code === 0
-    ? { icon: "☀️", label: "Sereno" }
-    : [1, 2, 3].includes(code)
-      ? { icon: "🌤️", label: "Parzialmente Nuvoloso" }
-      : [45, 48].includes(code)
-        ? { icon: "🌫️", label: "Nebbia" }
-        : [71, 73, 75, 77, 85, 86].includes(code)
-          ? { icon: "❄️", label: "Neve" }
-          : [95, 96, 99].includes(code)
-            ? { icon: "⛈️", label: "Temporale" }
-            : { icon: "🌧️", label: "Pioggia" };
-  return <span className="itinerary-weather-icon" role="img" aria-label={weather.label} title={weather.label}>{weather.icon}</span>;
+  const weather = [
+    { codes: [0, 1], icon: Sun, label: "Sereno" },
+    { codes: [2], icon: CloudSun, label: "Parzialmente nuvoloso" },
+    { codes: [3], icon: Cloud, label: "Nuvoloso" },
+    { codes: [45, 48], icon: CloudFog, label: "Nebbia" },
+    { codes: [51, 53, 55, 56, 57], icon: CloudDrizzle, label: "Pioviggine" },
+    { codes: [61, 63, 65, 66, 67, 80, 81, 82], icon: CloudRain, label: "Pioggia" },
+    { codes: [71, 73, 75, 77, 85, 86], icon: CloudSnow, label: "Neve" },
+    { codes: [95, 96, 99], icon: CloudLightning, label: "Temporale" },
+  ].find(item => item.codes.includes(code));
+  const Icon = weather?.icon;
+  const label = weather?.label ?? "Previsioni non disponibili";
+  return <span className="itinerary-weather-icon" role="img" aria-label={label} title={label}>{Icon ? <Icon size={22} aria-hidden="true" /> : <span aria-hidden="true">—</span>}</span>;
 }
 
 export default function TripPage() {
@@ -304,9 +305,10 @@ export default function TripPage() {
                     <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
                   </div>
                   <div className="activity-meta"><span><MapPin size={16} /> {item.placeAddress || item.place}</span></div>
-                  {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
+
                 </div>
               </div>
+                  {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
             </div>
           </article>
         </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><MapPinned size={20} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div></div>}
