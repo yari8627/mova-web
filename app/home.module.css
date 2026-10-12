@@ -148,8 +148,9 @@
 .wordmark > small { margin-top: 5px; font-size: 9px; }
 .home :global(.hero-card) { min-height: 335px; padding: 26px; }
 .home :global(.hero-meta) { margin: 14px 0; }
-.home :global(.section-heading) { flex-wrap: wrap; margin: 18px 0 10px; }
-.home :global(.section-heading > .primary-button) { flex-shrink: 0; }
+.home :global(.section-heading) { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: center; margin: 16px 0 8px; text-align: left; }
+.home :global(.section-heading > div:first-child) { flex: 1 1 auto; min-width: max-content; text-align: left; }
+.home :global(.section-heading > .primary-button) { flex: 0 0 auto; width: auto; min-height: 44px; padding: 10px 14px; font-size: 12px; }
 .home :global(.home-empty) { min-height: 80px; padding: 14px 16px; gap: 12px; background: #f6f1e8; }
 .home :global(.home-empty strong) { font-size: 20px; }
 .home :global(.home-empty p) { font-size: 12px; margin: 4px 0 0; }
@@ -186,13 +187,14 @@
 .home .completedCarousel :global(.home-empty) { flex: 1 0 100%; box-sizing: border-box; }
 .completedBadge { position: absolute; right: 10px; top: 10px; width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center; color: #59754e; background: #fffcf7; box-shadow: 0 2px 8px rgba(16,37,56,.1); }
 .carouselControls { display: flex; flex-shrink: 0; gap: 6px; }
-.home .completedHeading { flex-wrap: nowrap; gap: 8px; }
+.home .completedHeading { flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 8px; margin: 18px 0 6px; }
 .home .completedHeading > div:first-child { min-width: 0; }
+.home .completedHeading > .carouselControls { flex: 0 0 auto; margin-left: auto; }
 .carouselControls > button { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #e0d4bf; border-radius: 50%; color: #102538; background: #fffcf7; cursor: pointer; }
 .carouselControls > button:hover { background: #eee4d2; }
 .previousArrow { transform: rotate(180deg); }
-.home :global(.page-grid) { gap: 18px; }
-.home :global(.secondary-column) { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.home :global(.page-grid) { gap: 14px; }
+.home :global(.secondary-column) { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .home :global(.tip-card) { padding: 16px; gap: 12px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 .home :global(.home-invite-entry) { padding: 0 0 0 18px; border-top: 0; border-left: 1px solid #d3dbca; }
 .home :global(.home-invite-entry > div) { gap: 7px; }
@@ -241,6 +243,6 @@
   .home :global(.share-app-card > span:first-child) { width: 32px; height: 32px; }
 }
 @media (max-width: 360px) {
-  .home :global(.section-heading:not(.completed-heading)) { align-items: flex-start; gap: 8px; }
+  .home :global(.section-heading:not(.completed-heading)) { align-items: center; gap: 8px; }
   .home :global(.section-heading:not(.completed-heading) > .primary-button) { padding: 10px 12px; }
 }
