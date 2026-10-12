@@ -91,3 +91,21 @@ test('activity sync persists submitted positions independently of optional times
   await api.post({ activities: [{ ...activity, id: 'first', time: '22:00' }, { ...activity, id: 'second', time: '' }, { ...activity, id: 'third', time: '07:00' }] });
   assert.deepEqual(Array.from(api.calls.activities, item => [item.id, item.sortOrder, item.time]), [['first', 0, '22:00'], ['second', 1, ''], ['third', 2, '07:00']]);
 });
+
+test('activity API rejects a missing place and safely defaults a blank title', async () => {
+  const api = route();
+  assert.equal((await api.post({ activities: [{ ...activity, place: ' ' }] })).status, 400);
+  assert.equal(api.calls.activities, null);
+  assert.equal(api.calls.notifications.length, 0);
+  assert.equal((await api.post({ activities: [{ ...activity, title: ' ', place: ' Museo ' }] })).status, 200);
+  assert.equal(api.calls.activities[0].title, 'Museo');
+});
+
+test('activity API retains missing coordinates as null and accepts numeric zero without inventing positions', async () => {
+  const api = route();
+  await api.post({ activities: [{ ...activity, latitude: null, longitude: '' }, { ...activity, id: 'origin', latitude: 0, longitude: 0 }] });
+  assert.equal(api.calls.activities[0].latitude, null);
+  assert.equal(api.calls.activities[0].longitude, null);
+  assert.equal(api.calls.activities[1].latitude, 0);
+  assert.equal(api.calls.activities[1].longitude, 0);
+});

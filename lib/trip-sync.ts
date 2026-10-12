@@ -9,9 +9,9 @@ function currentTrip(id: string) {
   return saved.find((trip) => trip.id === id);
 }
 
-export async function syncTripSnapshot(id: string, snapshot: Snapshot) {
+export async function syncTripSnapshot(id: string, snapshot: Snapshot, knownTrip?: TripRecord) {
   try {
-    let trip = currentTrip(id);
+    let trip = knownTrip?.id === id ? knownTrip : currentTrip(id);
     if (!trip) {
       const tripResponse = await fetch(`/api/trips/${id}`, { cache: "no-store" });
       if (!tripResponse.ok) return false;
@@ -41,6 +41,6 @@ export async function syncTripSnapshot(id: string, snapshot: Snapshot) {
   }
 }
 
-export function syncTripResource(id: string, resource: keyof Omit<Snapshot, "budget">, items: unknown[]) {
-  return syncTripSnapshot(id, { [resource]: items });
+export function syncTripResource(id: string, resource: keyof Omit<Snapshot, "budget">, items: unknown[], knownTrip?: TripRecord) {
+  return syncTripSnapshot(id, { [resource]: items }, knownTrip);
 }

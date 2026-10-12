@@ -1,4 +1,5 @@
 "use client";
+import { applyActivityPlace, editActivityPlace, prepareActivityDraft, restoreActivityMetadata, activityRoute, latestActivityRequest, type TitleSource } from "../../../lib/itinerary-activity";
 import styles from "./itinerary.module.css";
 import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
@@ -15,7 +16,7 @@ import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard"
 import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-cache";
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
-type Activity = { sortOrder?: number; id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
+type Activity = { titleSource?: TitleSource; sortOrder?: number; id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
 type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
 type WeatherDay = { date: string; code: number };
 
@@ -69,6 +70,10 @@ export default function TripPage() {
   const { canEditItinerary, canInvite } = useTripPermissions(id);
   const [trip, setTrip] = useState<Trip | null>(null);
   const savingActivity = useRef(false);
+  const searchRequests = useRef(latestActivityRequest());
+  const selectionRequests = useRef(latestActivityRequest());
+  const [placeSelecting, setPlaceSelecting] = useState(false);
+  const [routeMessage, setRouteMessage] = useState<{ day: number; text: string } | null>(null);
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -95,51 +100,87 @@ export default function TripPage() {
   }, [trip]);
   const placeKeyboard = useAutocompleteKeyboard({ itemCount: placeMatches.length, isOpen: placeSearchOpen, resetKey: draft.place, onOpen: () => setPlaceSearchOpen(true), onClose: () => setPlaceSearchOpen(false), onSelect: selectPlace });
 
-  async function selectPlace(index: number) { let place = placeMatches[index]; if (!place) return; setPlaceSearchOpen(false); if (place.provider === "google" && place.placeId) { try { const response = await fetch(`/api/places?placeId=${encodeURIComponent(place.placeId)}&sessionToken=${encodeURIComponent(placeSessionToken)}`); if (response.ok) place = await response.json(); } catch { /* Mantiene il risultato selezionato. */ } } setDraft({ ...draft, title: draft.title || place.name, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoUrl: place.photoUrl, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri }); setEditorStep(2); }
+  function closeEditor() {
+    if (savingActivity.current) return;
+    selectionRequests.current.cancel();
+    setPlaceSelecting(false);
+    setShowEditor(false);
+  }
+
+  async function selectPlace(index: number) {
+    let place = placeMatches[index];
+    if (!place) return;
+    searchRequests.current.cancel();
+    const request = selectionRequests.current.begin();
+    setPlaceSearchOpen(false); setPlaceSelecting(true); setActivityError("");
+    try {
+      if (place.provider === "google" && place.placeId) {
+        const response = await fetch('/api/places?placeId=' + encodeURIComponent(place.placeId) + '&sessionToken=' + encodeURIComponent(placeSessionToken), { signal: request.signal });
+        if (!response.ok) throw new Error();
+        const details = await response.json() as PlaceResult | null;
+        if (!details?.name) throw new Error();
+        place = details;
+      }
+      if (!request.isCurrent()) return;
+      setDraft(current => request.isCurrent() ? applyActivityPlace(current, place) : current);
+      setEditorStep(2);
+    } catch {
+      if (request.isCurrent()) setActivityError("Luogo non caricato. Riprova a selezionarlo.");
+    } finally { if (request.isCurrent()) setPlaceSelecting(false); }
+  }
 
   useEffect(() => {
     const query = draft.place.trim();
-    if (!showEditor || query.length < 3) { setPlaceMatches([]); setPlaceSearching(false); return; }
-    const controller = new AbortController();
+    if (!paneActive || !showEditor || editorStep !== 1 || !placeSearchOpen || query.length < 3) { searchRequests.current.cancel(); setPlaceMatches([]); setPlaceSearching(false); return; }
+    const request = searchRequests.current.begin();
     const timer = window.setTimeout(async () => {
       setPlaceSearching(true);
-      try { const response = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(placeSessionToken)}`, { signal: controller.signal }); if (response.ok) setPlaceMatches(await response.json()); }
-      catch { if (!controller.signal.aborted) setPlaceMatches([]); }
-      finally { if (!controller.signal.aborted) setPlaceSearching(false); }
-    }, 500);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [countryIsoCode, draft.place, placeSessionToken, showEditor]);
+      try {
+        const response = await fetch('/api/places?q=' + encodeURIComponent(query) + '&countryCode=' + encodeURIComponent(countryIsoCode || "") + '&sessionToken=' + encodeURIComponent(placeSessionToken), { signal: request.signal });
+        if (!response.ok) throw new Error();
+        const matches = await response.json() as PlaceResult[];
+        if (request.isCurrent()) setPlaceMatches(matches);
+      } catch { if (request.isCurrent()) setPlaceMatches([]); }
+      finally { if (request.isCurrent()) setPlaceSearching(false); }
+    }, 300);
+    return () => { window.clearTimeout(timer); searchRequests.current.cancel(); };
+  }, [countryIsoCode, draft.place, placeSessionToken, showEditor, placeSearchOpen, editorStep, paneActive]);
+
+  useEffect(() => () => selectionRequests.current.cancel(), []);
+  useEffect(() => { if (!paneActive) { selectionRequests.current.cancel(); setPlaceSelecting(false); } }, [paneActive]);
 
   useEffect(() => {
-    if (!trip || !countryIsoCode) return;
-    const activity = activities.find((item) => !item.photoUrl && item.place && !photoLookups.current.has(item.id));
+    if (!trip || !countryIsoCode || !paneActive || showEditor || activitySaving) return;
+    const activity = activities.find((item) => !item.photoUrl && !item.photoName && item.place && !photoLookups.current.has(item.id));
     if (!activity || photoLookups.current.size >= 12) return;
     const targetActivity = activity;
     let cancelled = false;
+    let finished = false;
+    const controller = new AbortController();
     photoLookups.current.add(targetActivity.id);
     async function enrich() {
       try {
           const token = crypto.randomUUID();
           const query = [targetActivity.place, targetActivity.placeAddress, trip?.country].filter(Boolean).join(", ");
-          const suggestionsResponse = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(token)}`);
+          const suggestionsResponse = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(token)}`, { signal: controller.signal });
           if (!suggestionsResponse.ok) return;
           const suggestions = await suggestionsResponse.json() as PlaceResult[];
           const match = suggestions.find((place) => place.provider === "google" && place.placeId);
           if (!match?.placeId) return;
-          const detailsResponse = await fetch(`/api/places?placeId=${encodeURIComponent(match.placeId)}&sessionToken=${encodeURIComponent(token)}`);
+          const detailsResponse = await fetch(`/api/places?placeId=${encodeURIComponent(match.placeId)}&sessionToken=${encodeURIComponent(token)}`, { signal: controller.signal });
           if (!detailsResponse.ok) return;
           const details = await detailsResponse.json() as PlaceResult;
-          if (!details.photoUrl || cancelled) return;
+          if ((!details.photoUrl && !details.photoName) || cancelled) return;
           setActivities((current) => {
-            const next = current.map((item) => item.id === targetActivity.id ? { ...item, photoName: details.photoName, photoUrl: details.photoUrl, photoAttribution: details.photoAttribution, photoAttributionUri: details.photoAttributionUri } : item);
+            const next = current.map((item) => item.id === targetActivity.id && item.place === targetActivity.place && item.placeAddress === targetActivity.placeAddress ? { ...item, photoName: details.photoName, photoUrl: details.photoUrl, photoAttribution: details.photoAttribution, photoAttributionUri: details.photoAttributionUri } : item);
             window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(next));
             return next;
           });
       } catch { /* La card mantiene il layout senza immagine. */ }
     }
-    void enrich();
-    return () => { cancelled = true; };
-  }, [activities, countryIsoCode, id, trip]);
+    void enrich().finally(() => { finished = true; });
+    return () => { cancelled = true; controller.abort(); if (!finished) photoLookups.current.delete(targetActivity.id); };
+  }, [activities, countryIsoCode, id, trip, paneActive, showEditor, activitySaving]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
@@ -150,7 +191,7 @@ export default function TripPage() {
     setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
     const snapshot = readTripSnapshot(id);
     setActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
-    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const photoById = new Map(cached.filter((item) => item.photoName || item.photoUrl).map((item) => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => photoById.has(item.id) ? { ...item, photoName: photoById.get(item.id)?.photoName, photoUrl: photoById.get(item.id)?.photoUrl, photoAttribution: photoById.get(item.id)?.photoAttribution, photoAttributionUri: photoById.get(item.id)?.photoAttributionUri } : item); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const metadataById = new Map(cached.map(item => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => restoreActivityMetadata(item, metadataById.get(item.id))); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
 
@@ -205,11 +246,11 @@ export default function TripPage() {
     setActivityError("");
     const previous = activities;
     const ordered = numberActivities(next);
-    setActivities(ordered);
     try {
-      const saved = await syncTripResource(id, "activities", ordered);
+      const saved = await syncTripResource(id, "activities", ordered, trip || undefined);
       if (!saved) throw new Error();
-      window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered));
+      setActivities(ordered);
+      try { window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
       window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
       return true;
     } catch {
@@ -223,6 +264,8 @@ export default function TripPage() {
   }
 
   function openNew(day?: number) {
+    if (savingActivity.current) return;
+    selectionRequests.current.cancel(); setPlaceSelecting(false); setActivityError("");
     setEditingId(null);
     const availableDays = trip ? tripDays(trip.startDate, trip.endDate) : [{ day: 1, date: new Date() }];
     const firstEmptyDay = availableDays.find((item) => !activities.some((activity) => activity.day === item.day))?.day;
@@ -233,17 +276,21 @@ export default function TripPage() {
   }
 
   function openEdit(activity: Activity) {
+    if (savingActivity.current) return;
+    selectionRequests.current.cancel(); setPlaceSelecting(false); setActivityError("");
     setEditingId(activity.id);
-    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, photoName: activity.photoName, photoUrl: activity.photoUrl, photoAttribution: activity.photoAttribution, photoAttributionUri: activity.photoAttributionUri, time: activity.time });
+    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, photoName: activity.photoName, photoUrl: activity.photoUrl, photoAttribution: activity.photoAttribution, photoAttributionUri: activity.photoAttributionUri, time: activity.time, titleSource: activity.titleSource });
     setEditorStep(2);
     setShowEditor(true);
   }
 
   async function saveActivity() {
-    if (!draft.title.trim() || !draft.place.trim()) return;
+    if (savingActivity.current || placeSelecting) return;
+    let prepared: typeof draft;
+    try { prepared = prepareActivityDraft(draft); } catch (error) { setActivityError((error as Error).message); return; }
     const next = editingId
-      ? activities.map((item) => item.id === editingId ? { ...item, ...draft } : item)
-      : [...activities, { id: `${Date.now()}`, ...draft, done: false }];
+      ? activities.map((item) => item.id === editingId ? { ...item, ...prepared } : item)
+      : [...activities, { id: `${Date.now()}`, ...prepared, done: false }];
     if (await persist(next)) setShowEditor(false);
   }
 
@@ -254,9 +301,15 @@ export default function TripPage() {
     setDropTarget(null);
   }
 
+  const days = useMemo(() => trip ? tripDays(trip.startDate, trip.endDate) : [], [trip?.startDate, trip?.endDate]);
+  const activitiesByDay = useMemo(() => {
+    const result = new Map<number, Activity[]>();
+    for (const activity of activities) { const items = result.get(activity.day) || []; items.push(activity); result.set(activity.day, items); }
+    return result;
+  }, [activities]);
+
   if (!trip) return <main className="detail-loading">Caricamento del viaggio…</main>;
 
-  const days = tripDays(trip.startDate, trip.endDate);
 
   function scrollToDay(day: number) {
     setActiveDay(day);
@@ -264,15 +317,9 @@ export default function TripPage() {
   }
 
   function openDayRoute(dayActivities: Activity[]) {
-    const stops = sortActivities(dayActivities).map((activity) => Number.isFinite(activity.latitude) && Number.isFinite(activity.longitude) ? `${activity.latitude},${activity.longitude}` : [activity.place, activity.placeAddress].filter(Boolean).join(", "));
-    if (!stops.length) return;
-    if (stops.length === 1) {
-      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const params = new URLSearchParams({ api: "1", origin: stops[0], destination: stops[stops.length - 1], travelmode: "walking" });
-    if (stops.length > 2) params.set("waypoints", stops.slice(1, -1).join("|"));
-    window.open(`https://www.google.com/maps/dir/?${params}`, "_blank", "noopener,noreferrer");
+    const result = activityRoute(dayActivities);
+    setRouteMessage(result.message ? { day: dayActivities[0]?.day ?? activeDay, text: result.message } : null);
+    if (result.url) window.open(result.url, "_blank", "noopener,noreferrer");
   }
 
   return <main className={`trip-detail-shell ${styles.itinerary}`}>
@@ -291,7 +338,7 @@ export default function TripPage() {
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2 className="trip-section-title">Itinerario</h2></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
-        <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
+        <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activitiesByDay.get(day) || []; return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canEditItinerary && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
@@ -311,26 +358,30 @@ export default function TripPage() {
                   {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
             </div>
           </article>
-        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><MapPinned size={20} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div></div>}
+        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><MapPinned size={20} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div>{routeMessage?.day === day && <p className={styles.routeMessage} role="status">{routeMessage.text}</p>}</div>}
         </section>; })}</div>
       </section>
 
     </div>
 
-    {showEditor && <div className="modal-backdrop activity-backdrop" onMouseDown={() => setShowEditor(false)}><div className="modal activity-modal" role="dialog" aria-modal="true" aria-labelledby="activity-title" onMouseDown={(event) => event.stopPropagation()}>
+    {showEditor && <div className="modal-backdrop activity-backdrop" onMouseDown={closeEditor}><div className="modal activity-modal" role="dialog" aria-modal="true" aria-labelledby="activity-title" onMouseDown={(event) => event.stopPropagation()}>
       <div className="activity-sheet-handle" />
-      <div className="modal-header"><div><p className="section-kicker">{editingId ? "ITINERARIO" : `PASSO ${editorStep} DI 2`}</p><h2 id="activity-title">{editingId ? "Modifica attività" : editorStep === 1 ? "Dove vuoi andare?" : "Quando?"}</h2></div><button className="icon-button" onClick={() => setShowEditor(false)} aria-label="Chiudi"><X size={20} /></button></div>
-      <form className="trip-form" onSubmit={(event) => { event.preventDefault(); saveActivity(); }}>
+      <div className="modal-header"><div><p className="section-kicker">{editingId ? "ITINERARIO" : `PASSO ${editorStep} DI 2`}</p><h2 id="activity-title">{editingId ? "Modifica attività" : editorStep === 1 ? "Dove vuoi andare?" : "Quando?"}</h2></div><button className="icon-button" onClick={closeEditor} aria-label="Chiudi"><X size={20} /></button></div>
+      <form className="trip-form" aria-busy={activitySaving || placeSelecting} onSubmit={(event) => { event.preventDefault(); if (editorStep === 1) { if (draft.place.trim() && !placeSelecting) setEditorStep(2); } else { saveActivity(); } }}>
+        <fieldset className={styles.editorFields} disabled={activitySaving}>
         {editorStep === 1 ? <>
-          <label className="autocomplete-field activity-place-first">Cerca un luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 3) setPlaceSearchOpen(true); }} onChange={(event) => { setDraft({ ...draft, place: event.target.value, placeAddress: undefined, latitude: undefined, longitude: undefined }); setPlaceSearchOpen(event.target.value.trim().length >= 3); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Ristorante, museo, attrazione o luogo in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}{placeMatches.some((place) => place.provider === "google") && <div className="google-attribution"><img src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" /></div>}</div>}</label>
+          {activityError && <p className="auth-error" role="alert">{activityError}</p>}
+          {placeSelecting && <span role="status">Caricamento luogo…</span>}
+          <label className="autocomplete-field activity-place-first">Cerca un luogo<input value={draft.place} onFocus={() => { if (draft.place.trim().length >= 3) setPlaceSearchOpen(true); }} onChange={(event) => { selectionRequests.current.cancel(); searchRequests.current.cancel(); setPlaceSelecting(false); setPlaceMatches([]); setDraft(current => editActivityPlace(current, event.target.value)); setPlaceSearchOpen(event.target.value.trim().length >= 3); }} onKeyDown={placeKeyboard.onKeyDown} placeholder={`Ristorante, museo, attrazione o luogo in ${trip.country}`} autoComplete="off" role="combobox" aria-expanded={placeSearchOpen && placeMatches.length > 0} aria-controls="place-options" aria-activedescendant={placeKeyboard.activeIndex >= 0 ? `place-option-${placeKeyboard.activeIndex}` : undefined} required />{placeSearching && <span className="autocomplete-status">Ricerca luoghi…</span>}{placeSearchOpen && placeMatches.length > 0 && <div className="autocomplete-menu activity-place-menu" id="place-options" role="listbox">{placeMatches.map((place, index) => <button type="button" id={`place-option-${index}`} role="option" aria-selected={placeKeyboard.activeIndex === index} className={placeKeyboard.activeIndex === index ? "keyboard-active" : undefined} key={place.id} onMouseEnter={() => placeKeyboard.setActiveIndex(index)} onClick={() => selectPlace(index)}><MapPin size={17} /><span><strong>{place.name}</strong><small>{place.address || trip.country}</small></span></button>)}{placeMatches.some((place) => place.provider === "google") && <div className="google-attribution"><img src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" /></div>}</div>}</label>
           <div className="activity-search-hint"><MapPin size={18} /><span>Cerca città, ristoranti, attrazioni, hotel e qualsiasi luogo disponibile sulla mappa.</span></div>
-          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowEditor(false)}>Annulla</button><button type="button" className="primary-button" disabled={!draft.place.trim()} onClick={() => setEditorStep(2)}>Continua</button></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={closeEditor}>Annulla</button><button type="button" className="primary-button" disabled={!draft.place.trim() || placeSelecting} onClick={() => setEditorStep(2)}>Continua</button></div>
         </> : <>
           <button type="button" className="selected-place-summary" onClick={() => { setPlaceSessionToken(crypto.randomUUID()); setEditorStep(1); }}><MapPin size={19} /><span><strong>{draft.place}</strong><small>{draft.placeAddress || "Tocca per cambiare luogo"}</small></span></button>
-          {activityError && <p className="auth-error" role="alert">{activityError}</p>}<label>Nome attività<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Es. Visita al museo" required /></label>
+          {activityError && <p className="auth-error" role="alert">{activityError}</p>}<label>Nome attività (facoltativo)<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value, titleSource: event.target.value.trim() ? "custom" : "place" })} placeholder={draft.place || "Es. Visita al museo"} /></label>
           <div className="form-grid"><label>Giorno<select value={draft.day} onChange={(event) => setDraft({ ...draft, day: Number(event.target.value) })}>{days.map(({ day, date }) => { const now = new Date(); const isToday = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate(); return <option key={day} value={day}>Giorno {day} · {formatDay(date)}{isToday ? " · Oggi" : ""}</option>; })}</select></label><label>Orario (facoltativo)<input type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label></div>
-          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? setShowEditor(false) : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" disabled={activitySaving} className="primary-button">{activitySaving ? "Salvataggio…" : "Salva attività"}</button></div>
+          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => editingId ? closeEditor() : setEditorStep(1)}>{editingId ? "Annulla" : "Indietro"}</button><button type="submit" disabled={activitySaving} className="primary-button">{activitySaving ? "Salvataggio…" : "Salva attività"}</button></div>
         </>}
+        </fieldset>
       </form>
     </div></div>}
   </div>

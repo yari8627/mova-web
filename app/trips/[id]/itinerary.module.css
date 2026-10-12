@@ -118,3 +118,5 @@
 @media (prefers-reduced-motion: reduce) {
   .itinerary :global(.itinerary-days) { scroll-behavior: auto; }
 }
+.editorFields { display: contents; margin: 0; padding: 0; border: 0; min-width: 0; }
+.routeMessage { margin: 0 0 14px; font-size: 13px; color: var(--navy); line-height: 1.5; }

@@ -16,12 +16,7 @@ async function googlePlaceDetails(placeId: string, sessionToken: string) {
   const place = await response.json();
   const photo = (place.photos as GooglePhoto[] | undefined)?.[0];
   const attribution = photo?.authorAttributions?.[0];
-  let photoUrl: string | undefined;
-  if (photo?.name) {
-    const mediaResponse = await fetch(`https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=360&skipHttpRedirect=true`, { headers: { "X-Goog-Api-Key": apiKey }, cache: "no-store" });
-    if (mediaResponse.ok) photoUrl = (await mediaResponse.json() as { photoUri?: string }).photoUri;
-  }
-  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place", photoName: photo?.name, photoUrl, photoAttribution: attribution?.displayName, photoAttributionUri: attribution?.uri };
+  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place", photoName: photo?.name, photoAttribution: attribution?.displayName, photoAttributionUri: attribution?.uri };
 }
 
 async function googleAutocomplete(query: string, countryCode: string, sessionToken: string) {
