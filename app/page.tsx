@@ -28,6 +28,8 @@ import {
   X,
 } from "lucide-react";
 
+import styles from "./home.module.css";
+
 import { NamiAnimatedSplash } from "./components/nami-animated-splash";
 
 type Trip = {
@@ -310,12 +312,12 @@ export default function Page() {
   return (
     <NamiAnimatedSplash ready={authReady} onComplete={completeStartup}>
     {loadError && !currentUser ? <main className="auth-loading"><p>Connessione non disponibile. Riprova.</p><button className="primary-button" onClick={() => window.location.reload()}>Riprova</button></main> : !currentUser ? null : (
-    <main className="app-shell">
+    <main className={`app-shell ${styles.home}`}>
       <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <div>
             <div className="brand">NAMI</div>
-            <div className="brand-subtitle">Travel together</div>
+            <div className="brand-subtitle">TRAVEL</div>
           </div>
           <button className="icon-button mobile-only" onClick={() => setMobileMenu(false)} aria-label="Chiudi menu">
             <X size={20} />
@@ -342,6 +344,7 @@ export default function Page() {
 
       <section className="content">
         <header className="topbar">
+          <div className={styles.wordmark} aria-label="NAMI Travel"><span>NAMI</span><small>TRAVEL</small></div>
           <button className="icon-button mobile-only" onClick={() => setMobileMenu(true)} aria-label="Apri menu">
             <Menu size={22} />
           </button>
@@ -361,6 +364,7 @@ export default function Page() {
               <article className={`hero-card theme-${selectedTrip.theme}`} style={imageForTrip(selectedTrip) ? { backgroundImage: `url(${imageForTrip(selectedTrip)})` } : undefined}>
                 <div className="hero-overlay" />
                 <div className="hero-content">
+                  <div className={styles.heroLabel}>IL TUO VIAGGIO</div>
                   <div className="eyebrow">
                     <span>{selectedTrip.countryCode}</span>
                     <span>{selectedTrip.country}</span>
