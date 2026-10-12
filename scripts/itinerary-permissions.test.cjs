@@ -16,6 +16,7 @@ function route({ role = 'participant', allowed = true, signedIn = true, bookingC
     deleteMany: async () => {}, createMany: async ({ data }) => { if (fail) throw Error('transaction failed'); calls.activities = data; },
   } };
   const api = moduleWith('app/api/trips/[id]/sync/route.ts', {
+    '../../../../../lib/activity-order-storage': { ensureActivityOrder: async () => {} },
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
     '../../../../../lib/auth': { currentUser: async () => signedIn ? { id: 'member', name: 'Maria' } : null },
     '../../../../../lib/trip-access': { tripAccess: async () => ({ allowed, role }) },

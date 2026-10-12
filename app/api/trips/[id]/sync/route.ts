@@ -1,3 +1,4 @@
+import { ensureActivityOrder } from "../../../../../lib/activity-order-storage";
 import { NextResponse } from "next/server";
 import { currentUser } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
@@ -24,6 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   if (access?.allowed && access.role === "co-organizer" && body.participants) return NextResponse.json({ error: "Solo il proprietario può modificare ruoli o rimuovere partecipanti" }, { status: 403 });
 
+  if (body.activities || body.bookings) await ensureActivityOrder();
   await prisma.$transaction(async (tx) => {
     if (!activitiesOnly) await tx.trip.upsert({ where: { id }, update: { name: trip.name, country: trip.country, countryCode: trip.countryCode, city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget === undefined ? undefined : body.budget }, create: { id, name: trip.name, country: trip.country, countryCode: trip.countryCode || "🌍", city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget ?? null, ownerId: user.id } });
     if (body.activities) { await tx.activity.deleteMany({ where: { tripId: id } }); await tx.activity.createMany({ data: body.activities.map((item: Item, sortOrder: number) => ({ sortOrder, id: String(item.id), tripId: id, day: Number(item.day), title: String(item.title), place: String(item.place), placeAddress: item.placeAddress ? String(item.placeAddress) : null, latitude: Number.isFinite(Number(item.latitude)) ? Number(item.latitude) : null, longitude: Number.isFinite(Number(item.longitude)) ? Number(item.longitude) : null, time: String(item.time || ""), done: Boolean(item.done), bookingId: item.bookingId ? String(item.bookingId) : null, bookingEvent: item.bookingEvent ? String(item.bookingEvent) : null })) }); }
