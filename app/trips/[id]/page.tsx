@@ -1,11 +1,12 @@
 "use client";
+import styles from "./itinerary.module.css";
 import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
-import { CalendarDays, Check, Clock3, ExternalLink, GripVertical, MapPin, Navigation, Pencil, Plus, Trash2, Users, X } from "lucide-react";
+import { CalendarDays, Check, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
 import { TripCover } from "../../components/trip-cover";
 import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
@@ -273,9 +274,9 @@ export default function TripPage() {
     window.open(`https://www.google.com/maps/dir/?${params}`, "_blank", "noopener,noreferrer");
   }
 
-  return <main className="trip-detail-shell">
+  return <main className={`trip-detail-shell ${styles.itinerary}`}>
     <header className="detail-topbar">
-      <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>
+      <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home"><span>NAMI</span><small>TRAVEL</small></button>
       {canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}
     </header>
 
@@ -286,27 +287,29 @@ export default function TripPage() {
 
     <div className="detail-grid itinerary-only-grid">
       <section className="itinerary-panel">
-        <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2 className="trip-section-title">Itinerario</h2><p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
+        <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2 className="trip-section-title">Itinerario</h2></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
+        <p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p>
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
         <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activities.filter((activity) => activity.day === day); return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canEditItinerary && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
-          {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id}>
+          {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
+            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.photoUrl || item.photoName ? "has-photo" : ""}`}>
                 {(item.photoUrl || item.photoName) && <figure className="activity-place-photo"><img src={item.photoUrl || `/api/places/photo?name=${encodeURIComponent(item.photoName!)}`} alt={item.place} loading="lazy" onError={(event) => { if (item.photoName && !event.currentTarget.src.includes("/api/places/photo")) event.currentTarget.src = `/api/places/photo?name=${encodeURIComponent(item.photoName)}`; }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
-                    <div className="timeline-card-title"><button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
+                    <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
                   </div>
-                  <div className="activity-meta"><span><MapPin size={16} /> {item.place}</span>{item.time && <span><Clock3 size={16} /> {item.time}</span>}</div>
+                  <div className="activity-meta"><span><MapPin size={16} /> {item.placeAddress || item.place}</span></div>
                   {canEditItinerary && <div className="activity-actions activity-actions-below"><span className="drag-handle" title="Trascina per spostare" aria-label="Trascina per spostare"><GripVertical size={18} /></span><button disabled={activitySaving} onClick={() => openEdit(item)} aria-label="Modifica attività"><Pencil size={16} /></button><button disabled={activitySaving} onClick={() => persist(activities.filter((activity) => activity.id !== item.id))} aria-label="Elimina attività"><Trash2 size={16} /></button></div>}
                 </div>
               </div>
             </div>
           </article>
-        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><Navigation size={18} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div></div>}
+        </div>; })}<div className={`activity-drop-line activity-drop-line-last ${dropTarget === `end-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`end-${day}`); }} onDrop={() => dropActivity(day)}><span>Rilascia qui</span></div><div className="day-route-action"><button type="button" onClick={() => openDayRoute(dayActivities)}><MapPinned size={20} /><span><strong>Crea percorso</strong><small>Apri le tappe della giornata in Google Maps</small></span><ExternalLink size={16} /></button></div></div>}
         </section>; })}</div>
       </section>
 
