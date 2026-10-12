@@ -220,7 +220,6 @@ export default function Page() {
     if (currentUser) void preloadOverview(currentUser.id, tripId);
   }
   function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
-  const firstName = currentUser?.name.trim().split(/\s+/)[0] || "Viaggiatore";
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
 
   useEffect(() => {
@@ -352,14 +351,10 @@ export default function Page() {
 
       <section className="content">
         <header className="topbar">
-          <div className={styles.wordmark} aria-label="NAMI Travel"><span>NAMI</span><small>TRAVEL</small></div>
+          <div className={styles.wordmark} aria-label="NAMI Travel"><h1>NAMI</h1><small>TRAVEL</small></div>
           <button className="icon-button mobile-only" onClick={() => setMobileMenu(true)} aria-label="Apri menu">
             <Menu size={22} />
           </button>
-          <div className="topbar-title">
-            <h1>Ciao, {firstName}</h1>
-            <p>Continuiamo a costruire il tuo prossimo viaggio.</p>
-          </div>
           <div className="notification-center">
             <button className="icon-button notification-button" aria-label="Notifiche" onClick={() => setNotificationsOpen((value) => !value)}><Bell size={21} />{notifications.some((item) => !item.readAt) && <span className="notification-dot" />}{notifications.filter((item) => !item.readAt).length > 0 && <span className="notification-count">{notifications.filter((item) => !item.readAt).length}</span>}</button>
             {notificationsOpen && <div className="notification-popover"><header><div><p className="section-kicker">AGGIORNAMENTI</p><h2>Notifiche</h2></div>{notifications.some((item) => !item.readAt) && <button onClick={markAllNotificationsRead}>Segna tutte come lette</button>}</header><div className="notification-list">{notifications.length ? notifications.map((item) => <button key={item.id} className={item.readAt ? "" : "unread"} onClick={() => openNotification(item)}><span className="notification-item-icon"><Bell size={17} /></span><div><strong>{item.title}</strong><p>{item.message}</p><small>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(item.createdAt))}</small></div></button>) : <p className="notification-empty">Non ci sono ancora notifiche.</p>}</div></div>}
@@ -424,7 +419,7 @@ export default function Page() {
               ))}
             </div>
 
-            <div className="section-heading completed-heading">
+            <div className={`section-heading completed-heading ${styles.completedHeading}`}>
               <div>
                 <p className="section-kicker">LA TUA STORIA</p>
                 <h3 id="completed-trips-title">Completati</h3>
@@ -497,7 +492,7 @@ export default function Page() {
                 {inviteEntryError && <small className="home-invite-error">{inviteEntryError}</small>}
               </form>
             </div>
-            <div className="share-app-card"><span><Share2 size={21} /></span><div><strong>Condividi NAMI</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small></div><button type="button" className="secondary-button" onClick={shareApp}>{shareFeedback ? <Check size={17} /> : <Share2 size={17} />}{shareFeedback || "Condividi"}</button></div>
+            <button type="button" className="share-app-card" onClick={shareApp}><span aria-hidden="true"><Share2 size={21} /></span><span className={styles.shareCopy}><strong>Condividi NAMI</strong><small>Invia l’app e le istruzioni per aggiungerla alla Home.</small>{shareFeedback && <small className={styles.shareFeedback} role="status">{shareFeedback}</small>}</span><ChevronRight size={18} aria-hidden="true" /></button>
           </aside>
         </div>
       </section>
