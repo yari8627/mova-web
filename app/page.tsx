@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preloadTrips, tripsPrepared, priorityTrip, preloadOtherTrips } from "../lib/preload-trips";
 import { setTripCacheAccount } from "../lib/trip-client-cache";
 import { useRouter } from "next/navigation";
@@ -125,6 +125,14 @@ function suggestedTripName(draft: TripDraft) {
 
 export default function Page() {
   const router = useRouter();
+  const completedCarousel = useRef<HTMLDivElement>(null);
+  function scrollCompleted(direction: -1 | 1) {
+    const carousel = completedCarousel.current;
+    if (!carousel) return;
+    const card = carousel.querySelector<HTMLElement>(".trip-card");
+    const distance = card ? card.getBoundingClientRect().width + parseFloat(getComputedStyle(carousel).columnGap || "0") : carousel.clientWidth;
+    carousel.scrollBy({ left: direction * distance, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }
   const [trips, setTrips] = useState<Trip[]>([]);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -419,10 +427,18 @@ export default function Page() {
             <div className="section-heading completed-heading">
               <div>
                 <p className="section-kicker">LA TUA STORIA</p>
-                <h3>Completati</h3>
+                <h3 id="completed-trips-title">Completati</h3>
               </div>
+              {completedTrips.length > 1 && <div className={styles.carouselControls}>
+                <button type="button" aria-label="Scorri i viaggi completati verso sinistra" aria-controls="completed-trips-carousel" onClick={() => scrollCompleted(-1)}><ChevronRight size={18} className={styles.previousArrow} /></button>
+                <button type="button" aria-label="Scorri i viaggi completati verso destra" aria-controls="completed-trips-carousel" onClick={() => scrollCompleted(1)}><ChevronRight size={18} /></button>
+              </div>}
             </div>
-            <div className="trip-grid completed-trip-grid">
+            <div id="completed-trips-carousel" ref={completedCarousel} className={`trip-grid completed-trip-grid ${styles.completedCarousel}`} role="region" aria-labelledby="completed-trips-title" tabIndex={completedTrips.length ? 0 : undefined} onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); scrollCompleted(event.key === "ArrowLeft" ? -1 : 1); }
+              else if (event.key === "Home" || event.key === "End") { event.preventDefault(); event.currentTarget.scrollTo({ left: event.key === "Home" ? 0 : event.currentTarget.scrollWidth, behavior: "instant" }); }
+            }}>
               {!completedTrips.length && <div className="home-empty completed-empty"><Check size={28} /><div><strong>Nessun Viaggio Completato</strong><p>I viaggi conclusi verranno raccolti automaticamente qui.</p></div></div>}
               {completedTrips.map((trip) => (
                 <button
@@ -436,9 +452,10 @@ export default function Page() {
                   <div className="trip-card-copy">
                     <strong>{trip.name}</strong>
                     {trip.city && <span>{trip.city}</span>}
-                    <small>Concluso il {formatDate(trip.endDate)} · {trip.people} persone</small>
+                    <small><CalendarDays size={13} aria-hidden="true" /> Concluso il {formatDate(trip.endDate)}</small>
+                    <small><Users size={13} aria-hidden="true" /> {trip.people} persone</small>
                   </div>
-                  <Check size={18} />
+                  <span className={styles.completedBadge} role="img" aria-label="Viaggio completato"><Check size={16} aria-hidden="true" /></span>
                 </button>
               ))}
             </div>
