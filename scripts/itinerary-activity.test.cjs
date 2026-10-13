@@ -65,6 +65,7 @@ function persistHarness(sync) {
   const changes=[],errors=[],events=[];
   const initial=[{id:'old',day:1,place:'A',title:'A',time:'',done:false}];
   const context={canEditItinerary:true,savingActivity:{current:false},activities:initial,id:'trip',trip:{id:'trip'},numberActivities:order.numberActivities,syncTripResource:sync,setActivitySaving(){},setActivityError:x=>errors.push(x),setActivities:x=>changes.push(x),window:{localStorage:{setItem(){}},dispatchEvent:x=>events.push(x)},CustomEvent:class{constructor(type){this.type=type}}};
+  context.activitiesRef={current:initial};context.pendingCompletions={current:new Map()};context.updateActivities=value=>{const next=typeof value==='function'?value(context.activitiesRef.current):value;context.activitiesRef.current=next;changes.push(next);};
   vm.createContext(context);vm.runInContext(pageFunction('persist'),context);
   return {context,changes,errors,events};
 }
@@ -74,7 +75,7 @@ test('persist blocks duplicate taps and publishes UI only after positive server 
  const first=h.context.persist(next);assert.equal(await h.context.persist(next),false);assert.equal(calls,1);assert.equal(h.changes.length,0);release(true);assert.equal(await first,true);assert.equal(h.changes[0][0].id,'new');assert.equal(h.events.length,1);assert.equal(h.context.savingActivity.current,false);
 });
 test('failed persist retains existing activities, reports error and releases the save guard',async()=>{
- const h=persistHarness(async()=>false);assert.equal(await h.context.persist([]),false);assert.equal(h.changes[0],h.context.activities);assert.match(h.errors.at(-1),/non salvata/);assert.equal(h.events.length,0);assert.equal(h.context.savingActivity.current,false);
+ const h=persistHarness(async()=>false);assert.equal(await h.context.persist([]),false);assert.equal(h.changes.length,0);assert.equal(h.context.activitiesRef.current,h.context.activities);assert.match(h.errors.at(-1),/non salvata/);assert.equal(h.events.length,0);assert.equal(h.context.savingActivity.current,false);
 });
 test('failed form save keeps draft and editor open; valid blank title is filled only in the save payload',async()=>{
  const draft={title:'',place:'Museo',day:1,time:''};let payload,closed=false;
@@ -100,22 +101,42 @@ test('late Google selection cannot overwrite a newer selected place or reopen a 
   const closing=context.selectPlace(0);selection.cancel();await closing;assert.equal(applied,1);
 });
 
-test('completion responds before API resolution, blocks duplicate taps and modifies only done',async()=>{
- let release,calls=0;const h=persistHarness(async()=>{throw Error('full-list save must not run');});
- const old={id:'old',day:1,place:'A',title:'Custom',time:'',done:false,sortOrder:9,latitude:4,photoName:'photo'};
- h.context.activities=[old];h.context.syncActivityCompletion=async(id,activityId,done)=>{calls++;assert.equal(activityId,'old');assert.equal(done,true);return new Promise(resolve=>release=resolve);};
- const next=[{...old,done:true}],saving=h.context.persist(next,{id:'old',done:true});
- assert.equal(h.changes[0][0].done,true);assert.equal(h.changes[0][0].sortOrder,9);assert.equal(h.events.length,0);
- assert.equal(await h.context.persist(next,{id:'old',done:true}),false);assert.equal(calls,1);
- release(true);assert.equal(await saving,true);assert.equal(h.events.length,1);
- for(const key of Object.keys(old).filter(k=>k!=='done'))assert.equal(h.changes.at(-1)[0][key],old[key]);
+function toggleHarness(sync) {
+ const h=persistHarness(async()=>{throw Error('unexpected whole-list write');});
+ h.context.syncActivityCompletion=sync;
+ h.context.setCompletionSaving=value=>h.pending=value;
+ h.context.activitiesRef.current=[{id:'a',day:1,title:'A',place:'A',sortOrder:8,time:'',done:false},{id:'b',day:1,title:'B',place:'B',sortOrder:12,time:'09:00',done:false}];
+ vm.runInContext(pageFunction('toggleActivity'),h.context);
+ return h;
+}
+test('toggle reacts before API response without activating global saving or disabling other records',async()=>{
+ let release,calls=0;const h=toggleHarness(async()=>{calls++;return new Promise(resolve=>release=resolve);});
+ const initial=h.context.activitiesRef.current,old={...initial[0]};
+ const saving=h.context.toggleActivity('a');assert.equal(h.context.activitiesRef.current[0].done,true);assert.equal(h.pending.has('a'),true);assert.equal(h.pending.has('b'),false);assert.equal(h.context.savingActivity.current,false);
+ assert.equal(await h.context.toggleActivity('a'),false);assert.equal(calls,1);assert.equal(h.context.activitiesRef.current[1],initial[1]);
+ release(true);assert.equal(await saving,true);assert.equal(h.pending.size,0);
+ for(const key of Object.keys(old).filter(k=>k!=='done'))assert.equal(h.context.activitiesRef.current[0][key],old[key]);
 });
-test('completion rollback and reopening preserve all fields and show failures',async()=>{
- for(const done of [false,true]){
-  const h=persistHarness(async()=>{throw Error('unexpected full save');});h.context.activities[0].done=done;h.context.syncActivityCompletion=async()=>false;
-  const next=[{...h.context.activities[0],done:!done}];assert.equal(await h.context.persist(next,{id:'old',done:!done}),false);
-  assert.equal(h.changes[0][0].done,!done);assert.equal(h.changes.at(-1)[0].done,done);assert.match(h.errors.at(-1),/non salvata/);assert.equal(h.events.length,0);
+test('two distinct activities save concurrently and an error rolls back only its own record',async()=>{
+ const releases=new Map(),h=toggleHarness(async(_,id)=>new Promise(resolve=>releases.set(id,resolve)));
+ const a=h.context.toggleActivity('a'),b=h.context.toggleActivity('b');assert.equal(releases.size,2);assert.equal(h.pending.size,2);
+ releases.get('b')(true);assert.equal(await b,true);assert.equal(h.context.activitiesRef.current[1].done,true);assert.equal(h.context.activitiesRef.current[0].done,true);
+ releases.get('a')(false);assert.equal(await a,false);assert.equal(h.context.activitiesRef.current[0].done,false);assert.equal(h.context.activitiesRef.current[1].done,true);assert.match(h.errors.at(-1),/Stato non salvato/);assert.equal(h.events.length,1);
+});
+test('reopening remains immediate and repeated taps cannot overlap',async()=>{
+ let release;const h=toggleHarness(async()=>new Promise(resolve=>release=resolve));h.context.activitiesRef.current[0].done=true;
+ const job=h.context.toggleActivity('a');assert.equal(h.context.activitiesRef.current[0].done,false);assert.equal(await h.context.toggleActivity('a'),false);release(true);assert.equal(await job,true);assert.equal(h.context.activitiesRef.current[0].done,false);
+});
+test('whole-list writes wait for toggles and preserve settled completion or rollback',async()=>{
+ for(const confirmed of [true,false]){
+  let release,payload;const h=toggleHarness(async()=>new Promise(resolve=>release=resolve));h.context.syncTripResource=async(_,__,items)=>{payload=items;return true;};
+  const toggle=h.context.toggleActivity('a');const edited=h.context.activitiesRef.current.map(item=>({...item,title:item.id==='b'?'Edited':item.title}));
+  const bulk=h.context.persist(edited);assert.equal(payload,undefined);release(confirmed);await toggle;assert.equal(await bulk,true);assert.equal(payload[0].done,confirmed);assert.equal(payload[1].title,'Edited');
  }
+});
+test('late incoming snapshot cannot remove an in-flight optimistic completion',async()=>{
+ let release;const h=toggleHarness(async()=>new Promise(resolve=>release=resolve));vm.runInContext(pageFunction('applyIncomingActivities'),h.context);
+ const job=h.context.toggleActivity('a');h.context.applyIncomingActivities([{id:'a',done:false,title:'Remote edit',day:1,place:'A'}]);assert.equal(h.context.activitiesRef.current[0].done,true);assert.equal(h.context.activitiesRef.current[0].title,'Remote edit');release(true);await job;
 });
 test('completion transport sends one field-level PATCH and invalidates only confirmed writes',async()=>{
  const calls=[],invalidations=[];let ok=true;
@@ -127,4 +148,12 @@ test('invalid place selection preserves the old title and location',async()=>{
  let draft={title:'Personalizzato',place:'Old'},error;
  const context={placeMatches:[{id:'new',provider:'google',placeId:'new',name:'New'}],searchRequests:{current:helper.latestActivityRequest()},selectionRequests:{current:helper.latestActivityRequest()},placeSessionToken:'test',setPlaceSearchOpen(){},setPlaceSelecting(){},setActivityError:e=>error=e,fetch:async()=>({ok:false}),applyActivityPlace:helper.applyActivityPlace,setDraft:fn=>draft=fn(draft),setEditorStep(){throw Error('must not advance');}};
  vm.createContext(context);vm.runInContext(pageFunction('selectPlace'),context);await context.selectPlace(0);assert.equal(draft.title,'Personalizzato');assert.equal(draft.place,'Old');assert.match(error,/Riprova/);
+});
+
+test('editing another activity remains available while a checkbox request is pending', async()=>{
+ let release,opened=false,draft;
+ const h=toggleHarness(async()=>new Promise(resolve=>release=resolve));
+ Object.assign(h.context,{selectionRequests:{current:helper.latestActivityRequest()},setPlaceSelecting(){},setEditingId(){},setDraft:value=>draft=value,setEditorStep(){},setShowEditor:value=>opened=value});
+ vm.runInContext(pageFunction('openEdit'),h.context);
+ const toggle=h.context.toggleActivity('a');h.context.openEdit(h.context.activitiesRef.current[1]);assert.equal(opened,true);assert.equal(draft.title,'B');assert.equal(h.context.savingActivity.current,false);release(true);await toggle;
 });

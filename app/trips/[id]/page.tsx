@@ -4,7 +4,7 @@ import styles from "./itinerary.module.css";
 import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
 import { CalendarDays, Check, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Sun, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
@@ -77,6 +77,17 @@ export default function TripPage() {
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
+  const activitiesRef = useRef<Activity[]>([]);
+  const pendingCompletions = useRef(new Map<string, { done: boolean; promise: Promise<boolean> }>());
+  const [completionSaving, setCompletionSaving] = useState<Set<string>>(() => new Set());
+  const updateActivities = useCallback((value: Activity[] | ((current: Activity[]) => Activity[])) => {
+    const next = typeof value === "function" ? value(activitiesRef.current) : value;
+    activitiesRef.current = next;
+    setActivities(next);
+  }, []);
+  function applyIncomingActivities(incoming: Activity[]) {
+    updateActivities(incoming.map(item => pendingCompletions.current.has(item.id) ? { ...item, done: pendingCompletions.current.get(item.id)!.done } : item));
+  }
   const [showEditor, setShowEditor] = useState(false);
   const [editorStep, setEditorStep] = useState<1 | 2>(1);
   const [activeDay, setActiveDay] = useState(1);
@@ -150,7 +161,7 @@ export default function TripPage() {
   useEffect(() => { if (!paneActive) { selectionRequests.current.cancel(); setPlaceSelecting(false); } }, [paneActive]);
 
   useEffect(() => {
-    if (!trip || !countryIsoCode || !paneActive || showEditor || activitySaving) return;
+    if (!trip || !countryIsoCode || !paneActive || showEditor || activitySaving || completionSaving.size) return;
     const activity = activities.find((item) => !item.photoUrl && !item.photoName && item.place && !photoLookups.current.has(item.id));
     if (!activity || photoLookups.current.size >= 12) return;
     const targetActivity = activity;
@@ -171,7 +182,7 @@ export default function TripPage() {
           if (!detailsResponse.ok) return;
           const details = await detailsResponse.json() as PlaceResult;
           if ((!details.photoUrl && !details.photoName) || cancelled) return;
-          setActivities((current) => {
+          updateActivities((current) => {
             const next = current.map((item) => item.id === targetActivity.id && item.place === targetActivity.place && item.placeAddress === targetActivity.placeAddress ? { ...item, photoName: details.photoName, photoUrl: details.photoUrl, photoAttribution: details.photoAttribution, photoAttributionUri: details.photoAttributionUri } : item);
             window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(next));
             return next;
@@ -180,7 +191,7 @@ export default function TripPage() {
     }
     void enrich().finally(() => { finished = true; });
     return () => { cancelled = true; controller.abort(); if (!finished) photoLookups.current.delete(targetActivity.id); };
-  }, [activities, countryIsoCode, id, trip, paneActive, showEditor, activitySaving]);
+  }, [activities, countryIsoCode, id, trip, paneActive, showEditor, activitySaving, completionSaving.size]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
@@ -190,8 +201,8 @@ export default function TripPage() {
     const cachedTrip = readTripSnapshot(id) as Trip | null;
     setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
     const snapshot = readTripSnapshot(id);
-    setActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
-    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const metadataById = new Map(cached.map(item => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => restoreActivityMetadata(item, metadataById.get(item.id))); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); setActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
+    applyIncomingActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const metadataById = new Map(cached.map(item => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => restoreActivityMetadata(item, metadataById.get(item.id))); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); applyIncomingActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
 
@@ -239,25 +250,53 @@ export default function TripPage() {
     return () => observer.disconnect();
   }, [trip, activities.length, paneActive]);
 
-  async function persist(next: Activity[], completion?: { id: string; done: boolean }) {
+  function toggleActivity(activityId: string): Promise<boolean> {
+    if (!canEditItinerary || savingActivity.current || pendingCompletions.current.has(activityId)) return Promise.resolve(false);
+    const activity = activitiesRef.current.find(item => item.id === activityId);
+    if (!activity) return Promise.resolve(false);
+    const done = !activity.done;
+    const job = { done, promise: Promise.resolve(false) };
+    pendingCompletions.current.set(activityId, job);
+    setCompletionSaving(new Set(pendingCompletions.current.keys()));
+    setActivityError("");
+    updateActivities(current => current.map(item => item.id === activityId ? { ...item, done } : item));
+    job.promise = (async () => {
+      try {
+        if (!await syncActivityCompletion(id, activityId, done)) throw new Error();
+        return true;
+      } catch {
+        updateActivities(current => current.map(item => item.id === activityId ? { ...item, done: activity.done } : item));
+        setActivityError("Stato non salvato. Controlla la connessione e riprova.");
+        return false;
+      } finally {
+        pendingCompletions.current.delete(activityId);
+        setCompletionSaving(new Set(pendingCompletions.current.keys()));
+        // Store only settled states; never serialize another pending optimistic toggle.
+        if (!pendingCompletions.current.size) {
+          try { window.localStorage.setItem('mova-itinerary-' + id, JSON.stringify(activitiesRef.current)); } catch { /* Server remains authoritative. */ }
+          window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
+        }
+      }
+    })();
+    return job.promise;
+  }
+
+  async function persist(next: Activity[]) {
     if (!canEditItinerary || savingActivity.current) return false;
     savingActivity.current = true;
     setActivitySaving(true);
     setActivityError("");
-    const previous = activities;
-    const ordered = completion ? next : numberActivities(next);
-    if (completion) setActivities(ordered);
     try {
-      const saved = completion
-        ? await syncActivityCompletion(id, completion.id, completion.done)
-        : await syncTripResource(id, "activities", ordered, trip || undefined);
-      if (!saved) throw new Error();
-      setActivities(ordered);
-      try { window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
+      // Whole-list writes must not overwrite a pending completion or its rollback.
+      await Promise.all([...pendingCompletions.current.values()].map(job => job.promise));
+      const current = new Map(activitiesRef.current.map(item => [item.id, item]));
+      const ordered = numberActivities(next.map(item => current.has(item.id) ? { ...item, done: current.get(item.id)!.done } : item));
+      if (!await syncTripResource(id, "activities", ordered, trip || undefined)) throw new Error();
+      updateActivities(ordered);
+      try { window.localStorage.setItem('mova-itinerary-' + id, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
       window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
       return true;
     } catch {
-      setActivities(previous);
       setActivityError("Modifica non salvata. Controlla la connessione e riprova.");
       return false;
     } finally {
@@ -346,7 +385,7 @@ export default function TripPage() {
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
-            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity), { id: item.id, done: !item.done })} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
+            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.photoUrl || item.photoName ? "has-photo" : ""}`}>
                 {(item.photoUrl || item.photoName) && <figure className="activity-place-photo"><img src={item.photoUrl || `/api/places/photo?name=${encodeURIComponent(item.photoName!)}`} alt={item.place} loading="lazy" onError={(event) => { if (item.photoName && !event.currentTarget.src.includes("/api/places/photo")) event.currentTarget.src = `/api/places/photo?name=${encodeURIComponent(item.photoName)}`; }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
