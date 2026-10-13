@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./overview.module.css";
+import boutique from "../itinerary.module.css";
 import { sortActivities } from "../../../../lib/activity-order";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -11,6 +13,7 @@ import {
   Clock3,
   FileCheck2,
   MapPin,
+  Luggage,
   Paperclip,
   ReceiptText,
   Settings,
@@ -26,6 +29,11 @@ import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
 
 type Activity = {
+  photoUrl?: string;
+  photoName?: string;
+  photoAttribution?: string;
+  photoAttributionUri?: string;
+  placeAddress?: string;
   sortOrder?: number;
   id: string;
   day: number;
@@ -366,14 +374,14 @@ export default function OverviewPage() {
   }
 
   return (
-    <main className="trip-detail-shell overview-shell">
+    <main className={`trip-detail-shell overview-shell ${boutique.itinerary} ${styles.overview}`}>
       <header className="detail-topbar">
         <button
           className="detail-brand home-brand-button"
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          NAMI
+          <span>NAMI</span><small>TRAVEL</small>
         </button>
         <button
           className="secondary-button"
@@ -393,13 +401,14 @@ export default function OverviewPage() {
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />
+      <section className="overview-heading"><div><p className="section-kicker">IL TUO VIAGGIO</p><h2>Panoramica</h2><p>Il tuo viaggio, tutto sotto controllo.</p></div></section>
       <section className="today-dashboard">
         <header>
           <div>
-            <p className="section-kicker">OGGI</p>
+            <p className="section-kicker">{today?.phase === "active" ? "OGGI" : today?.phase === "before" ? "PRIMA DI PARTIRE" : today?.phase === "after" ? "VIAGGIO CONCLUSO" : "PREPARAZIONE"}</p>
             <h2>
               {today?.phase === "active"
-                ? `Giorno ${today.day} del viaggio`
+                ? "Le attività del giorno"
                 : today?.phase === "before"
                   ? `Partenza tra ${today.distance} ${today.distance === 1 ? "giorno" : "giorni"}`
                   : today?.phase === "after"
@@ -424,22 +433,22 @@ export default function OverviewPage() {
             className="secondary-button"
             onClick={() => router.push(`/trips/${id}`)}
           >
-            Apri itinerario <ChevronRight size={17} />
+            Vai all’Itinerario <ChevronRight size={17} />
           </button>
         </header>
         {today?.phase === "active" ? (
           today.activities.length ? (
             <div className="today-activities">
-              {today.activities.map((activity) => {
+              {today.activities.slice(0, 3).map((activity) => {
                 const linkedDocuments = documents.filter(
                   (document) =>
                     document.bookingId &&
                     document.bookingId === activity.bookingId,
                 );
                 return (
-                  <article key={activity.id}>
-                    {activity.time && <time>{activity.time}</time>}
-                    <span className={activity.done ? "done" : ""}>
+                  <article key={activity.id} className={activity.photoUrl || activity.photoName ? styles.withPhoto : undefined}>
+                    {(activity.photoUrl || activity.photoName) && <figure className={styles.activityPhoto}><img src={activity.photoUrl || `/api/places/photo?name=${encodeURIComponent(activity.photoName!)}`} alt={activity.place} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} />{activity.photoAttribution && <figcaption>{activity.photoAttributionUri ? <a href={activity.photoAttributionUri} target="_blank" rel="noreferrer">{activity.photoAttribution}</a> : activity.photoAttribution}</figcaption>}</figure>}
+                    <span className={activity.done ? "done" : ""} role="img" aria-label={activity.done ? "Attività completata" : "Da svolgere"}>
                       {activity.done ? (
                         <CheckCircle2 size={16} />
                       ) : (
@@ -448,8 +457,9 @@ export default function OverviewPage() {
                     </span>
                     <div>
                       <strong>{activity.title}</strong>
+                      {activity.time && <time>{activity.time}</time>}
                       <p>
-                        <MapPin size={14} /> {activity.place}
+                        <MapPin size={14} /> {activity.placeAddress || activity.place}
                       </p>
                       {linkedDocuments.length > 0 && (
                         <button
@@ -470,6 +480,7 @@ export default function OverviewPage() {
                   </article>
                 );
               })}
+              {today.activities.length > 3 && <p className={styles.previewHint}>{today.activities.length - 3} {today.activities.length === 4 ? "altra attività" : "altre attività"} nell’Itinerario.</p>}
             </div>
           ) : (
             <div className="today-empty">
@@ -514,26 +525,7 @@ export default function OverviewPage() {
                 <ChevronRight size={19} />
               </button>
             </article>
-            <button
-              className={`packing-wallet-card${packingItems.length === 0 ? "" : packedCount === packingItems.length ? " completed" : " incomplete"}`}
-              onClick={() => router.push(`/trips/${id}/packing`)}
-            >
-              <Image
-                className="travel-card-icon"
-                src="/icons/suitcase-travel.png"
-                width={44}
-                height={44}
-                alt=""
-                aria-hidden="true"
-              />
-              <span>
-                <strong>Valigia</strong>
-                <small>
-                  {packingReady ? `${packedCount}/${packingItems.length} Pronti` : "Caricamento…"}
-                </small>
-              </span>
-              <ChevronRight size={19} />
-            </button>
+
           </div>
         )}
         {showReturnCheckIn && (
@@ -571,14 +563,22 @@ export default function OverviewPage() {
           </div>
         )}
       </section>
-      <section className="overview-heading">
-        <div>
-          <p className="section-kicker">PANORAMICA</p>
-          <h2>Tutto sotto controllo</h2>
-          <p>Le informazioni più importanti, aggiornate dalle altre sezioni.</p>
-        </div>
-      </section>
       <section className="overview-grid">
+            <button
+              className={`packing-wallet-card ${styles.packingSummary}${packingItems.length === 0 ? "" : packedCount === packingItems.length ? " completed" : " incomplete"}`}
+              onClick={() => router.push(`/trips/${id}/packing`)}
+            >
+              <Luggage size={24} aria-hidden="true" />
+              <span>
+                <strong>Cosa Portare</strong>
+                <small>
+                  {packingReady ? packingItems.length ? `${packedCount} di ${packingItems.length} preparati` : "Nessun elemento nella checklist" : "Caricamento…"}
+                </small>
+                <small>Personale e condivisa</small>
+                {packingReady && packingItems.length > 0 && <span className={styles.packingProgress} role="progressbar" aria-label="Preparazione valigia" aria-valuemin={0} aria-valuemax={packingItems.length} aria-valuenow={packedCount}><span style={{ width: `${packedCount / packingItems.length * 100}%` }} /></span>}
+              </span>
+              <ChevronRight size={19} />
+            </button>
         <button
           className="overview-card overview-next"
           onClick={() => router.push(`/trips/${id}`)}
