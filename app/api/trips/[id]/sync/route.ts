@@ -66,3 +66,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (change) await notifyTripMembers(id, user.id, change);
   return NextResponse.json({ synchronized: true });
 }
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 });
+  const { id } = await params;
+  const access = await tripAccess(id, user, true);
+  if (!access.allowed) return NextResponse.json({ error: "Non hai il permesso di modificare le attività" }, { status: access.missing ? 404 : 403 });
+  let body: { activityId: string; done: boolean };
+  try {
+    body = await request.json();
+    if (!body || Array.isArray(body) || typeof body.activityId !== "string" || !body.activityId.trim() || typeof body.done !== "boolean" || Object.keys(body).some(key => key !== "activityId" && key !== "done")) throw new Error();
+  } catch { return NextResponse.json({ error: "Stato attività non valido" }, { status: 400 }); }
+  try {
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.activity.updateMany({ where: { id: body.activityId, tripId: id }, data: { done: body.done } });
+      if (!result.count) return false;
+      await notifyTripMembers(id, user.id, { type: "itinerary", title: "Itinerario aggiornato", message: `${user.name} ha ${body.done ? "completato" : "riaperto"} un’attività.`, link: `/trips/${id}` }, tx);
+      return true;
+    }, { timeout: 10000 });
+    if (!updated) return NextResponse.json({ error: "Attività non trovata" }, { status: 404 });
+    return NextResponse.json({ synchronized: true, activityId: body.activityId, done: body.done });
+  } catch { return NextResponse.json({ error: "Stato non salvato. Riprova." }, { status: 503 }); }
+}

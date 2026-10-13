@@ -5,12 +5,11 @@ export type ActivityDraftData = { title: string; titleSource?: TitleSource; plac
 export type SelectedPlace = { name: string; address?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
 
 export function applyActivityPlace<T extends ActivityDraftData>(draft: T, place: SelectedPlace): T {
-  const automatic = !draft.title.trim() || draft.titleSource === "place";
-  return { ...draft, title: automatic ? place.name : draft.title, titleSource: automatic ? "place" : draft.titleSource, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoUrl: place.photoUrl, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri };
+  return { ...draft, title: place.name, titleSource: "place", place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoUrl: place.photoUrl, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri };
 }
 
 export function editActivityPlace<T extends ActivityDraftData>(draft: T, place: string): T {
-  return { ...draft, place, title: draft.titleSource === "place" ? "" : draft.title, placeAddress: undefined, latitude: undefined, longitude: undefined, photoName: undefined, photoUrl: undefined, photoAttribution: undefined, photoAttributionUri: undefined };
+  return { ...draft, place, title: draft.title, placeAddress: undefined, latitude: undefined, longitude: undefined, photoName: undefined, photoUrl: undefined, photoAttribution: undefined, photoAttributionUri: undefined };
 }
 
 export function prepareActivityDraft<T extends ActivityDraftData>(draft: T): T {

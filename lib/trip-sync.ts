@@ -44,3 +44,16 @@ export async function syncTripSnapshot(id: string, snapshot: Snapshot, knownTrip
 export function syncTripResource(id: string, resource: keyof Omit<Snapshot, "budget">, items: unknown[], knownTrip?: TripRecord) {
   return syncTripSnapshot(id, { [resource]: items }, knownTrip);
 }
+
+// Completion is a field-level mutation: never submit or rewrite the itinerary list.
+export async function syncActivityCompletion(id: string, activityId: string, done: boolean) {
+  try {
+    const response = await fetch(`/api/trips/${id}/sync`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityId, done }),
+    });
+    if (response.ok) removeTripSnapshot(id);
+    return response.ok;
+  } catch { return false; }
+}

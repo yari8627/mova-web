@@ -10,7 +10,7 @@ import { Country } from "country-state-city";
 import { CalendarDays, Check, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Sun, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
 import { TripTabs } from "../../components/trip-tabs";
 import { TripCover } from "../../components/trip-cover";
-import { syncTripResource, syncTripSnapshot } from "../../../lib/trip-sync";
+import { syncTripResource, syncActivityCompletion } from "../../../lib/trip-sync";
 import { useTripPermissions } from "../../../lib/use-trip-permissions";
 import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard";
 import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-cache";
@@ -239,15 +239,18 @@ export default function TripPage() {
     return () => observer.disconnect();
   }, [trip, activities.length, paneActive]);
 
-  async function persist(next: Activity[]) {
+  async function persist(next: Activity[], completion?: { id: string; done: boolean }) {
     if (!canEditItinerary || savingActivity.current) return false;
     savingActivity.current = true;
     setActivitySaving(true);
     setActivityError("");
     const previous = activities;
-    const ordered = numberActivities(next);
+    const ordered = completion ? next : numberActivities(next);
+    if (completion) setActivities(ordered);
     try {
-      const saved = await syncTripResource(id, "activities", ordered, trip || undefined);
+      const saved = completion
+        ? await syncActivityCompletion(id, completion.id, completion.done)
+        : await syncTripResource(id, "activities", ordered, trip || undefined);
       if (!saved) throw new Error();
       setActivities(ordered);
       try { window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
@@ -343,7 +346,7 @@ export default function TripPage() {
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
-            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity))} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
+            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving} onClick={() => persist(activities.map((activity) => activity.id === item.id ? { ...activity, done: !activity.done } : activity), { id: item.id, done: !item.done })} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.photoUrl || item.photoName ? "has-photo" : ""}`}>
                 {(item.photoUrl || item.photoName) && <figure className="activity-place-photo"><img src={item.photoUrl || `/api/places/photo?name=${encodeURIComponent(item.photoName!)}`} alt={item.place} loading="lazy" onError={(event) => { if (item.photoName && !event.currentTarget.src.includes("/api/places/photo")) event.currentTarget.src = `/api/places/photo?name=${encodeURIComponent(item.photoName)}`; }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
