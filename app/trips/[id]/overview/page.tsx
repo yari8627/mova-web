@@ -402,6 +402,100 @@ export default function OverviewPage() {
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />
       <section className="overview-heading"><div><p className="section-kicker">IL TUO VIAGGIO</p><h2>Panoramica</h2><p>Il tuo viaggio, tutto sotto controllo.</p></div></section>
+      <section className={styles.preparation} aria-label="Prima di partire">
+        <p className="section-kicker">PREPARAZIONE</p>
+        <h2>Prima di partire</h2>
+        <div className={styles.preparationGrid}>
+          {(today?.phase !== "active" || showReturnCheckIn) && <div className={styles.checkinStack}>
+            {today?.phase !== "active" && (
+          <div className="today-preparation wallet-preparation">
+            <article
+              className={`checkin-wallet-card${checkInCompleted ? " completed" : ""}`}
+            >
+              <div className="checkin-title-row">
+                <strong>Check-in Andata</strong>
+                <label className="checkin-checkbox" aria-label="Check-in di andata effettuato">
+                  <input
+                    type="checkbox"
+                    checked={checkInCompleted}
+                    disabled={savingCheckIn || !checkInReady}
+                    onChange={(event) => void updateCheckIn(event.target.checked)}
+                  />
+                  <span aria-hidden="true">
+                    {checkInCompleted && <CheckCircle2 size={18} />}
+                  </span>
+                </label>
+              </div>
+              <button onClick={() => openDeviceWallet(checkInCompleted)}>
+                <Image
+                  className="travel-wallet-icon"
+                  src="/icons/wallet-travel-ticket.png"
+                  width={44}
+                  height={44}
+                  alt=""
+                  aria-hidden="true"
+                />
+                <span>
+                  <small>Apri Wallet</small>
+                </span>
+                <ChevronRight size={19} />
+              </button>
+            </article>
+
+          </div>
+            )}
+        {showReturnCheckIn && (
+          <div className="today-preparation return-checkin-preparation">
+            <article
+              className={`checkin-wallet-card${returnCheckInCompleted ? " completed" : ""}`}
+            >
+              <div className="checkin-title-row">
+                <strong>Check-in Ritorno</strong>
+                <label className="checkin-checkbox" aria-label="Check-in ritorno effettuato">
+                  <input
+                    type="checkbox"
+                    checked={returnCheckInCompleted}
+                    disabled={savingCheckIn || !checkInReady}
+                    onChange={(event) => void updateCheckIn(event.target.checked, "return")}
+                  />
+                  <span aria-hidden="true">
+                    {returnCheckInCompleted && <CheckCircle2 size={18} />}
+                  </span>
+                </label>
+              </div>
+              <button onClick={() => openDeviceWallet(returnCheckInCompleted)}>
+                <Image
+                  className="travel-wallet-icon"
+                  src="/icons/wallet-travel-ticket.png"
+                  width={44}
+                  height={44}
+                  alt=""
+                  aria-hidden="true"
+                />
+                <span><small>Apri Wallet</small></span>
+                <ChevronRight size={19} />
+              </button>
+            </article>
+          </div>
+        )}
+          </div>}
+            <button
+              className={`packing-wallet-card ${styles.packingSummary}${packingItems.length === 0 ? "" : packedCount === packingItems.length ? " completed" : " incomplete"}`}
+              onClick={() => router.push(`/trips/${id}/packing`)}
+            >
+              <Luggage size={24} aria-hidden="true" />
+              <span>
+                <strong>Cosa Portare</strong>
+                <small>
+                  {packingReady ? packingItems.length ? `${packedCount} di ${packingItems.length} preparati` : "Nessun elemento nella checklist" : "Caricamento…"}
+                </small>
+                <small>Personale e condivisa{packingReady && packingItems.length > 0 ? ` · ${Math.round(packedCount / packingItems.length * 100)}%` : ""}</small>
+                {packingReady && packingItems.length > 0 && <span className={styles.packingProgress} role="progressbar" aria-label="Preparazione valigia" aria-valuemin={0} aria-valuemax={packingItems.length} aria-valuenow={packedCount}><span style={{ width: `${packedCount / packingItems.length * 100}%` }} /></span>}
+              </span>
+              <ChevronRight size={19} />
+            </button>
+        </div>
+      </section>
       <section className="today-dashboard">
         <header>
           <div>
@@ -436,7 +530,7 @@ export default function OverviewPage() {
             Vai all’Itinerario <ChevronRight size={17} />
           </button>
         </header>
-        {today?.phase === "active" ? (
+        {today?.phase === "active" && (
           today.activities.length ? (
             <div className="today-activities">
               {today.activities.slice(0, 3).map((activity) => {
@@ -491,96 +585,9 @@ export default function OverviewPage() {
               </div>
             </div>
           )
-        ) : (
-          <div className="today-preparation wallet-preparation">
-            <article
-              className={`checkin-wallet-card${checkInCompleted ? " completed" : ""}`}
-            >
-              <div className="checkin-title-row">
-                <strong>Check-in Effettuato?</strong>
-                <label className="checkin-checkbox" aria-label="Check-in effettuato">
-                  <input
-                    type="checkbox"
-                    checked={checkInCompleted}
-                    disabled={savingCheckIn || !checkInReady}
-                    onChange={(event) => void updateCheckIn(event.target.checked)}
-                  />
-                  <span aria-hidden="true">
-                    {checkInCompleted && <CheckCircle2 size={18} />}
-                  </span>
-                </label>
-              </div>
-              <button onClick={() => openDeviceWallet(checkInCompleted)}>
-                <Image
-                  className="travel-wallet-icon"
-                  src="/icons/wallet-travel-ticket.png"
-                  width={44}
-                  height={44}
-                  alt=""
-                  aria-hidden="true"
-                />
-                <span>
-                  <small>Apri Wallet</small>
-                </span>
-                <ChevronRight size={19} />
-              </button>
-            </article>
-
-          </div>
         )}
-        {showReturnCheckIn && (
-          <div className="today-preparation return-checkin-preparation">
-            <article
-              className={`checkin-wallet-card${returnCheckInCompleted ? " completed" : ""}`}
-            >
-              <div className="checkin-title-row">
-                <strong>Check-in Ritorno Effettuato?</strong>
-                <label className="checkin-checkbox" aria-label="Check-in ritorno effettuato">
-                  <input
-                    type="checkbox"
-                    checked={returnCheckInCompleted}
-                    disabled={savingCheckIn || !checkInReady}
-                    onChange={(event) => void updateCheckIn(event.target.checked, "return")}
-                  />
-                  <span aria-hidden="true">
-                    {returnCheckInCompleted && <CheckCircle2 size={18} />}
-                  </span>
-                </label>
-              </div>
-              <button onClick={() => openDeviceWallet(returnCheckInCompleted)}>
-                <Image
-                  className="travel-wallet-icon"
-                  src="/icons/wallet-travel-ticket.png"
-                  width={44}
-                  height={44}
-                  alt=""
-                  aria-hidden="true"
-                />
-                <span><small>Apri Wallet</small></span>
-                <ChevronRight size={19} />
-              </button>
-            </article>
-          </div>
-        )}
-      </section>
-      <section className="overview-grid">
-            <button
-              className={`packing-wallet-card ${styles.packingSummary}${packingItems.length === 0 ? "" : packedCount === packingItems.length ? " completed" : " incomplete"}`}
-              onClick={() => router.push(`/trips/${id}/packing`)}
-            >
-              <Luggage size={24} aria-hidden="true" />
-              <span>
-                <strong>Cosa Portare</strong>
-                <small>
-                  {packingReady ? packingItems.length ? `${packedCount} di ${packingItems.length} preparati` : "Nessun elemento nella checklist" : "Caricamento…"}
-                </small>
-                <small>Personale e condivisa{packingReady && packingItems.length > 0 ? ` · ${Math.round(packedCount / packingItems.length * 100)}%` : ""}</small>
-                {packingReady && packingItems.length > 0 && <span className={styles.packingProgress} role="progressbar" aria-label="Preparazione valigia" aria-valuemin={0} aria-valuemax={packingItems.length} aria-valuenow={packedCount}><span style={{ width: `${packedCount / packingItems.length * 100}%` }} /></span>}
-              </span>
-              <ChevronRight size={19} />
-            </button>
         {!(nextActivity && today?.phase === "active" && today.activities.slice(0, 3).some((activity) => activity.id === nextActivity.id)) && <button
-          className="overview-card overview-next"
+          className={`overview-card overview-next ${styles.nextActivity}`}
           onClick={() => router.push(`/trips/${id}`)}
         >
           <span className="overview-icon">
@@ -607,6 +614,9 @@ export default function OverviewPage() {
           </div>
           <ChevronRight size={20} />
         </button>}
+      </section>
+      <section className="overview-grid">
+
         <button
           className="overview-card"
           onClick={() => router.push(`/trips/${id}/expenses`)}
