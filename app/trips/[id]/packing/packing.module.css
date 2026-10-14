@@ -1,0 +1,47 @@
+/* Packing only; the approved header, cover and trip tabs reuse itinerary styles. */
+.packing:global(.packing-shell) { --shadow-sm: 0 3px 14px rgba(54,41,24,.035); min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.packing :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; }
+.packing :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
+.packing :global(.expenses-title > p:last-child) { margin-top: 6px; font-size: 13px; color: var(--text-secondary); }
+.packing :global(.packing-scope-tabs) { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 14px; padding: 4px; gap: 4px; overflow: visible; background: var(--surface); border-color: var(--border); box-shadow: none; }
+.packing :global(.packing-scope-tabs button) { min-width: 0; min-height: 44px; padding: 8px 6px; display: grid; place-items: center; text-align: center; font-size: 12px; }
+.packing :global(.packing-scope-tabs strong) { color: var(--navy); font-weight: 500; }
+.packing :global(.packing-scope-tabs button.active) { background: var(--navy); box-shadow: none; }
+.packing :global(.packing-scope-tabs button.active strong) { color: #fffcf7; }
+.packing :global(.packing-checklist) { margin-top: 12px; padding: 16px; border-radius: 16px; border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-sm); }
+.packing :global(.packing-checklist > header) { grid-template-columns: 28px minmax(0,1fr); gap: 8px; align-items: start; }
+.packing :global(.packing-heading-icon) { width: 28px; height: 28px; border-radius: 8px; color: #94723e; background: #eee7d9; }
+.packing :global(.packing-heading-icon svg) { width: 19px; height: 19px; }
+.packing :global(.packing-checklist h2) { margin: 0 0 4px; font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.packing :global(.packing-checklist header p:last-child) { display: block; font-size: 12px; line-height: 1.4; }
+.packing :global(.packing-checklist > header > strong) { grid-column: 2; padding: 0; border-radius: 0; color: #65755d; background: transparent; font-size: 12px; font-weight: 600; white-space: normal; }
+.progress { height: 6px; margin-top: 10px; border-radius: 8px; overflow: hidden; background: #e8e0d4; }
+.progress > span { display: block; height: 100%; background: #74836b; }
+.packing :global(.secondary-button) { min-height: 44px; padding: 10px 14px; border-radius: 999px; background: #eee4d2; color: var(--navy); font-size: 12px; font-weight: 600; }
+.packing :global(.packing-apply-template) { width: fit-content; margin-top: 10px; }
+.packing :global(.packing-checklist form) { margin-top: 12px; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.packing :global(.packing-checklist form input) { min-width: 0; width: 100%; min-height: 44px; height: auto; padding: 10px 12px; background: #f8f5ef; border-color: var(--border); font-size: 16px; }
+.packing :global(.packing-checklist form button) { min-height: 44px; padding: 10px 12px; font-size: 12px; }
+.packing :global(.packing-list) { gap: 8px; margin-top: 12px; }
+.packing :global(.packing-list article) { min-height: 58px; padding: 6px 8px; grid-template-columns: 44px 24px minmax(0,1fr) 44px; gap: 6px; border-color: var(--border); border-radius: 12px; background: #fffcf7; }
+.packing :global(.packing-list article.packed) { background: #edf0e7; border-color: #d6decc; }
+.packing :global(.packing-item-label) { color: var(--navy); font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.packing :global(.packing-item-copy small) { line-height: 1.4; overflow-wrap: anywhere; }
+.packing :global(.packing-item-icon) { width: 24px; height: 24px; color: #94723e; border-radius: 7px; background: #eee7d9; }
+.packing :global(.packed .packing-item-icon) { color: #65755d; background: #dde5d4; }
+.packing :global(.packing-toggle) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; padding: 0; }
+.checkVisual { display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #b8a681; border-radius: 6px; background: #fffcf7; color: #fff; }
+.packing :global(.packed) .checkVisual { border-color: #74836b; background: #74836b; }
+.packing :global(.packing-remove) { width: 44px; height: 44px; min-height: 44px; color: var(--text-secondary); }
+.packing :global(.packing-remove:hover) { color: #983d35; background: #f6e9e1; }
+.packing :global(.packing-template-marker) { width: 44px; height: 44px; color: #94723e; background: transparent; }
+.packing :global(.packing-empty) { margin-top: 12px; padding: 14px; border: 1px solid var(--border); background: #f8f5ef; text-align: left; justify-content: flex-start; gap: 10px; }
+.packing :global(.packing-empty > svg) { flex-shrink: 0; color: #94723e; }
+.packing :global(.packing-empty strong) { font: 400 18px/1.2 Georgia, 'Times New Roman', serif; }
+.packing :global(.packing-empty p) { font-size: 12px; line-height: 1.4; }
+.packing :global(button:focus-visible) { outline: 2px solid #94723e; outline-offset: 2px; }
+.packing :global(button:disabled) { cursor: default; }
+@media (max-width: 700px) { .packing :global(.packing-list) { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 560px) { .packing :global(.expenses-title .trip-section-title) { font-size: 30px; } .packing :global(.packing-checklist) { padding: 12px; } }
+@media (max-width: 360px) { .packing :global(.packing-checklist form) { grid-template-columns: minmax(0,1fr); } .packing :global(.packing-list article) { padding-inline: 4px; gap: 4px; } }
+@media (prefers-reduced-motion: reduce) { .packing :global(button), .progress > span { transition: none; } }
