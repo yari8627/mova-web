@@ -1,0 +1,60 @@
+/* Bookings only; reuse the approved trip header, cover and tabs. */
+.bookings:global(.bookings-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.bookings :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.bookings :global(.expenses-title > div) { flex: 1 1 240px; min-width: 0; }
+.bookings :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
+.bookings :global(.expenses-title p:last-child) { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.bookings :global(.booking-add-button) { min-width: 0; width: auto; min-height: 44px; flex: 0 0 auto; font-size: 12px; }
+.bookings :global(.bookings-panel) { max-width: 1280px; margin: 12px auto 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.bookings :global(.booking-overview) { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.bookings :global(.booking-overview > div) { min-width: 0; padding: 10px 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-align: center; box-shadow: none; }
+.bookings :global(.booking-overview > .booking-kpi-total) { background: #eee7d9; border-color: #ddceb3; }
+.bookings :global(.booking-overview strong), .bookings :global(.booking-kpi-total strong) { color: var(--navy); font: 400 24px/1.1 Georgia, 'Times New Roman', serif; }
+.bookings :global(.booking-overview span), .bookings :global(.booking-kpi-total span) { margin-top: 4px; color: #78684d; font-size: 11px; font-weight: 500; white-space: normal; overflow: visible; text-overflow: clip; }
+.bookings :global(.booking-group) { display: grid; gap: 8px; margin-top: 12px; }
+.bookings :global(.booking-row) { min-height: 0; padding: 12px; display: grid; grid-template-columns: 32px minmax(0,1fr) auto; align-items: start; gap: 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.bookings :global(.booking-row > div:nth-child(2)) { min-width: 0; }
+.bookings :global(.booking-title-line strong) { font: 400 21px/1.2 Georgia, 'Times New Roman', serif; color: var(--navy); overflow-wrap: anywhere; }
+.bookings :global(.booking-row > div:nth-child(2) > span) { align-items: flex-start; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.bookings :global(.booking-row > div:nth-child(2) > span svg) { flex-shrink: 0; margin-top: 1px; }
+.bookings :global(.booking-row small) { display: block; margin-top: 5px; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.bookings :global(.booking-source) { color: #78684d !important; background: #eee7d9; }
+.bookings :global(.booking-notes) { margin-top: 6px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bookings :global(.booking-icon) { width: 32px; height: 32px; border-radius: 9px; color: #94723e; background: #eee7d9; transition: none; }
+.bookings :global(.booking-icon-hotel), .bookings :global(.booking-icon-activity), .bookings :global(.booking-icon-place) { color: #65755d; background: #e7ecdf; }
+.bookings :global(.booking-icon-train), .bookings :global(.booking-icon-bus), .bookings :global(.booking-icon-ferry) { color: #526a70; background: #e8eded; }
+.bookings :global(.booking-row:hover .booking-icon) { transform: none; }
+.bookings :global(.person-actions) { grid-column: 1 / -1; display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.bookings :global(.person-actions button), .bookings :global(.booking-attach-button) { width: 44px; height: 44px; min-height: 44px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); background: transparent; }
+.bookings :global(.person-actions button:hover), .bookings :global(.booking-attach-button:hover) { color: var(--navy); background: #eee7d9; border-color: #c9b58d; }
+.bookings :global(.booking-attach-button small) { margin: 0; background: var(--navy); color: #fff; font-size: 10px; }
+.bookings :global(.booking-attach-button input) { inset: 0; width: 100%; height: 100%; pointer-events: auto; cursor: pointer; }
+.bookings :global(.person-actions .booking-documents-link) { width: auto; height: auto; min-width: 44px; display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--navy); white-space: nowrap; min-height: 44px; margin: 0 auto 0 0; padding: 5px 0; font-size: 12px; font-weight: 600; }
+.bookings :global(.booking-highlighted) { background: #f5efdf; outline-color: #c5a369; }
+.flightRoute { color: var(--navy) !important; font-weight: 600; }
+.empty { display: flex; align-items: center; gap: 12px; padding: 16px; margin-top: 12px; border: 1px solid var(--border); border-radius: 14px; color: #94723e; background: var(--surface); }
+.empty > svg { flex-shrink: 0; }
+.empty strong { color: var(--navy); font: 400 21px/1.2 Georgia, 'Times New Roman', serif; }
+.empty p { margin: 4px 0 0; font-size: 12px; color: var(--text-secondary); }
+.bookings :global(.booking-modal), .bookings :global(.booking-modal .modal-header), .bookings :global(.booking-modal .modal-actions) { background: var(--surface); }
+.bookings :global(.booking-modal h2) { font: 400 28px/1.15 Georgia, 'Times New Roman', serif; letter-spacing: -.4px; }
+.bookings :global(.booking-modal .icon-button) { width: 44px; height: 44px; flex-shrink: 0; }
+.bookings :global(.booking-modal .trip-form) { gap: 12px; }
+.bookings :global(.booking-modal input), .bookings :global(.booking-modal select), .bookings :global(.booking-modal textarea) { min-width: 0; max-width: 100%; font-size: 16px; color: var(--navy); background: #f8f5ef; border-color: var(--border); }
+.bookings :global(.booking-modal textarea) { padding: 10px 12px; border-radius: 12px; }
+.bookings :global(.booking-modal .secondary-button) { min-height: 44px; padding: 10px 14px; border-radius: 999px; background: #eee4d2; color: var(--navy); font-size: 12px; font-weight: 600; }
+.bookings :global(.booking-modal .primary-button) { font-size: 12px; }
+.bookings :global(.flight-options button), .bookings :global(.autocomplete-menu button) { min-height: 44px; background: var(--surface); border-color: var(--border); }
+.bookings :global(.airport-menu) { background: var(--surface); border-color: var(--border); }
+.bookings :global(button:focus-visible), .bookings :global(.booking-attach-button:focus-within) { outline: 2px solid #94723e; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .bookings :global(.expenses-title .trip-section-title) { font-size: 30px; }
+  .bookings :global(.booking-overview) { gap: 6px; }
+  .bookings :global(.booking-overview > div) { padding: 9px 4px; }
+  .bookings :global(.booking-row) { grid-template-columns: 32px minmax(0,1fr); padding: 12px; gap: 8px; }
+  .bookings :global(.booking-row > .person-actions) { grid-column: 1 / -1; grid-row: auto; justify-self: stretch; }
+  .bookings :global(.booking-title-line strong) { font-size: 20px; }
+  .bookings :global(.booking-modal h2) { font-size: 24px; }
+  .bookings :global(.booking-modal .form-grid) { grid-template-columns: minmax(0,1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .bookings :global(.booking-modal), .bookings :global(.booking-row), .bookings :global(button) { animation: none; transition: none; } }

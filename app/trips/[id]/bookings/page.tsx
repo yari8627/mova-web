@@ -1,4 +1,6 @@
 "use client";
+import styles from "./bookings.module.css";
+import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
 
 import { ChangeEvent, useEffect, useLayoutEffect, useState } from "react";
@@ -436,23 +438,33 @@ export default function BookingsPage() {
   }, [bookings, highlightedBookingId, paneActive]);
 
   return (
-    <main className="trip-detail-shell bookings-shell">
+    <main className={`trip-detail-shell bookings-shell ${boutique.itinerary} ${styles.bookings}`}>
       <header className="detail-topbar">
         <button
           className="detail-brand home-brand-button"
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          NAMI
+          <span>NAMI</span><small>TRAVEL</small>
         </button>
       </header>
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />
       <div className="expenses-title">
+        <div>
         <p className="section-kicker">ORGANIZZAZIONE</p>
         <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
+        </div>
+          {canManage && (
+            <button
+              className="primary-button booking-add-button"
+              onClick={openNew}
+            >
+              <Plus size={18} /> Aggiungi Prenotazione
+            </button>
+          )}
       </div>
       <section className="bookings-panel">
         <div className="booking-overview">
@@ -472,15 +484,9 @@ export default function BookingsPage() {
             <strong>{activityCount}</strong>
             <span>Attività</span>
           </div>
-          {canManage && (
-            <button
-              className="primary-button booking-add-button"
-              onClick={openNew}
-            >
-              <Plus size={18} /> Aggiungi Prenotazione
-            </button>
-          )}
+
         </div>
+        {bookings.length === 0 && <div className={styles.empty}><CalendarDays size={24} aria-hidden="true" /><div><strong>Nessuna prenotazione</strong><p>Le prenotazioni del viaggio compariranno qui.</p></div></div>}
         {groups.map((group) => (
           <div className="booking-group" key={group.type}>
             {group.items.map((item) => (
@@ -499,12 +505,14 @@ export default function BookingsPage() {
                       </span>
                     )}
                   </div>
-                  <span>
-                    <CalendarDays size={14} /> {dateLabel(item.startDate)}
-                  </span>
-                  {item.location && (
+                  {item.type === "flight" && item.originAirport && item.destinationAirport && bookingTitle(item) !== `${airportCode(item.originAirport)} → ${airportCode(item.destinationAirport)}` && <span className={styles.flightRoute}>{airportCode(item.originAirport)} → {airportCode(item.destinationAirport)}</span>}
+                  {item.startDate && <span>
+                    <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{dateLabel(item.startDate)}
+                  </span>}
+                  {item.endDate && item.endDate !== item.startDate && <span><CalendarDays size={14} /> {item.type === "hotel" ? "Check-out · " : "Fino al · "}{dateLabel(item.endDate)}</span>}
+                  {(item.location || (item.type === "flight" && (item.originAirport || item.destinationAirport))) && (
                     <span>
-                      <MapPin size={14} /> {item.location}
+                      <MapPin size={14} /> {item.location || [item.originAirport, item.destinationAirport].filter(Boolean).join(" → ")}
                     </span>
                   )}
                   {(item.provider || item.reference) && (
@@ -515,6 +523,10 @@ export default function BookingsPage() {
                     </small>
                   )}
                   {item.notes && <p className="booking-notes">{item.notes}</p>}
+
+                </div>
+                {(canManage || Boolean(attachmentCounts[item.id])) && (
+                  <div className="person-actions">
                   {attachmentCounts[item.id] ? (
                     <button
                       className="booking-documents-link"
@@ -530,9 +542,7 @@ export default function BookingsPage() {
                         : "allegati"}
                     </button>
                   ) : null}
-                </div>
-                {canManage && (
-                  <div className="person-actions">
+                    {canManage && <>
                     <label
                       className="booking-attach-button"
                       title="Allega conferma"
@@ -543,6 +553,7 @@ export default function BookingsPage() {
                       ) : null}
                       <input
                         type="file"
+                        aria-label={`Allega conferma a ${item.title}`}
                         accept=".pdf,.png,.jpg,.jpeg"
                         onChange={(event) => attachConfirmation(item, event)}
                       />
@@ -563,6 +574,7 @@ export default function BookingsPage() {
                     >
                       <Trash2 size={17} />
                     </button>
+                    </>}
                   </div>
                 )}
               </article>
@@ -579,6 +591,7 @@ export default function BookingsPage() {
             className="modal booking-modal"
             role="dialog"
             aria-modal="true"
+            aria-label={editingId ? "Modifica Prenotazione" : "Nuova Prenotazione"}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="modal-header">
