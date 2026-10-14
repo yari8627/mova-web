@@ -574,12 +574,12 @@ export default function OverviewPage() {
                 <small>
                   {packingReady ? packingItems.length ? `${packedCount} di ${packingItems.length} preparati` : "Nessun elemento nella checklist" : "Caricamento…"}
                 </small>
-                <small>Personale e condivisa</small>
+                <small>Personale e condivisa{packingReady && packingItems.length > 0 ? ` · ${Math.round(packedCount / packingItems.length * 100)}%` : ""}</small>
                 {packingReady && packingItems.length > 0 && <span className={styles.packingProgress} role="progressbar" aria-label="Preparazione valigia" aria-valuemin={0} aria-valuemax={packingItems.length} aria-valuenow={packedCount}><span style={{ width: `${packedCount / packingItems.length * 100}%` }} /></span>}
               </span>
               <ChevronRight size={19} />
             </button>
-        <button
+        {!(nextActivity && today?.phase === "active" && today.activities.slice(0, 3).some((activity) => activity.id === nextActivity.id)) && <button
           className="overview-card overview-next"
           onClick={() => router.push(`/trips/${id}`)}
         >
@@ -606,7 +606,7 @@ export default function OverviewPage() {
             )}
           </div>
           <ChevronRight size={20} />
-        </button>
+        </button>}
         <button
           className="overview-card"
           onClick={() => router.push(`/trips/${id}/expenses`)}
