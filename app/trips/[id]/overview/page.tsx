@@ -23,7 +23,7 @@ import {
 import { TripCover } from "../../../components/trip-cover";
 import { TripTabs } from "../../../components/trip-tabs";
 import { syncTripSnapshot } from "../../../../lib/trip-sync";
-import { fetchPageCache, readPageCache, writePageCache } from "../../../../lib/page-cache";
+import { fetchPageCache, readPageCache, writePageCache, subscribePageCache } from "../../../../lib/page-cache";
 import { useTripUserId } from "../../../components/trip-session";
 import { fetchTripSnapshot, readTripSnapshot } from "../../../../lib/trip-client-cache";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
@@ -243,12 +243,14 @@ export default function OverviewPage() {
       setCheckInReady(cached !== null);
       if (cached) { setCheckInCompleted(cached.completed); setReturnCheckInCompleted(cached.returnCompleted); }
     };
+    const stopPersonal = subscribePageCache(userId, personalKey, showPacking);
+    const stopShared = subscribePageCache(userId, sharedKey, showPacking);
     showPacking();
     showCheckIn();
-    void fetchPageCache(userId, personalKey, `/api/trips/${id}/packing?scope=personal`).then(showPacking);
-    void fetchPageCache(userId, sharedKey, `/api/trips/${id}/packing?scope=shared`).then(showPacking);
+    void fetchPageCache(userId, personalKey, `/api/trips/${id}/packing?scope=personal`);
+    void fetchPageCache(userId, sharedKey, `/api/trips/${id}/packing?scope=shared`);
     void fetchPageCache(userId, checkInKey, `/api/trips/${id}/check-in`).then(showCheckIn);
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopPersonal(); stopShared(); };
   }, [id, userId]);
   const nextActivity = useMemo(
     () => {

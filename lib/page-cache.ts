@@ -3,6 +3,20 @@
 const pending = new Map<string, Promise<unknown>>();
 const versions = new Map<string, number>();
 const refreshed = new Map<string, number>();
+const listeners = new Map<string, Set<() => void>>();
+
+// Subscribers receive no payload: each reads only its account/resource copy.
+export function subscribePageCache(userId: string, resource: string, listener: () => void) {
+  if (!userId) return () => {};
+  const key = `${userId}:${resource}`;
+  const subscribers = listeners.get(key) || new Set<() => void>();
+  subscribers.add(listener);
+  listeners.set(key, subscribers);
+  return () => {
+    subscribers.delete(listener);
+    if (!subscribers.size) listeners.delete(key);
+  };
+}
 
 // Account-specific copies for immediate display; the server remains authoritative.
 export function readPageCache<T>(userId: string, resource: string): T | null {
@@ -18,6 +32,9 @@ export function writePageCache<T>(userId: string, resource: string, value: T) {
   refreshed.set(key, Date.now());
   try { sessionStorage.setItem(`mova-page:${userId}:${resource}`, JSON.stringify(value)); }
   catch { /* Storage is optional. */ }
+  for (const listener of listeners.get(key) || []) {
+    try { listener(); } catch { /* A subscriber cannot interrupt a cache write. */ }
+  }
 }
 
 export async function fetchPageCache<T>(userId: string, resource: string, url: string): Promise<T | null> {
