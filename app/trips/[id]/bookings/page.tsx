@@ -495,9 +495,9 @@ export default function BookingsPage() {
                 className={`booking-row ${highlightedBookingId === item.id ? "booking-highlighted" : ""}`}
                 key={item.id}
               >
-                <BookingVisual item={item} />
-                <div>
+                <div className="booking-copy">
                   <div className="booking-title-line">
+                    <BookingVisual item={item} />
                     <strong>{bookingTitle(item)}</strong>
                     {item.source === "email" && (
                       <span className="booking-source">
@@ -505,6 +505,7 @@ export default function BookingsPage() {
                       </span>
                     )}
                   </div>
+                  <div className={styles.metadata}>
                   {item.type === "flight" && item.originAirport && item.destinationAirport && bookingTitle(item) !== `${airportCode(item.originAirport)} → ${airportCode(item.destinationAirport)}` && <span className={styles.flightRoute}>{airportCode(item.originAirport)} → {airportCode(item.destinationAirport)}</span>}
                   {item.startDate && <span>
                     <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{dateLabel(item.startDate)}
@@ -522,6 +523,7 @@ export default function BookingsPage() {
                         .join(" · ")}
                     </small>
                   )}
+                  </div>
                   {item.notes && <p className="booking-notes">{item.notes}</p>}
 
                 </div>
