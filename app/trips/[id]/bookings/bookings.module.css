@@ -60,7 +60,7 @@
 /* Constrain native date/time intrinsic sizing at the grid, label and control. */
 .bookings :global(.booking-modal .trip-form) { width: 100%; max-width: 100%; min-width: 0; grid-template-columns: minmax(0,1fr); }
 .bookings :global(.booking-modal .trip-form > *), .bookings :global(.booking-modal .trip-form label), .bookings :global(.booking-modal .form-grid) { min-width: 0; max-width: 100%; box-sizing: border-box; }
-.bookings :global(.booking-modal input[type="datetime-local"]) { display: block; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 44px; }
+.bookings :global(.booking-modal input[type="date"]), .bookings :global(.booking-modal input[type="time"]) { display: block; width: 100%; min-width: 0; max-width: 100%; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; box-sizing: border-box; height: 46px; padding: 10px; }
 .bookings :global(.booking-modal .flight-search-button) { width: fit-content; max-width: 100%; min-width: 0; min-height: 44px; justify-self: start; padding: 8px 12px; white-space: normal; text-align: left; line-height: 1.35; }
 .bookings :global(.flight-search-button > svg) { flex-shrink: 0; }
 .bookings :global(.booking-title-line) { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 8px; align-items: center; }
@@ -70,3 +70,6 @@
 .metadata > span { display: inline-flex; align-items: flex-start; gap: 5px; max-width: 100%; font-size: 12px; line-height: 1.35; color: var(--text-secondary); overflow-wrap: anywhere; }
 .metadata > span svg { flex-shrink: 0; margin-top: 1px; }
 .bookings .metadata > small { margin: 0; max-width: 100%; }
+
+.dateTimeFields { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 10px; }
+@media (max-width: 360px) { .dateTimeFields { grid-template-columns: minmax(0,1fr); } }

@@ -330,8 +330,12 @@ export default function BookingsPage() {
     setShowEditor(true);
   }
   async function save() {
+    const [date, time] = draft.startDate.split("T");
+    if (!date || !time) {
+      setSaveError("Inserisci data e ora della prenotazione.");
+      return;
+    }
     if (
-      !draft.startDate ||
       (draft.type === "flight"
         ? !draft.originAirport || !draft.destinationAirport
         : !draft.title)
@@ -339,7 +343,7 @@ export default function BookingsPage() {
       return;
     setSaving(true);
     setSaveError("");
-    const confirmedDraft = { ...draft, endDate: "", status: "confirmed" as const };
+    const confirmedDraft = { ...draft, startDate: `${date}T${time}`, endDate: "", status: "confirmed" as const };
     const completed =
       draft.type === "flight"
         ? {
@@ -369,7 +373,7 @@ export default function BookingsPage() {
     const query = new URLSearchParams({
       origin: airportCode(draft.originAirport),
       destination: airportCode(draft.destinationAirport),
-      date: draft.startDate.slice(0, 10),
+      date: draft.startDate.split("T")[0],
     });
     const response = await fetch(`/api/flights?${query}`);
     const result = await response.json();
@@ -667,17 +671,26 @@ export default function BookingsPage() {
                   />
                 </label>
               )}
-              <label>
-                Data e Ora
-                <input
-                  type="datetime-local"
-                  value={draft.startDate}
-                  onChange={(event) =>
-                    setDraft({ ...draft, startDate: event.target.value })
-                  }
-                  required
-                />
-              </label>
+              <div className={styles.dateTimeFields}>
+                <label>
+                  Data
+                  <input
+                    type="date"
+                    value={draft.startDate.split("T")[0] || ""}
+                    onChange={(event) => setDraft({ ...draft, startDate: [event.target.value, draft.startDate.split("T")[1] || ""].join("T") })}
+                    required
+                  />
+                </label>
+                <label>
+                  Ora
+                  <input
+                    type="time"
+                    value={draft.startDate.split("T")[1] || ""}
+                    onChange={(event) => setDraft({ ...draft, startDate: [draft.startDate.split("T")[0] || "", event.target.value].join("T") })}
+                    required
+                  />
+                </label>
+              </div>
               {draft.type === "flight" && (
                 <>
                   <button
@@ -688,7 +701,7 @@ export default function BookingsPage() {
                       searchingFlights ||
                       !draft.originAirport ||
                       !draft.destinationAirport ||
-                      !draft.startDate
+                      !draft.startDate.split("T")[0]
                     }
                   >
                     <Plane size={17} />{" "}
