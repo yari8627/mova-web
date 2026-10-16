@@ -60,7 +60,7 @@
 /* Constrain native date/time intrinsic sizing at the grid, label and control. */
 .bookings :global(.booking-modal .trip-form) { width: 100%; max-width: 100%; min-width: 0; grid-template-columns: minmax(0,1fr); }
 .bookings :global(.booking-modal .trip-form > *), .bookings :global(.booking-modal .trip-form label), .bookings :global(.booking-modal .form-grid) { min-width: 0; max-width: 100%; box-sizing: border-box; }
-.bookings :global(.booking-modal input[type="date"]), .bookings :global(.booking-modal input[type="time"]) { display: block; width: 100%; min-width: 0; max-width: 100%; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; box-sizing: border-box; height: 46px; padding: 10px; }
+.bookings :global(.booking-modal) .temporalInput { display: block; width: 100%; min-width: 0; max-width: 100%; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; box-sizing: border-box; height: 46px; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: #f8f5ef; color: var(--navy); -webkit-text-fill-color: var(--navy); font-family: inherit; font-size: 16px; font-weight: inherit; line-height: 24px; text-align: left; appearance: none; -webkit-appearance: none; }
 .bookings :global(.booking-modal .flight-search-button) { width: fit-content; max-width: 100%; min-width: 0; min-height: 44px; justify-self: start; padding: 8px 12px; white-space: normal; text-align: left; line-height: 1.35; }
 .bookings :global(.flight-search-button > svg) { flex-shrink: 0; }
 .bookings :global(.booking-title-line) { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 8px; align-items: center; }
@@ -71,5 +71,10 @@
 .metadata > span svg { flex-shrink: 0; margin-top: 1px; }
 .bookings .metadata > small { margin: 0; max-width: 100%; }
 
-.dateTimeFields { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 10px; }
+.dateTimeFields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; align-items: start; }
 @media (max-width: 360px) { .dateTimeFields { grid-template-columns: minmax(0,1fr); } }
+
+.temporalBox { display: block; position: relative; min-width: 0; width: 100%; height: 46px; }
+.temporalHint { position: absolute; inset: 1px 30px 1px 1px; display: flex; align-items: center; padding: 9px; border-radius: 11px; background: #f8f5ef; color: var(--text-secondary); font-size: 16px; line-height: 24px; pointer-events: none; }
+.bookings :global(.booking-modal) .temporalInput[data-empty="true"] { -webkit-text-fill-color: transparent; }
+.bookings :global(.booking-modal) .temporalInput::-webkit-date-and-time-value { min-height: 24px; margin: 0; text-align: left; }

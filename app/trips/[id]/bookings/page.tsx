@@ -676,6 +676,7 @@ export default function BookingsPage() {
                   Data
                   <input
                     type="date"
+                    className={styles.temporalInput}
                     value={draft.startDate.split("T")[0] || ""}
                     onChange={(event) => setDraft({ ...draft, startDate: [event.target.value, draft.startDate.split("T")[1] || ""].join("T") })}
                     required
@@ -683,12 +684,19 @@ export default function BookingsPage() {
                 </label>
                 <label>
                   Ora
+                  <span className={styles.temporalBox}>
                   <input
                     type="time"
+                    className={styles.temporalInput}
+                    data-empty={!draft.startDate.split("T")[1]}
+                    aria-label="Ora"
+                    title="Ora nel formato HH:mm"
                     value={draft.startDate.split("T")[1] || ""}
                     onChange={(event) => setDraft({ ...draft, startDate: [draft.startDate.split("T")[0] || "", event.target.value].join("T") })}
                     required
                   />
+                  {!draft.startDate.split("T")[1] && <span className={styles.temporalHint} aria-hidden="true">HH:mm</span>}
+                  </span>
                 </label>
               </div>
               {draft.type === "flight" && (
