@@ -1,0 +1,39 @@
+/* Travel Essentials, scoped to App Utili only. */
+.apps:global(.trip-detail-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.apps :global(.useful-apps-heading) { display: block; margin: 14px auto 12px; }
+.apps :global(.useful-apps-heading .trip-section-title) { margin: 0; color: var(--navy); font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
+.apps :global(.useful-apps-heading .section-kicker) { margin: 0 0 5px; color: #94723e; }
+.apps :global(.useful-apps-heading h1 + p) { margin-top: 6px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.apps :global(.catalog-health) { margin-top: 8px; gap: 3px 10px; }
+.apps :global(.catalog-health span) { padding: 0; color: var(--text-secondary); background: transparent; font-size: 10px; line-height: 1.45; font-weight: 400; }
+.apps :global(.useful-app-groups) { gap: 14px; }
+.apps :global(.useful-app-group) { min-width: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.apps :global(.useful-app-group > header) { margin-bottom: 7px; gap: 7px; color: #94723e; }
+.apps :global(.useful-app-group > header svg) { flex-shrink: 0; width: 18px; height: 18px; }
+.apps :global(.useful-app-group h2) { color: var(--navy); font: 400 22px/1.2 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; }
+.apps :global(.useful-app-grid) { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.apps :global(.useful-app-card) { min-width: 0; min-height: 44px; padding: 10px; display: grid; grid-template-columns: 36px minmax(0,1fr) 18px; align-items: start; gap: 8px; color: var(--navy); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+.apps :global(a.useful-app-card:hover) { border-color: #c5a369; background: #faf6ee; }
+.apps :global(a.useful-app-card:focus-visible) { outline: 2px solid #94723e; outline-offset: 2px; }
+.apps :global(.useful-app-logo) { width: 36px; height: 36px; border-radius: 9px; color: #94723e; background: #eee7d9; font-weight: 500; }
+.apps :global(.useful-app-logo img) { width: 36px; height: 36px; border-radius: inherit; object-fit: contain; }
+.appInfo { min-width: 0; }
+.apps :global(.useful-app-name) { flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.apps :global(.useful-app-name h3) { color: var(--navy); font-size: 15px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.apps :global(.useful-app-name span) { padding: 3px 6px; color: #65755d; background: #edf0e7; font-size: 9px; font-weight: 500; text-transform: none; }
+.apps :global(.useful-app-card p) { margin-top: 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.apps :global(.useful-app-card small) { margin-top: 5px; font-size: 10px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+.apps :global(.app-verified) { color: #65755d; }
+.apps :global(.app-review) { color: #876831; }
+.externalArrow { color: #94723e; margin-top: 1px; }
+.noLink { grid-column: 2 / -1; color: var(--text-secondary); }
+.srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.tip { max-width: 1280px; margin: 14px auto 0; padding: 12px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--border); border-radius: 12px; background: #eee7d9; }
+.tip > svg { flex-shrink: 0; color: #94723e; }
+.tip > div { min-width: 0; }
+.tip h2 { margin: 0; color: var(--navy); font: 400 19px/1.2 Georgia, 'Times New Roman', serif; }
+.tip p { margin: 5px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.apps :global(.useful-app-note) { margin: 10px auto 0; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.emptyState { max-width: 1280px; margin: 12px auto; color: var(--text-secondary); font-size: 13px; }
+@media (max-width: 760px) { .apps :global(.useful-app-grid) { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 559px) { .apps :global(.useful-apps-heading .trip-section-title) { font-size: 30px; } }

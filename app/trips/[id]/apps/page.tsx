@@ -1,5 +1,8 @@
 "use client";
 
+import styles from "./apps.module.css";
+import boutique from "../itinerary.module.css";
+
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -244,8 +247,8 @@ const categoryIcon = (category: string) =>
 
 function AppLogo({ app }: { app: TravelApp }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <>{app.icon}</>;
-  return <img src={`/api/travel-app-icons?name=${encodeURIComponent(app.name)}&website=${encodeURIComponent(app.url)}`} alt="" loading="lazy" onError={() => setFailed(true)} />;
+  if (failed || !app.url) return <Smartphone size={22} aria-hidden="true" />;
+  return <img src={`/api/travel-app-icons?name=${encodeURIComponent(app.name)}&website=${encodeURIComponent(app.url)}`} alt="" width={36} height={36} loading="lazy" onError={() => setFailed(true)} />;
 }
 
 export default function UsefulAppsPage() {
@@ -301,30 +304,27 @@ export default function UsefulAppsPage() {
   }, [appCountry, apps, trip]);
 
   return (
-    <main className="trip-detail-shell">
+    <main className={`trip-detail-shell ${boutique.itinerary} ${styles.apps}`}>
       <header className="detail-topbar">
         <button
           className="detail-brand home-brand-button"
           onClick={() => router.push("/")}
+          aria-label="Torna alla Home"
         >
-          NAMI
+          <span>NAMI</span><small>TRAVEL</small>
         </button>
       </header>
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />
       <section className="useful-apps-heading">
-        <div className="useful-apps-icon">
-          <Smartphone size={25} />
-        </div>
         <div>
           <p className="section-kicker">PRIMA DI PARTIRE</p>
-          <h1 className="trip-section-title">App Utili {trip ? `in ${trip.country}` : "per il viaggio"}</h1>
+          <h1 className="trip-section-title">App Utili</h1>
           <p>
-            Installa e configura le app essenziali prima della partenza, quando
-            hai ancora una connessione stabile.
+            Le app essenziali per il tuo viaggio{trip?.country ? ` in ${trip.country}` : ""}.
           </p>
-          {catalogStatus && (
+          {catalogStatus && apps.length > 0 && (
             <div className="catalog-health">
               <span>
                 Catalogo controllato{" "}
@@ -335,7 +335,7 @@ export default function UsefulAppsPage() {
               </span>
               {catalogStatus.pendingCandidates > 0 && (
                 <span>
-                  {catalogStatus.pendingCandidates} nuove{" "}
+                  {catalogStatus.pendingCandidates} {catalogStatus.pendingCandidates === 1 ? "nuova" : "nuove"}{" "}
                   {catalogStatus.pendingCandidates === 1
                     ? "app candidata"
                     : "app candidate"}{" "}
@@ -346,6 +346,7 @@ export default function UsefulAppsPage() {
           )}
         </div>
       </section>
+      {!apps.length && <p className={styles.emptyState}>Catalogo non ancora disponibile per il viaggio.</p>}
       <div className="useful-app-groups">
         {groups.map((category) => {
           const Icon = categoryIcon(category);
@@ -362,10 +363,11 @@ export default function UsefulAppsPage() {
                     const check = catalogStatus?.checks.find(
                       (item) => item.name === app.name,
                     );
+                    const Card = app.url ? "a" : "article";
                     return (
-                      <article className="useful-app-card" key={app.name}>
-                        <div className="useful-app-logo"><AppLogo app={app} /></div>
-                        <div>
+                      <Card className="useful-app-card" key={app.name} href={app.url || undefined} target={app.url ? "_blank" : undefined} rel={app.url ? "noreferrer" : undefined}>
+                        <div className="useful-app-logo" aria-hidden="true"><AppLogo app={app} /></div>
+                        <div className={styles.appInfo}>
                           <div className="useful-app-name">
                             <h3>{app.name}</h3>
                             {app.essential && <span>Essenziale</span>}
@@ -383,10 +385,8 @@ export default function UsefulAppsPage() {
                             </small>
                           )}
                         </div>
-                        <a href={app.url} target="_blank" rel="noreferrer">
-                          Apri <ArrowUpRight size={16} />
-                        </a>
-                      </article>
+                        {app.url ? <><ArrowUpRight size={18} className={styles.externalArrow} aria-hidden="true" /><span className={styles.srOnly}>Apri il sito ufficiale in una nuova scheda</span></> : <small className={styles.noLink}>Collegamento non disponibile</small>}
+                      </Card>
                     );
                   })}
               </div>
@@ -394,6 +394,7 @@ export default function UsefulAppsPage() {
           );
         })}
       </div>
+      {apps.length > 0 && <aside className={styles.tip}><Smartphone size={20} aria-hidden="true" /><div><h2>Consiglio NAMI</h2><p>Installa le app essenziali e configura gli account prima di partire, quando hai una connessione stabile.</p></div></aside>}
       <p className="useful-app-note">
         Disponibilità e funzionalità possono cambiare. Verifica sempre
         requisiti, copertura e condizioni sul sito ufficiale prima della
