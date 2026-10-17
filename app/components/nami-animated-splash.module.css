@@ -21,9 +21,10 @@
 .departure, .upright { will-change: transform; }
 .upright { transform-origin: 50% 42%; }
 .upright img { display: block; width: 100%; height: auto; object-fit: contain; }
-.wordmark { text-align: center; color: #145cff; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); }
-.wordmark strong { display: block; font-size: clamp(40px, 11vw, 62px); font-weight: 800; line-height: 1.08; letter-spacing: .025em; }
-.wordmark span { display: block; font-size: clamp(17px, 4.5vw, 22px); font-weight: 500; letter-spacing: .12em; margin-top: 5px; }
+.wordmark { text-align: center; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); height: calc(clamp(43.2px, 11.88vw, 66.96px) + clamp(25.5px, 6.75vw, 33px) + 5px); }
+/* Preserve the previous wordmark's line-box height so the centered composition
+   keeps the balloon at its approved position throughout the flight. */
+.wordmark .logo { cursor: default; }
 .play .flight { animation: arrive var(--entrance) 150ms cubic-bezier(.22, .55, .3, 1) both; }
 .play .rise { animation: rise var(--entrance) 150ms cubic-bezier(.16, .5, .35, 1) both; }
 .play .upright img { will-change: transform; animation: sway 3600ms ease-in-out infinite; }
