@@ -1,10 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Camera, LogOut, UserRound } from "lucide-react";
+import { Camera, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import countries from "i18n-iso-countries";
 import italian from "i18n-iso-countries/langs/it.json";
+
+import brandStyles from "../../components/trip-header.module.css";
+import styles from "./profile.module.css";
 
 countries.registerLocale(italian);
 const passportCountries = Object.entries(countries.getNames("it", { select: "official" })).map(([alpha2, name]) => ({ code: countries.alpha2ToAlpha3(alpha2) || alpha2, name })).sort((a, b) => a.name.localeCompare(b.name, "it"));
@@ -15,7 +18,28 @@ export default function ProfileSettingsPage() {
   async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setMessage(""); const response = await fetch("/api/auth/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profile) }); const result = await response.json(); if (!response.ok) return setError(result.error); setMessage(result.emailChanged ? "Profilo salvato. Verifica il nuovo indirizzo email per renderlo attivo." : "Profilo aggiornato."); setPreviewUrl(result.previewUrl || ""); router.refresh(); }
   async function upload(file?: File) { if (!file) return; setError(""); const body = new FormData(); body.append("avatar", file); const response = await fetch("/api/auth/profile", { method: "POST", body }); const result = await response.json(); if (!response.ok) return setError(result.error); setProfile((value) => value ? { ...value, avatarUrl: result.avatarUrl } : value); setMessage("Foto profilo aggiornata."); }
   async function logout() { setLoggingOut(true); await fetch("/api/auth/logout", { method: "POST" }); router.replace("/auth"); router.refresh(); }
-  if (!profile) return <main className="detail-loading">Caricamento profilo…</main>;
+  if (!profile) return <main className={styles.loading} role="status">Caricamento profilo…</main>;
   const initials = profile.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
-  return <main className="preference-shell"><header><button className="detail-brand home-brand-button" onClick={() => router.push("/")}>NAMI</button></header><section className="preference-card profile-card"><div className="preference-heading"><span><UserRound size={25} /></span><div><p className="section-kicker">PROFILO</p><h1>I tuoi dati</h1><p>Gestisci l’identità mostrata nei tuoi viaggi.</p></div></div><div className="profile-avatar-editor">{profile.avatarUrl ? <img src={profile.avatarUrl} alt="Foto profilo" /> : <div>{initials}</div>}<label><Camera size={17} /> Cambia foto<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label><small>JPG, PNG o WebP · massimo 3 MB</small></div>{message && <div className="security-success">{message}</div>}{error && <div className="auth-error security-feedback">{error}</div>}{profile.pendingEmail && <div className="security-result">In attesa di verifica: <strong>{profile.pendingEmail}</strong></div>}<form className="security-form" onSubmit={save}><label>Nome e cognome<input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required /></label><label>Email<input type="email" value={profile.pendingEmail || profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value, pendingEmail: null })} required /></label><label>Paese del passaporto<select value={profile.passportCountry || "ITA"} onChange={(event) => setProfile({ ...profile, passportCountry: event.target.value })}>{passportCountries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select><small>Serve a calcolare automaticamente visti e documenti richiesti.</small></label><button className="primary-button security-action">Salva profilo</button></form>{previewUrl && <button className="security-preview-link profile-preview" onClick={() => router.push(previewUrl)}>Apri link di verifica</button>}<button type="button" className="secondary-button auth-submit profile-logout" onClick={logout} disabled={loggingOut}><LogOut size={18} /> {loggingOut ? "Uscita in corso…" : "Esci dall'account"}</button></section></main>;
+  return <main className={styles.page}>
+    <div className={styles.content}>
+      <header className={styles.header}><button className={brandStyles.wordmarkButton} onClick={() => router.push("/")} aria-label="NAMI Travel, torna alla Home"><span>NAMI</span><small>TRAVEL</small></button></header>
+      <section className={styles.heading}><p className={styles.eyebrow}>IL TUO PROFILO</p><h1>I tuoi dati</h1><p>La tua identità, per ogni viaggio.</p></section>
+      <div className={styles.avatarEditor}>
+        {profile.avatarUrl ? <img src={profile.avatarUrl} alt="Foto profilo" width={104} height={104} /> : <div className={styles.initials}>{initials}</div>}
+        <label className={styles.photoAction}><Camera size={17} aria-hidden="true" /> Cambia foto<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => upload(event.target.files?.[0])} /></label>
+        <small>JPG, PNG o WebP · massimo 3 MB</small>
+      </div>
+      <form className={styles.form} onSubmit={save}>
+        {message && <div className={styles.success} role="status">{message}</div>}
+        {error && <div className={styles.error} role="alert">{error}</div>}
+        {profile.pendingEmail && <div className={styles.pending}>In attesa di verifica: <strong>{profile.pendingEmail}</strong></div>}
+        <label>Nome e cognome<input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required /></label>
+        <label>Email<input type="email" value={profile.pendingEmail || profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value, pendingEmail: null })} required /></label>
+        <label>Paese del passaporto<select value={profile.passportCountry || "ITA"} onChange={(event) => setProfile({ ...profile, passportCountry: event.target.value })}>{passportCountries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}</select><small>Serve a calcolare automaticamente visti e documenti richiesti.</small></label>
+        <button className={styles.save}>Salva profilo</button>
+      </form>
+      {previewUrl && <button className={styles.preview} onClick={() => router.push(previewUrl)}>Apri link di verifica</button>}
+      <button type="button" className={styles.logout} onClick={logout} disabled={loggingOut}><LogOut size={18} aria-hidden="true" /> {loggingOut ? "Uscita in corso…" : "Esci dall'account"}</button>
+    </div>
+  </main>;
 }
