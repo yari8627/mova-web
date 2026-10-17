@@ -1,0 +1,58 @@
+/* Participants only; reuse the approved trip chrome without changing shared CSS. */
+.participants:global(.participants-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.participants :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; }
+.titleRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.titleRow > div { flex: 1 1 180px; min-width: 0; }
+.participants :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; overflow-wrap: anywhere; }
+.titleRow > div > p:last-child { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.participants .titleRow > button { flex: 0 0 auto; padding: 10px 12px; font-size: 12px; }
+.participants :global(.participants-grid) { max-width: 1280px; margin: 12px auto 0; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.participants :global(.participants-panel) { min-width: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.groupSummary { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.groupSummary > svg { flex-shrink: 0; color: #94723e; }
+.groupSummary h2 { margin: 0; color: var(--navy); font-size: 15px; font-weight: 600; }
+.groupSummary p { margin: 3px 0 0; font-size: 11px; line-height: 1.4; color: var(--text-secondary); }
+.participants :global(.people-list) { margin-top: 0; gap: 8px; }
+.participants :global(.people-list article), .participants :global(.people-list article:last-child) { min-width: 0; min-height: 0; padding: 10px 10px 4px; display: grid; grid-template-columns: 32px minmax(0,1fr) auto; gap: 3px 8px; align-items: start; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.participants :global(.person-avatar) { width: 32px; height: 32px; grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 500; background: #eee4d2; color: #876831; }
+.personInfo { grid-column: 2; grid-row: 1; min-width: 0; }
+.personInfo > strong { display: block; font-size: 15px; line-height: 1.35; font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+.participants .personInfo > span { margin-top: 2px; color: var(--text-secondary); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.participants :global(.status-chip) { grid-column: 3; grid-row: 1; justify-self: end; max-width: 100%; padding: 5px 6px; font-size: 10px; font-weight: 400; white-space: normal; }
+.participants :global(.status-chip svg) { flex-shrink: 0; }
+.participants :global(.status-chip.confirmed) { color: #65755d; background: #edf0e7; }
+.participants :global(.status-chip.pending) { color: #876831; background: #f3e9d6; }
+.personFooter { grid-column: 2 / -1; min-width: 0; min-height: 36px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 6px; }
+.participants :global(.role-chip) { grid-column: auto; min-width: 0; max-width: 100%; padding: 5px 7px; color: var(--navy); background: #f4f0e8; border: 1px solid var(--border); font-size: 10px; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
+.participants :global(.role-chip).ownerRole { color: #876831; border-color: #d1bd97; background: #eee4d2; }
+.participants :global(.person-actions) { grid-column: auto; grid-row: auto; display: flex; gap: 0; margin-left: auto; }
+.participants :global(.person-actions button) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; color: var(--text-secondary); }
+.participants :global(.person-actions button:hover) { color: var(--navy); background: #eee7d9; }
+.participants :global(.invite-panel) { min-width: 0; padding: 14px; display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 6px 10px; text-align: left; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: none; }
+.participants :global(.invite-icon) { grid-column: 1; grid-row: 1; margin: 0; width: 28px; height: 28px; color: #94723e; background: transparent; }
+.participants :global(.invite-panel h2) { grid-column: 2; margin: 0; color: var(--navy); font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.participants :global(.invite-panel > p) { grid-column: 2; margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.participants :global(.invite-email) { grid-column: 2; justify-self: start; width: auto; margin-top: 3px; padding: 10px 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.participants :global(.secondary-button) { min-height: 44px; border-radius: 999px; color: var(--navy); background: #eee4d2; }
+.participants :global(.invite-code) { grid-column: 1 / -1; margin-top: 4px; padding: 4px 6px 4px 10px; gap: 6px; border: 1px solid #d1bd97; background: #f4f0e8; color: var(--navy); }
+.participants :global(.invite-code strong) { min-width: 0; font-size: 13px; line-height: 1.4; font-weight: 500; overflow-wrap: anywhere; }
+.participants :global(.invite-code button) { flex-shrink: 0; width: 44px; height: 44px; min-height: 44px; color: var(--navy); background: transparent; }
+.participants :global(.copy-feedback) { grid-column: 2; margin-top: 0; color: #65755d; font-size: 11px; }
+.participants :global(.participant-modal), .participants :global(.participant-modal .modal-header), .participants :global(.participant-modal .modal-actions) { background: var(--surface); }
+.participants :global(.participant-modal h2) { color: var(--navy); font: 400 25px/1.15 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; }
+.participants :global(.participant-modal .icon-button) { width: 44px; height: 44px; min-width: 44px; }
+.participants :global(.participant-modal .trip-form) { min-width: 0; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.participants :global(.participant-modal label) { min-width: 0; }
+.participants :global(.participant-modal input), .participants :global(.participant-modal select) { min-width: 0; width: 100%; max-width: 100%; min-height: 44px; font-size: 16px; color: var(--navy); background: #f8f5ef; border-color: var(--border); }
+.participants :global(.invite-status-note) { padding: 10px; align-items: flex-start; gap: 8px; border-color: #d1bd97; background: #f4f0e8; color: #876831; }
+.participants :global(.invite-status-note svg) { flex-shrink: 0; }
+.participants :global(.invite-status-note span) { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.participants :global(button:focus-visible), .participants :global(input:focus-visible), .participants :global(select:focus-visible) { outline: 2px solid #94723e; outline-offset: 2px; }
+@media (max-width: 559px) {
+  .participants :global(.expenses-title .trip-section-title) { font-size: 30px; }
+}
+@media (max-width: 360px) {
+  .participants :global(.status-chip) { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
+  .personInfo { grid-column: 2 / -1; }
+  .personFooter { grid-row: 3; }
+}
