@@ -1,0 +1,92 @@
+/* Boutique Explorer, scoped exclusively to the trip Expenses screen. */
+.expenses:global(.expenses-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.expenses :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; }
+.expenses :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
+.expenses :global(.expenses-title > p:last-child) { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; }
+.expenses :global(.budget-summary) { max-width: 1280px; margin: 12px auto 0; padding: 18px; display: block; border: 1px solid var(--navy); border-radius: 16px; color: #fffcf7; background: var(--navy); }
+.totalSpent { min-width: 0; }
+.totalSpent > span { color: #e0c99f; font-size: 12px; }
+.expenses .totalSpent > strong { display: block; margin-top: 4px; color: #fffcf7; font: 400 clamp(30px, 7vw, 42px)/1.15 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.budgetDetails { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #405160; }
+.expenses .budgetDetails > article { min-width: 0; min-height: 0; padding: 0; display: grid; align-content: start; gap: 5px; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.expenses .budgetDetails > article > span { color: #e0c99f; font-size: 11px; }
+.expenses .budgetDetails > article > span small { font-size: 10px; }
+.expenses .budgetDetails strong { color: #fffcf7; font-size: 19px; font-weight: 500; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.expenses .budgetDetails :global(.budget-empty) { font-size: 13px !important; font-weight: 400; color: #d8d3ca; }
+.expenses .budgetDetails label { min-width: 0; min-height: 44px; margin-top: -5px; padding: 4px 7px; border: 1px solid #73808a; border-radius: 8px; color: #fffcf7; font-size: 17px; font-weight: 400; }
+.expenses .budgetDetails input { min-width: 0; max-width: 100%; min-height: 34px; color: #fffcf7; font-size: 17px; font-weight: 400; color-scheme: dark; }
+.expenses .budgetDetails input::placeholder { color: #d8d3ca; opacity: 1; }
+.expenses .budgetDetails :global(.positive) { color: #c4d4b7 !important; }
+.expenses .budgetDetails :global(.negative) { color: #f0c795 !important; }
+.overBudget { color: #f0c795; font-size: 11px; }
+.averageHint { margin: 12px 0 0; color: #d8d3ca; font-size: 11px; line-height: 1.45; }
+.expenses :global(.expenses-grid.personal-expenses-grid) { margin-top: 12px; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.expenses :global(.balances-panel), .expenses :global(.expenses-list-panel) { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: none; }
+.expenses :global(.balances-panel h2), .expenses :global(.panel-heading h2) { margin: 0; color: var(--navy); text-align: left; font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.expenses :global(.balances-panel > p:not(.section-kicker)) { margin: 7px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.expenses :global(.balance-subtitle), .expenses :global(.balance-subtitle.receiving) { margin: 12px 0 6px; color: #876831; font-size: 12px; font-weight: 600; }
+.expenses :global(.balance-subtitle.receiving) { color: #65755d; }
+.expenses :global(.balance-list) { gap: 6px; }
+.expenses :global(.balance-list > div) { min-width: 0; min-height: 0; padding: 8px; grid-template-columns: 32px minmax(0,1fr) minmax(0,.9fr); gap: 6px 8px; background: transparent; border-color: var(--border); border-radius: 10px; }
+.expenses :global(.balance-avatar) { width: 32px; height: 32px; background: #eee4d2; color: #876831; font-size: 13px; font-weight: 500; }
+.expenses :global(.balance-avatar.receiving) { background: #edf0e7; color: #65755d; }
+.expenses :global(.balance-list b) { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.expenses :global(.balance-list small) { font-size: 11px; }
+.expenses :global(.balance-list strong) { max-width: 100%; text-align: right; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.expenses :global(.balance-list .positive) { color: #65755d !important; }
+.expenses :global(.balance-list .negative) { color: #876831 !important; }
+.expenses :global(.panel-heading) { gap: 8px; flex-wrap: wrap; }
+.expenses :global(.panel-heading > div) { flex: 1 1 90px; }
+.expenses :global(.panel-heading > .primary-button) { min-width: 0; padding: 10px 12px; font-size: 12px; }
+.expenses :global(.expense-list) { margin-top: 10px; gap: 8px; }
+.expenses :global(.expense-row), .expenses :global(.expense-row:last-child) { min-width: 0; min-height: 0; padding: 9px 10px 4px; display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 3px 8px; align-items: start; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+.expenses :global(.expense-icon) { width: 32px; height: 32px; grid-column: 1; grid-row: 1; color: #94723e; background: #eee7d9; border-radius: 9px; }
+.expenses .movementInfo { grid-column: 2; grid-row: 1; min-width: 0; }
+.expenses .movementInfo > strong { display: block; color: var(--navy); font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.expenses .movementInfo > span { font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.expenses :global(.expense-amount) { grid-column: 2; grid-row: 2; min-width: 0; text-align: left; align-self: center; }
+.expenses :global(.expense-amount strong) { color: var(--navy); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.expenses :global(.expense-amount span) { font-size: 11px; }
+.expenses :global(.expense-row-actions) { grid-column: 2; grid-row: 3; justify-self: end; gap: 0; }
+.expenses :global(.expense-row-actions button) { width: 44px; height: 44px; min-width: 44px; min-height: 44px; color: var(--text-secondary); }
+.expenses :global(.expense-row-actions button:hover) { color: var(--navy); background: #eee7d9; }
+.expenses :global(.expense-row).settlementRow { background: #f4f3eb; border-color: #d8decc; }
+.expenses :global(.expense-icon.settlement) { color: #65755d; background: #e7ebdf; }
+.emptyState { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.expenses :global(.expense-modal), .expenses :global(.expense-modal .modal-header), .expenses :global(.expense-modal .modal-actions) { background: var(--surface); }
+.expenses :global(.expense-modal h2) { color: var(--navy); font: 400 25px/1.15 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; }
+.expenses :global(.expense-modal .icon-button) { width: 44px; height: 44px; min-width: 44px; }
+.expenses :global(.expense-modal .trip-form) { min-width: 0; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.expenses :global(.expense-modal label), .expenses :global(.expense-modal .form-grid) { min-width: 0; }
+.expenses :global(.expense-modal input), .expenses :global(.expense-modal select) { min-width: 0; width: 100%; max-width: 100%; min-height: 44px; font-size: 16px; color: var(--navy); background: #f8f5ef; border-color: var(--border); }
+.expenses :global(.movement-type) { background: #eee7d9; }
+.expenses :global(.movement-type button) { min-height: 44px; min-width: 0; padding: 8px; }
+.expenses :global(.movement-type button.selected) { background: var(--surface); color: var(--navy); box-shadow: none; }
+.expenses :global(.split-people > div) { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
+.expenses :global(.split-people button) { min-width: 0; min-height: 44px; padding: 8px; font-size: 12px; color: var(--navy); background: var(--surface); overflow-wrap: anywhere; text-align: left; }
+.expenses :global(.split-people button.selected) { background: #eee7d9; border-color: #c5a369; }
+.expenses :global(.split-people button > span:first-child) { color: #876831; background: #eee4d2; }
+.expenses :global(.split-preview) { min-width: 0; padding: 10px; grid-template-columns: auto minmax(0,1fr); gap: 6px; border-color: var(--border); color: var(--navy); background: #eee7d9; font-size: 12px; }
+.expenses :global(.split-preview strong) { grid-column: 2; font-size: 16px; overflow-wrap: anywhere; }
+.expenses :global(.settlement-note) { padding: 10px; color: #65755d; border-color: #cad4bd; background: #edf0e7; }
+.expenses :global(.settlement-note svg) { flex-shrink: 0; }
+.expenses :global(.settlement-note span) { color: #65755d; overflow-wrap: anywhere; }
+.expenses :global(.secondary-button) { min-height: 44px; border-radius: 999px; color: var(--navy); background: #eee4d2; }
+.expenses :global(button:focus-visible), .expenses :global(input:focus-visible), .expenses :global(select:focus-visible) { outline: 2px solid #c5a369; outline-offset: 2px; }
+@media (min-width: 560px) {
+  .expenses :global(.expense-row) { grid-template-columns: 32px minmax(0,1fr) minmax(0,180px); }
+  .expenses :global(.expense-amount) { grid-column: 3; grid-row: 1; text-align: right; }
+  .expenses :global(.expense-row-actions) { grid-column: 3; grid-row: 2; }
+}
+@media (max-width: 559px) {
+  .expenses :global(.expenses-title .trip-section-title) { font-size: 30px; }
+  .expenses :global(.budget-summary) { padding: 14px; }
+  .budgetDetails { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .expenses :global(.expense-row) { grid-template-columns: 32px minmax(0,1fr) 88px; }
+  .expenses .movementInfo { grid-column: 2 / -1; }
+  .expenses :global(.expense-amount) { grid-column: 1 / 3; padding-top: 4px; }
+  .expenses :global(.expense-row-actions) { grid-column: 3; grid-row: 2; align-self: center; }
+}
+@media (max-width: 360px) {
+  .expenses :global(.split-people > div), .expenses :global(.expense-modal .form-grid) { grid-template-columns: minmax(0,1fr); }
+}

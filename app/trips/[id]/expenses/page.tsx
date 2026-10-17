@@ -1,5 +1,8 @@
 "use client";
 
+import styles from "./expenses.module.css";
+import boutique from "../itinerary.module.css";
+
 import { calculateGroupBalances, normalizeSharedWith } from "../../../../lib/expense-balances";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -138,33 +141,37 @@ export default function ExpensesPage() {
     setShowAdd(false);
   }
 
-  return <main className="trip-detail-shell expenses-shell">
-    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home">NAMI</button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
+  return <main className={`trip-detail-shell expenses-shell ${boutique.itinerary} ${styles.expenses}`}>
+    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home"><span>NAMI</span><small>TRAVEL</small></button>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Aggiungi</button>}</header>
     <TripCover tripId={id} />
     <div className="trip-swipe-body">
     <TripTabs tripId={id} />
-    <div className="expenses-title"><p className="section-kicker">VIAGGIO</p><h1 className="trip-section-title">Budget e spese</h1><p>Tieni sotto controllo i costi e dividili con il gruppo.</p></div>
+    <div className="expenses-title"><p className="section-kicker">IL BUDGET DEL VIAGGIO</p><h1 className="trip-section-title">Spese</h1><p>Ogni spesa, tutto sotto controllo</p></div>
 
-    <section className="budget-summary">
+    <section className="budget-summary" aria-label="Riepilogo economico">
+      <div className={styles.totalSpent}><span>Totale speso</span><strong>{money.format(total)}</strong></div>
+      <div className={styles.budgetDetails}>
       <article><span>Budget totale <small>(opzionale)</small></span><label><span>€</span><input type="number" min="0" value={budget ?? ""} placeholder="—" onChange={(event) => { const value = event.target.value === "" ? null : Number(event.target.value); setBudget(value); if (value === null) window.localStorage.removeItem(`mova-budget-${id}`); else window.localStorage.setItem(`mova-budget-${id}`, String(value)); void syncTripSnapshot(id, { budget: value }); }} aria-label="Budget totale opzionale" /></label></article>
-      <article><span>Totale speso</span><strong>{money.format(total)}</strong></article>
-      <article><span>Budget residuo</span>{budget === null ? <strong className="budget-empty">Non impostato</strong> : <strong className={budget - total < 0 ? "negative" : "positive"}>{money.format(budget - total)}</strong>}</article>
+      <article><span>Budget residuo</span>{budget === null ? <strong className="budget-empty">Budget non impostato</strong> : <><strong className={budget - total < 0 ? "negative" : "positive"}>{money.format(budget - total)}</strong>{budget - total < 0 && <small className={styles.overBudget}>Budget superato</small>}</>}</article>
       <article><span>Quota a persona</span><strong>{money.format(perPerson)}</strong></article>
+      </div>
+      <p className={styles.averageHint}>Quota media sul gruppo; la ripartizione delle singole spese può variare.</p>
     </section>
 
     <div className="expenses-grid personal-expenses-grid">
       <section className="balances-panel"><p className="section-kicker">I TUOI SALDI</p><h2>Saldi da regolare</h2>
         {!userName ? <p>Caricamento…</p> : <>
           <h3 className="balance-subtitle receiving">Devi ricevere</h3>
-          {toReceive.length ? <div className="balance-list transfer-list">{toReceive.map(item => <div key={item.from}><div className="balance-avatar receiving">{item.from.slice(0, 1)}</div><span><b>{item.from}</b><small>Devi ricevere {money.format(item.amount)} da {item.from}</small></span><strong className="positive">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da ricevere.</p>}
-          <h3 className="balance-subtitle receiving">Devi pagare</h3>
-          {toPay.length ? <div className="balance-list transfer-list">{toPay.map(item => <div key={item.to}><div className="balance-avatar">{item.to.slice(0, 1)}</div><span><b>{item.to}</b><small>Devi pagare {money.format(item.amount)} a {item.to}</small></span><strong className="negative">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da pagare.</p>}
+          {toReceive.length ? <div className="balance-list transfer-list">{toReceive.map(item => <div key={item.from}><div className="balance-avatar receiving">{item.from.slice(0, 1)}</div><span><b>{item.from}</b><small>Da ricevere</small></span><strong className="positive">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da ricevere.</p>}
+          <h3 className="balance-subtitle">Devi pagare</h3>
+          {toPay.length ? <div className="balance-list transfer-list">{toPay.map(item => <div key={item.to}><div className="balance-avatar">{item.to.slice(0, 1)}</div><span><b>{item.to}</b><small>Da pagare</small></span><strong className="negative">{money.format(item.amount)}</strong></div>)}</div> : <p>Non hai importi da pagare.</p>}
         </>}
       </section>
 
-      <section className="expenses-list-panel"><div className="panel-heading"><div><p className="section-kicker">MOVIMENTI</p><h2>Spese</h2></div><button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Nuova spesa</button></div>
+      <section className="expenses-list-panel"><div className="panel-heading"><div><p className="section-kicker">IL TUO REGISTRO</p><h2>Movimenti</h2></div>{role && <button className="primary-button" onClick={openNewExpense}><Plus size={18} /> Nuova spesa</button>}</div>
         {saveError && <div className="auth-error security-feedback">{saveError}</div>}
-        <div className="expense-list">{sortedExpenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; const visualCategory = expenseTravelCategory(expense); return <article className="expense-row" key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : visualCategory ? `booking-icon-${visualCategory}` : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `${expense.category} · Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div><div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`}><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`}><Trash2 size={17} /></button></div></article>; })}</div>
+        {!sortedExpenses.length && <p className={styles.emptyState}>Nessuna spesa registrata. Aggiungi il primo movimento del viaggio.</p>}
+        <div className="expense-list">{sortedExpenses.map((expense) => { const currentSplitCount = expense.sharedWith?.filter((participant) => participants.includes(participant)).length || participants.length; const visualCategory = expenseTravelCategory(expense); return <article className={`expense-row ${expense.kind === "settlement" ? styles.settlementRow : ""}`} key={expense.id}><div className={`expense-icon ${expense.kind === "settlement" ? "settlement" : visualCategory ? `booking-icon-${visualCategory}` : ""}`}><ExpenseCategoryIcon expense={expense} /></div><div className={styles.movementInfo}><strong>{expense.description}</strong><span>{expense.kind === "settlement" ? "Regolazione saldo" : expense.category}</span><span>{expense.kind === "settlement" ? `${expense.paidBy} → ${expense.recipient}` : `Pagata da ${expense.paidBy} · Divisa tra ${currentSplitCount}`}</span></div><div className="expense-amount"><strong>{money.format(expense.amount)}</strong><span>{new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(`${expense.date}T12:00:00`))}</span></div>{(canManage || (Boolean(userId) && expense.createdById === userId)) && <div className="expense-row-actions"><button onClick={() => openEditExpense(expense)} aria-label={`Modifica ${expense.description}`} title="Modifica"><Pencil size={17} /></button><button className="row-delete" onClick={() => void deleteExpense(expense.id)} aria-label={`Elimina ${expense.description}`} title="Elimina"><Trash2 size={17} /></button></div>}</article>; })}</div>
       </section>
 
 
