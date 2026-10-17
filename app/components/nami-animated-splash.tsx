@@ -2,7 +2,6 @@
 
 import { CSSProperties, ReactNode, useEffect, useState } from "react";
 import styles from "./nami-animated-splash.module.css";
-import brandStyles from "./trip-header.module.css";
 
 // Shared by the CSS timeline and the readiness gate. Geometry lives in the CSS module.
 export const SPLASH_TIMING = { intro: 4500, entrance: 2200, wordmarkDelay: 1950, wordmarkFade: 500, straighten: 1100, departureDelay: 2750, departure: 1550, transition: 350, reduced: 300 };
@@ -44,7 +43,7 @@ export function NamiAnimatedSplash({ ready, children, onComplete }: { ready: boo
         <div className={styles.departure}><div className={styles.flight}><div className={styles.rise}><div className={styles.upright}>
           <img src="/images/nami-balloon.png" width="1261" height="1247" alt="" fetchPriority="high" loading="eager" onLoad={() => setImageReady(true)} onError={() => setImageReady(true)} />
         </div></div></div></div>
-        <div className={styles.wordmark}><div className={`${brandStyles.wordmarkButton} ${styles.logo}`}><span>NAMI</span><small>TRAVEL</small></div></div>
+        <div className={styles.wordmark}><div className={styles.logo}><span>NAMI</span><small>TRAVEL</small></div></div>
       </div>
     </div>}
   </>;

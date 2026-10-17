@@ -24,7 +24,11 @@
 .wordmark { text-align: center; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); height: calc(clamp(43.2px, 11.88vw, 66.96px) + clamp(25.5px, 6.75vw, 33px) + 5px); }
 /* Preserve the previous wordmark's line-box height so the centered composition
    keeps the balloon at its approved position throughout the flight. */
-.wordmark .logo { cursor: default; }
+/* Exact approved wordmark typography from trip-header.module.css at 311d654.
+   Keep this presentation local: startup must not load or alter header styles. */
+.logo { min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: #102538; font-weight: 400; text-align: center; }
+.logo > span { display: block; margin: 0; padding-left: .16em; font: 400 36px/1 Georgia, 'Times New Roman', serif; letter-spacing: .16em; }
+.logo > small { display: block; margin-top: 5px; padding-left: .44em; color: #95743e; font-size: 9px; letter-spacing: .44em; }
 .play .flight { animation: arrive var(--entrance) 150ms cubic-bezier(.22, .55, .3, 1) both; }
 .play .rise { animation: rise var(--entrance) 150ms cubic-bezier(.16, .5, .35, 1) both; }
 .play .upright img { will-change: transform; animation: sway 3600ms ease-in-out infinite; }
