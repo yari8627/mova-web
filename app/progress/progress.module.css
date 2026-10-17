@@ -51,7 +51,6 @@
 .progress .showAll { min-height: 44px; margin-top: 8px; padding: 9px 12px; border-radius: 999px; color: var(--navy); background: #eee4d2; font-size: 12px; font-weight: 500; }
 .progress :global(.continent-progress) { margin-top: 12px; }
 .progress :global(.continent-progress > header) { align-items: center; gap: 8px; flex-wrap: wrap; }
-.progress :global(.continent-progress > header > strong) { padding: 5px 8px; color: #65755d; background: #edf0e7; font-size: 11px; }
 .progress :global(.continent-progress-grid) { margin-top: 10px; gap: 4px 18px; }
 .progress :global(.continent-progress-grid article) { min-width: 0; padding: 6px 0; grid-template-columns: minmax(0,1fr) 38px; gap: 6px; }
 .progress :global(.continent-progress-grid article div:first-child strong) { color: var(--navy); font-size: 13px; font-weight: 500; }
@@ -61,5 +60,5 @@
 .progress :global(.continent-progress-grid article > small) { grid-column: 2; grid-row: 1; color: #65755d; font-size: 12px; font-weight: 500; }
 .progress :global(button:focus-visible) { outline: 2px solid #536a7a; outline-offset: 2px; }
 @media (max-width: 900px) { .progress :global(.world-progress-layout) { grid-template-columns: minmax(0,1fr); } }
-@media (max-width: 620px) { .progress:global(.progress-page) { padding-inline: max(13px,env(safe-area-inset-left)) max(13px,env(safe-area-inset-right)); } .progress :global(.progress-heading h1) { font-size: 30px; } }
+@media (max-width: 620px) { .progress :global(.world-map-card) { padding-inline: 8px; } .progress:global(.progress-page) { padding-inline: max(13px,env(safe-area-inset-left)) max(13px,env(safe-area-inset-right)); } .progress :global(.progress-heading h1) { font-size: 30px; } }
 @media (prefers-reduced-motion: reduce) { .progress :global(.world-map-wrap path), .progress :global(.continent-progress-track span) { transition: none; } }

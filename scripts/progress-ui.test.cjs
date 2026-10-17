@@ -62,10 +62,13 @@ test('actual world topology loads once and map/manual additions and removal keep
   h.render(); h.keyboard().onSelect(0); await flush();
   assert.equal(h.state[0].length, 8); assert.equal(h.state[0][0].countryCode, 'JP');
   assert.equal(h.state[2], '');
+  assert.equal(h.state[3], ''); assert(!h.html().includes('progress-message'));
   await find(h, n => n.props?.['aria-label'] === 'Rimuovi IT').props.onClick();
   assert.equal(h.state[0].length, 7); assert.equal(italy().props.className, '');
   italy().props.onKeyDown({ key: 'Enter', preventDefault() {} }); await flush();
   assert.equal(h.state[0].length, 8); assert.equal(italy().props.className, 'visited');
+  assert(!h.html().includes('progress-message'));
+  assert(h.html().includes('3 su 44 Paesi'));
   assert.equal(h.calls.filter(c => c.url === '/world-countries.json').length, 1);
 });
 test('geolocation runs only after explicit action and preserves source, privacy options and denied permissions', async () => {
@@ -73,11 +76,12 @@ test('geolocation runs only after explicit action and preserves source, privacy 
   find(h, n => n.props?.onClick?.name === 'detectCountry').props.onClick(); await flush();
   assert.equal(h.state[0][0].source, 'position'); assert.equal(h.state[0][0].countryCode, 'JP');
   assert.equal(h.calls.find(c => c.geolocation).geolocation.enableHighAccuracy, false);
-  assert.equal(h.state[4], false);
+  assert.equal(h.state[4], false); assert(!h.html().includes('progress-message'));
   for (const geo of ['denied', 'unsupported']) {
     const denied = harness({ geo });
     find(denied, n => n.props?.onClick?.name === 'detectCountry').props.onClick();
     assert(denied.state[3].includes(geo === 'denied' ? 'Permesso posizione' : 'non è supportata'));
+    assert(denied.html().includes('progress-message'));
     assert.equal(denied.state[4], false); assert(!denied.calls.some(c => c.url));
   }
   const failure = harness({ detectOK: false });
@@ -89,4 +93,15 @@ test('empty state keeps zero statistics, no fabricated last country and no unnec
   assert(html.includes('0%')); assert(html.includes('Ultimo Paese aggiunto</span><strong>—'));
   assert(html.includes('pronta per il primo Paese')); assert(!html.includes('Mostra tutti'));
   assert(html.includes('OpenStreetMap')); assert(!html.includes('Gestisci viaggio'));
+});
+
+test('continental section preserves headings and six bars without the duplicate world badge', () => {
+  const h = harness();
+  const section = find(h, n => n.props?.className === 'continent-progress');
+  const header = nodes(section).find(n => n.type === 'header');
+  assert.equal(nodes(header).filter(n => n.type === 'strong').length, 0);
+  assert.equal(nodes(section).filter(n => n.props?.className === 'continent-progress-track').length, 6);
+  assert(h.html().includes('Quanto mondo hai esplorato'));
+  assert(h.html().includes('PROGRESSI PER CONTINENTE'));
+  assert(!h.html().includes('8 / 195'));
 });
