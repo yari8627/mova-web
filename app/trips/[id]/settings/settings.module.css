@@ -1,0 +1,35 @@
+/* Trip settings only; business handlers and confirmation flows remain unchanged. */
+.tripSettings:global(.settings-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.tripSettings :global(.expenses-title) { max-width: 900px; margin: 14px auto 0; }
+.tripSettings :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; overflow-wrap: anywhere; }
+.tripSettings :global(.expenses-title > p:last-child) { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.tripSettings :global(.settings-card) { min-width: 0; max-width: 900px; margin: 12px auto 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: none; }
+.tripSettings :global(.settings-card h2) { margin: 0 0 12px; color: var(--navy); font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.tripSettings :global(.trip-form) { grid-template-columns: minmax(0,1fr); gap: 12px; }
+.tripSettings :global(.form-grid) { min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.tripSettings :global(.trip-form label) { min-width: 0; gap: 5px; font-size: 12px; font-weight: 500; }
+.tripSettings :global(.settings-card input), .tripSettings :global(.settings-card select) { min-width: 0; width: 100%; max-width: 100%; min-height: 44px; margin-top: 0; padding: 10px; border: 1px solid #d5ccbd; border-radius: 9px; color: var(--navy); background: #f8f5ef; font-size: 16px; line-height: 24px; }
+.tripSettings .dateGrid input { display: block; height: 46px; inline-size: 100%; min-inline-size: 0; box-sizing: border-box; appearance: none; -webkit-appearance: none; text-align: left; -webkit-text-fill-color: var(--navy); }
+.dateGrid input::-webkit-date-and-time-value { min-height: 24px; text-align: left; }
+.dateGrid input::-webkit-datetime-edit { padding: 0; }
+.tripSettings :global(.settings-card input:focus), .tripSettings :global(.settings-card select:focus) { border-color: #536a7a; outline: none; box-shadow: none; }
+.tripSettings :global(.settings-save) { min-height: 44px; justify-self: end; font-size: 12px; }
+.tripSettings :global(.settings-message) { margin: 12px auto 0; padding: 10px 12px; border: 1px solid var(--border); color: var(--navy); background: #eee7d9; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.tripSettings :global(.settings-danger > div) { min-width: 0; min-height: 0; padding: 12px 0; grid-template-columns: 28px minmax(0,1fr) auto; gap: 6px 9px; align-items: start; border-color: var(--border); }
+.tripSettings :global(.settings-danger > div > span) { width: 28px; height: 28px; border-radius: 8px; color: #94723e; background: #eee7d9; }
+.tripSettings :global(.settings-danger > div > div) { min-width: 0; }
+.tripSettings :global(.settings-danger strong) { color: var(--navy); font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.tripSettings :global(.settings-danger p) { font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.tripSettings :global(.settings-danger select) { width: 100%; margin-top: 8px; }
+.tripSettings :global(.secondary-button), .tripSettings :global(.danger-button) { min-width: 44px; min-height: 44px; padding: 9px 12px; font-size: 12px; font-weight: 500; border-radius: 999px; }
+.tripSettings :global(.secondary-button) { color: var(--navy); background: #eee4d2; }
+.tripSettings :global(.danger-button) { color: #9a4b46; background: #f7eeea; border-color: #dfc6bd; }
+.tripSettings :global(.settings-danger .danger-row > span) { color: #9a4b46; background: #f7eeea; }
+.tripSettings :global(.danger-row strong) { color: #9a4b46; }
+.tripSettings :global(button:focus-visible) { outline: 2px solid #536a7a; outline-offset: 2px; }
+@media (max-width: 650px) {
+  .tripSettings :global(.settings-danger > div) { grid-template-columns: 28px minmax(0,1fr); }
+  .tripSettings :global(.settings-danger > div > button) { grid-column: 2; justify-self: start; }
+}
+@media (max-width: 559px) { .tripSettings :global(.expenses-title .trip-section-title) { font-size: 30px; } }
+@media (max-width: 360px) { .tripSettings :global(.form-grid) { grid-template-columns: minmax(0,1fr); } }

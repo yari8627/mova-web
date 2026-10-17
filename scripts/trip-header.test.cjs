@@ -15,22 +15,22 @@ function harness(route = '/trips/trip/overview', pane = null) {
   return { destinations, render, html: () => SSR.renderToStaticMarkup(render()) };
 }
 const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
-test('all eight sections share the Home logo and only Overview exposes Manage', () => {
+test('all eight sections share the Home logo and expose the same Manage action', () => {
   for (const section of ['overview','packing','','bookings','documents','expenses','participants','apps']) {
     const h = harness('/trips/trip' + (section ? '/' + section : ''));
     const buttons = nodes(h.render()).filter(n => n.type === 'button');
-    assert.equal(buttons.length, section === 'overview' ? 2 : 1);
+    assert.equal(buttons.length, 2);
     assert.equal(buttons[0].props['aria-label'], 'Torna alla Home');
     buttons[0].props.onClick(); assert.equal(h.destinations[0], '/');
     assert(h.html().includes('<span>NAMI</span><small>TRAVEL</small>'));
-    if (section === 'overview') {
+    {
       assert.equal(buttons[1].props['aria-label'], 'Gestisci viaggio');
       buttons[1].props.onClick(); assert.equal(h.destinations[1], '/trips/trip/settings');
     }
   }
 });
 test('preloaded swipe panes use their own existing path instead of the active URL', () => {
-  assert(!harness('/trips/trip/overview', '/trips/trip/packing').html().includes('Gestisci viaggio'));
+  assert(!harness('/trips/trip/overview', '/trips/trip/settings').html().includes('Gestisci viaggio'));
   assert(harness('/trips/trip/apps', '/trips/trip/overview').html().includes('Gestisci viaggio'));
 });
 test('every main trip section uses the shared header exactly once above its unchanged cover', () => {
@@ -41,3 +41,5 @@ test('every main trip section uses the shared header exactly once above its unch
     assert(!source.includes('<header className="detail-topbar">'));
   }
 });
+
+test("settings page avoids a redundant self link", () => { assert(!harness("/trips/trip/settings").html().includes("Gestisci viaggio")); });
