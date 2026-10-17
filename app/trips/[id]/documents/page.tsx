@@ -21,6 +21,7 @@ import {
   Trash2,
   UploadCloud,
   WifiOff,
+  Wifi,
   X,
 } from "lucide-react";
 import { TripCover } from "../../../components/trip-cover";
@@ -388,15 +389,13 @@ export default function DocumentsPage() {
           <section className={styles.archiveChoice} aria-labelledby="shared-documents-title">
             <Users size={24} aria-hidden="true" />
             <h2 id="shared-documents-title">Documenti del gruppo</h2>
-            <p>Visibili ai partecipanti autorizzati.</p>
-            <small>{shared.length ? `${shared.length} ${shared.length === 1 ? "documento" : "documenti"}` : "Nessun file caricato"}</small>
+            <small>{shared.length} {shared.length === 1 ? "documento" : "documenti"}</small>
             {canManage && <label className="secondary-button file-button" onClick={() => setCategory("shared")}><UploadCloud size={17} /> Carica<input type="file" aria-label="Carica documenti del gruppo" accept=".pdf,.png,.jpg,.jpeg" onChange={chooseFile} /></label>}
           </section>
           <section className={styles.archiveChoice} aria-labelledby="personal-documents-title">
             <Lock size={24} aria-hidden="true" />
             <h2 id="personal-documents-title">Solo per te</h2>
-            <p>Riservati esclusivamente al tuo account.</p>
-            <small>{personal.length ? `${personal.length} ${personal.length === 1 ? "documento" : "documenti"}` : "Nessun file caricato"}</small>
+            <small>{personal.length} {personal.length === 1 ? "documento" : "documenti"}</small>
             {role && <label className="secondary-button file-button" onClick={() => setCategory("personal")}><UploadCloud size={17} /> Carica<input type="file" aria-label="Carica documenti personali" accept=".pdf,.png,.jpg,.jpeg" onChange={chooseFile} /></label>}
           </section>
         </div>
@@ -685,25 +684,39 @@ function DocumentRow({
         <Lock size={16} className="document-lock" />
       )}
       <div className="document-row-actions">
+        {canModify ? (
+          <button
+            type="button"
+            className={`offline-button ${document.offline ? "active" : ""}`}
+            onClick={onToggle}
+            aria-pressed={document.offline}
+            aria-label={`Cambia stato offline di ${document.name}`}
+            title="Cambia stato offline"
+          >
+            {document.offline ? <WifiOff size={15} /> : <Wifi size={15} />}
+            {document.offline ? "Offline" : "Solo online"}
+          </button>
+        ) : (
+          <span className={`offline-button ${document.offline ? "active" : ""}`}>
+            {document.offline ? <WifiOff size={15} /> : <Wifi size={15} />}
+            {document.offline ? "Offline" : "Solo online"}
+          </span>
+        )}
         {document.storageKey && (
-          <button type="button" className="document-open-link" onClick={onOpen}>
-            <Eye size={16} /> Apri
+          <>
+            <button type="button" className="document-open-link" onClick={onOpen} aria-label={`Apri ${document.name}`} title="Apri">
+              <Eye size={18} />
+            </button>
+            <a href={`/api/documents/${document.id}/download`} className="document-download-link" aria-label={`Scarica ${document.name}`} title="Scarica">
+              <Download size={18} />
+            </a>
+          </>
+        )}
+        {canModify && (
+          <button type="button" className="row-delete" onClick={onDelete} aria-label={`Elimina ${document.name}`} title="Elimina">
+            <Trash2 size={17} />
           </button>
         )}
-        {document.storageKey && <a href={`/api/documents/${document.id}/download`} className="document-download-link" aria-label={`Scarica ${document.name}`}><Download size={16} /> Scarica</a>}
-        {canModify ? <button
-          className={`offline-button ${document.offline ? "active" : ""}`}
-          onClick={onToggle}
-        >
-          <WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}
-        </button> : <span className={`offline-button ${document.offline ? "active" : ""}`}><WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}</span>}
-      {canModify && <button
-        className="row-delete"
-        onClick={onDelete}
-        aria-label={`Elimina ${document.name}`}
-      >
-        <Trash2 size={17} />
-      </button>}
       </div>
     </article>
   );
