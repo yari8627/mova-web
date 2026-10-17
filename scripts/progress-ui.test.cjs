@@ -50,7 +50,7 @@ test('initial six preserve alphabetic order and flags; expanding and searching n
   assert.equal(rows().length, 8); assert.equal(h.state[0].length, 8);
   assert(h.html().includes('Giappone')); assert(h.html().includes('Già visitato'));
 });
-test('actual world topology loads once and map/manual additions and removal keep all views synchronized', async () => {
+test('actual world topology loads once and search additions and trash removal keep all views synchronized', async () => {
   const h = harness(); h.render(); h.effects[0](); await flush();
   assert(h.state[1].length > 150);
   assert.equal(h.calls.filter(c => c.url === '/world-countries.json').length, 1);
@@ -65,7 +65,8 @@ test('actual world topology loads once and map/manual additions and removal keep
   assert.equal(h.state[3], ''); assert(!h.html().includes('progress-message'));
   await find(h, n => n.props?.['aria-label'] === 'Rimuovi IT').props.onClick();
   assert.equal(h.state[0].length, 7); assert.equal(italy().props.className, '');
-  italy().props.onKeyDown({ key: 'Enter', preventDefault() {} }); await flush();
+  find(h, n => n.props?.role === 'combobox').props.onChange({ target: { value: 'italia' } });
+  h.render(); h.keyboard().onSelect(0); await flush();
   assert.equal(h.state[0].length, 8); assert.equal(italy().props.className, 'visited');
   assert(!h.html().includes('progress-message'));
   assert(h.html().includes('3 su 44 Paesi'));
@@ -104,4 +105,45 @@ test('continental section preserves headings and six bars without the duplicate 
   assert(h.html().includes('Quanto mondo hai esplorato'));
   assert(h.html().includes('PROGRESSI PER CONTINENTE'));
   assert(!h.html().includes('8 / 195'));
+});
+
+test('map is display-only: no mutation handlers or keyboard targets on any country or ancestor', async () => {
+  const h = harness(); h.render(); h.effects[0](); await flush();
+  const map = find(h, n => n.props?.className === 'world-map-wrap');
+  const snapshot = JSON.stringify(h.state[0]), requests = h.calls.length;
+  const paths = nodes(map).filter(n => n.type === 'path');
+  assert(paths.some(n => n.props.className === 'visited'));
+  assert(paths.some(n => n.props.className === ''));
+  for (const node of nodes(map)) {
+    assert(!Object.keys(node.props).some(key => /^on[A-Z]/.test(key)), 'no event handlers in map subtree');
+    assert.equal(node.props.tabIndex, undefined); assert.notEqual(node.props.role, 'button');
+  }
+  const root = h.render();
+  assert(!Object.keys(root.props).some(key => /^on[A-Z]/.test(key)));
+  assert(!Object.keys(find(h, n => n.props?.className === 'world-progress-layout').props).some(key => /^on[A-Z]/.test(key)));
+  assert(!Object.keys(find(h, n => n.props?.className === 'world-map-card').props).some(key => /^on[A-Z]/.test(key)));
+  assert.equal(find(h, n => n.type === 'svg').props.role, 'img');
+  assert(h.html().includes('I Paesi che hai visitato, tutti sulla tua mappa.'));
+  assert(!h.html().includes('Clicca per aggiungere'));
+  assert(!h.html().includes('Seleziona un Paese sulla mappa'));
+  assert.equal(JSON.stringify(h.state[0]), snapshot); assert.equal(h.calls.length, requests);
+});
+test('header has only the original Home wordmark and no back button', () => {
+  const h = harness();
+  const header = find(h, n => n.props?.className === 'progress-topbar');
+  const buttons = nodes(header).filter(n => n.type === 'button');
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].props['aria-label'], 'NAMI Travel, torna alla Home');
+  buttons[0].props.onClick(); assert.equal(h.calls.at(-1).route, '/');
+  assert(!h.html().includes('aria-label="Torna alla Home"'));
+});
+
+test('existing bottom navigation retains all four destinations and Progressi active state', () => {
+  const calls = [], context = { exports: {}, require: name => name === 'next/navigation' ? { usePathname: () => '/progress', useRouter: () => ({ push: path => calls.push(path) }) } : require(name) };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/components/app-bottom-nav.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, context);
+  const buttons = nodes(context.exports.AppBottomNav()).filter(n => n.type === 'button');
+  assert.equal(buttons.length, 4);
+  for (const button of buttons) button.props.onClick();
+  assert.deepEqual(calls, ['/', '/progress', '/about', '/settings/profile']);
+  assert.equal(buttons[1].props['aria-current'], 'page');
 });

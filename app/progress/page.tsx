@@ -10,7 +10,7 @@ import { geoNaturalEarth1, geoPath } from "d3-geo";
 import countries from "i18n-iso-countries";
 import localeIt from "i18n-iso-countries/langs/it.json";
 import { countries as countryMetadata, type TContinentCode, type TCountryCode } from "countries-list";
-import { ArrowLeft, Check, Earth, LocateFixed, MapPin, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { Check, LocateFixed, MapPin, Plus, Search, Trash2 } from "lucide-react";
 import { useAutocompleteKeyboard } from "../../lib/use-autocomplete-keyboard";
 
 type Visit = { id: string; countryCode: string; visitedAt: string; source: "manual" | "position" | "trip" };
@@ -66,7 +66,7 @@ export default function ProgressPage() {
   function detectCountry() { if (!navigator.geolocation) return setMessage("La posizione non è supportata su questo dispositivo."); setLocating(true); setMessage(""); navigator.geolocation.getCurrentPosition(async (position) => { const response = await fetch("/api/progress/detect-country", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ latitude: position.coords.latitude, longitude: position.coords.longitude }) }); const result = await response.json(); setLocating(false); if (!response.ok) return setMessage(result.error || "Paese non riconosciuto."); await addCountry(result.countryCode, "position"); }, () => { setLocating(false); setMessage("Permesso posizione non concesso o posizione non disponibile."); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 3600000 }); }
 
   return <main className={`progress-page ${styles.progress}`}>
-    <header className="progress-topbar"><button className={`icon-button ${styles.back}`} onClick={() => router.push("/")} aria-label="Torna alla Home"><ArrowLeft size={20} /></button><button className={brandStyles.wordmarkButton} onClick={() => router.push("/")} aria-label="NAMI Travel, torna alla Home"><span>NAMI</span><small>TRAVEL</small></button></header>
+    <header className="progress-topbar"><button className={brandStyles.wordmarkButton} onClick={() => router.push("/")} aria-label="NAMI Travel, torna alla Home"><span>NAMI</span><small>TRAVEL</small></button></header>
     <section className="progress-heading"><div><p className="section-kicker">IL TUO DIARIO DI VIAGGIO</p><h1>Il tuo mondo</h1><p>Ogni Paese visitato è una storia da raccontare.</p></div></section>
     {message && <div className="progress-message" role="status">{message}</div>}
     <section className={styles.discovery} aria-label="Il mondo che hai scoperto">
@@ -76,8 +76,8 @@ export default function ProgressPage() {
     </section>
     <div className="world-progress-layout">
       <section className="world-map-card"><header><div><p className="section-kicker">MAPPA MONDIALE</p><h2>La tua mappa</h2></div><div className="map-legend"><span></span> Visitati</div></header>
-        <div className="world-map-wrap"><svg viewBox="0 0 960 500" role="group" aria-label="Mappa dei Paesi visitati">{mapCountries.map((country) => <path key={country.code} d={country.path} className={visitedCodes.has(country.code) ? "visited" : ""} role="button" tabIndex={0} aria-label={`${country.name}${visitedCodes.has(country.code) ? " · Visitato" : " · Aggiungi ai visitati"}`} onClick={() => addCountry(country.code)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void addCountry(country.code); } }}><title>{`${country.name}${visitedCodes.has(country.code) ? " · Visitato" : " · Clicca per aggiungere"}`}</title></path>)}</svg></div>
-        <p>Seleziona un Paese sulla mappa per segnarlo come visitato.</p>
+        <div className="world-map-wrap"><svg viewBox="0 0 960 500" role="img" aria-label="Mappa dei Paesi visitati">{mapCountries.map((country) => <path key={country.code} d={country.path} className={visitedCodes.has(country.code) ? "visited" : ""} aria-label={`${country.name}${visitedCodes.has(country.code) ? " · Visitato" : " · Non visitato"}`}><title>{`${country.name}${visitedCodes.has(country.code) ? " · Visitato" : " · Non visitato"}`}</title></path>)}</svg></div>
+        <p>I Paesi che hai visitato, tutti sulla tua mappa.</p>
         <button className={`secondary-button ${styles.detect}`} onClick={detectCountry} disabled={locating}><LocateFixed size={18} /> {locating ? "Rilevamento…" : "Rileva il Paese in cui mi trovo"}</button>
         <p className="location-privacy">Attivando il rilevamento, la posizione viene usata una sola volta e inviata a OpenStreetMap per riconoscere il Paese. NAMI salva soltanto il codice del Paese, non le coordinate.</p>
       </section>

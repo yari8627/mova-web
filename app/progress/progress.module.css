@@ -1,6 +1,5 @@
 .progress:global(.progress-page) { --blue: #102b40; --blue-hover: #1e4055; --blue-soft: #eee7d9; --navy: #102538; --border: #e8e0d4; --text-secondary: #6b6b69; --surface: #fffcf7; min-height: 0; padding-top: max(16px,env(safe-area-inset-top)); padding-bottom: calc(18px + env(safe-area-inset-bottom)); color: var(--navy); background: #f8f5ef; }
-.progress :global(.progress-topbar) { min-height: 50px; display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: center; gap: 0; }
-.back { grid-column: 1; grid-row: 1; width: 44px; height: 44px; color: var(--navy); border: 0; background: transparent; box-shadow: none; }
+.progress :global(.progress-topbar) { min-height: 50px; display: flex; justify-content: center; align-items: center; gap: 0; }
 .progress :global(.section-kicker) { color: #94723e; font-size: 10px; font-weight: 500; letter-spacing: .2em; }
 .progress :global(.progress-heading) { margin-top: 16px; display: block; }
 .progress :global(.progress-heading h1) { margin: 4px 0 6px; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
@@ -24,9 +23,8 @@
 .progress :global(.map-legend span) { background: #74836b; }
 .progress :global(.world-map-wrap) { margin-top: 10px; background: #eeeae1; border-radius: 10px; }
 .progress :global(.world-map-wrap svg) { width: 100%; height: auto; touch-action: pan-y; }
-.progress :global(.world-map-wrap path) { fill: #fffcf7; stroke: #c7bfae; stroke-width: .65; }
-.progress :global(.world-map-wrap path.visited) { fill: #74836b; stroke: #5e6e56; }
-.progress :global(.world-map-wrap path:hover), .progress :global(.world-map-wrap path:focus-visible) { fill: #c5a369; outline: none; stroke: #876831; stroke-width: 1.5; }
+.progress :global(.world-map-wrap path), .progress :global(.world-map-wrap path:hover) { fill: #fffcf7; stroke: #c7bfae; stroke-width: .65; cursor: default; transition: none; }
+.progress :global(.world-map-wrap path.visited), .progress :global(.world-map-wrap path.visited:hover) { fill: #74836b; stroke: #5e6e56; }
 .progress :global(.world-map-card > p) { margin: 8px 0 0; font-size: 11px; line-height: 1.45; }
 .progress .detect { width: auto; min-height: 44px; margin-top: 10px; padding: 9px 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; color: var(--navy); background: #eee4d2; font-size: 12px; font-weight: 500; }
 .progress .detect > svg { flex-shrink: 0; }
