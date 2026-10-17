@@ -23,6 +23,7 @@ function harness({ expenses = [], participants = ['A', 'B', 'C', 'D'], budget = 
     if (name.endsWith('/use-trip-permissions')) return { useTripPermissions: () => ({ canManage: role === 'owner' || role === 'co-organizer', role, userId, userName }) };
     if (name.endsWith('/trip-sync')) return { syncTripSnapshot: (id, body) => requests.push({ url: 'snapshot', body }) };
     if (name.endsWith('/trip-client-cache')) return { removeTripSnapshot() {} };
+    if (name.endsWith('/trip-header')) return { TripHeader: () => null };
     if (name.endsWith('/trip-cover')) return { TripCover: () => null };
     if (name.endsWith('/trip-tabs')) return { TripTabs: () => null };
     if (name.endsWith('/travel-category-icon')) return { travelCategoryFromText: () => 'place', TravelCategoryIcon: () => null };

@@ -1,5 +1,7 @@
 "use client";
 
+import { TripHeader } from "../../../components/trip-header";
+
 import styles from "./overview.module.css";
 import boutique from "../itinerary.module.css";
 import { sortActivities } from "../../../../lib/activity-order";
@@ -377,29 +379,7 @@ export default function OverviewPage() {
 
   return (
     <main className={`trip-detail-shell overview-shell ${boutique.itinerary} ${styles.overview}`}>
-      <header className="detail-topbar">
-        <button
-          className="detail-brand home-brand-button"
-          onClick={() => router.push("/")}
-          aria-label="Torna alla Home"
-        >
-          <span>NAMI</span><small>TRAVEL</small>
-        </button>
-        <button
-          className="secondary-button"
-          onClick={() => router.push(`/trips/${id}/settings`)}
-        >
-          <Settings size={18} /> Gestisci
-        </button>
-        {canInvite && (
-          <button
-            className="primary-button"
-            onClick={() => router.push(`/trips/${id}/participants`)}
-          >
-            <Users size={18} /> Invita
-          </button>
-        )}
-      </header>
+      <TripHeader tripId={id} />
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />

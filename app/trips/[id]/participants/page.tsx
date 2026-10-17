@@ -1,5 +1,7 @@
 "use client";
 
+import { TripHeader } from "../../../components/trip-header";
+
 import styles from "./participants.module.css";
 import boutique from "../itinerary.module.css";
 
@@ -73,7 +75,7 @@ export default function ParticipantsPage() {
   async function copyCode() { const value = inviteLink || inviteCode; if (!value) return; await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
 
   return <main className={`trip-detail-shell participants-shell ${boutique.itinerary} ${styles.participants}`}>
-    <header className="detail-topbar"><button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home"><span>NAMI</span><small>TRAVEL</small></button></header>
+    <TripHeader tripId={id} />
     <TripCover tripId={id} />
     <div className="trip-swipe-body">
     <TripTabs tripId={id} />

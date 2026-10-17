@@ -1,5 +1,7 @@
 "use client";
 
+import { TripHeader } from "../../../components/trip-header";
+
 import styles from "./apps.module.css";
 import boutique from "../itinerary.module.css";
 
@@ -305,15 +307,7 @@ export default function UsefulAppsPage() {
 
   return (
     <main className={`trip-detail-shell ${boutique.itinerary} ${styles.apps}`}>
-      <header className="detail-topbar">
-        <button
-          className="detail-brand home-brand-button"
-          onClick={() => router.push("/")}
-          aria-label="Torna alla Home"
-        >
-          <span>NAMI</span><small>TRAVEL</small>
-        </button>
-      </header>
+      <TripHeader tripId={id} />
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />

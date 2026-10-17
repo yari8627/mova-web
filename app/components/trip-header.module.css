@@ -1,0 +1,53 @@
+/* Only the area above the trip cover; Home wordmark proportions are preserved. */
+.header.header:global(.detail-topbar) {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0,1fr) 44px;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 1280px;
+  min-height: 50px;
+  margin: calc(max(16px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-top))) auto 10px;
+  background: #f8f5ef;
+  color: #102538;
+}
+.wordmarkButton {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #102538;
+  font-weight: 400;
+  text-align: center;
+  cursor: pointer;
+}
+.wordmarkButton > span { display: block; margin: 0; padding-left: .16em; font: 400 36px/1 Georgia, 'Times New Roman', serif; letter-spacing: .16em; }
+.wordmarkButton > small { display: block; margin-top: 5px; padding-left: .44em; color: #95743e; font-size: 9px; letter-spacing: .44em; }
+.settings {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #102538;
+  cursor: pointer;
+}
+.wordmarkButton:focus-visible, .settings:focus-visible { outline: 2px solid #94723e; outline-offset: 2px; }
+
+@media (max-width: 560px) {
+  .header.header:global(.detail-topbar) { margin-top: calc(max(16px, env(safe-area-inset-top)) - max(14px, env(safe-area-inset-top))); }
+}

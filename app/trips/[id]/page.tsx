@@ -1,4 +1,6 @@
 "use client";
+
+import { TripHeader } from "../../components/trip-header";
 import { applyActivityPlace, editActivityPlace, prepareActivityDraft, restoreActivityMetadata, activityRoute, latestActivityRequest, type TitleSource } from "../../../lib/itinerary-activity";
 import styles from "./itinerary.module.css";
 import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
@@ -365,10 +367,7 @@ export default function TripPage() {
   }
 
   return <main className={`trip-detail-shell ${styles.itinerary}`}>
-    <header className="detail-topbar">
-      <button className="detail-brand home-brand-button" onClick={() => router.push("/")} aria-label="Torna alla Home"><span>NAMI</span><small>TRAVEL</small></button>
-      {canInvite && <button className="primary-button" onClick={() => router.push(`/trips/${id}/participants`)}><Users size={18} /> Invita</button>}
-    </header>
+    <TripHeader tripId={id} />
 
     <TripCover tripId={id} />
     <div className="trip-swipe-body">

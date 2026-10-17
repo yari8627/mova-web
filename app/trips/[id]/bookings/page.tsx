@@ -1,4 +1,6 @@
 "use client";
+
+import { TripHeader } from "../../../components/trip-header";
 import styles from "./bookings.module.css";
 import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
@@ -443,15 +445,7 @@ export default function BookingsPage() {
 
   return (
     <main className={`trip-detail-shell bookings-shell ${boutique.itinerary} ${styles.bookings}`}>
-      <header className="detail-topbar">
-        <button
-          className="detail-brand home-brand-button"
-          onClick={() => router.push("/")}
-          aria-label="Torna alla Home"
-        >
-          <span>NAMI</span><small>TRAVEL</small>
-        </button>
-      </header>
+      <TripHeader tripId={id} />
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
     <TripTabs tripId={id} />

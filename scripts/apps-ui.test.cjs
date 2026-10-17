@@ -9,6 +9,7 @@ function harness(country = 'Francia', status = null) {
     if (name === 'react') return { useEffect() {}, useMemo: fn => fn(), useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = value]; } };
     if (name === 'next/navigation') return { useParams: () => ({ id: 'trip' }), useRouter: () => ({ push() {} }) };
     if (name.endsWith('/trip-client-cache')) return {};
+    if (name.endsWith('/trip-header')) return { TripHeader: () => null };
     if (name.endsWith('/trip-cover')) return { TripCover: () => null };
     if (name.endsWith('/trip-tabs')) return { TripTabs: () => null };
     if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
