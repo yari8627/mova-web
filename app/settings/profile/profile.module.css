@@ -5,10 +5,10 @@
 .eyebrow { margin: 0; color: #94723e; font-size: 10px; font-weight: 500; letter-spacing: .2em; }
 .heading h1 { margin: 5px 0 6px; font: 400 30px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
 .heading > p:last-child { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
-.avatarEditor { margin: 20px 0 18px; display: grid; justify-items: center; gap: 8px; }
+.avatarEditor { margin: 17px 0 16px; display: grid; justify-items: center; gap: 7px; }
 .avatarEditor > img, .initials { width: 104px; height: 104px; border: 1px solid #c5a369; border-radius: 50%; object-fit: cover; }
 .initials { display: grid; place-items: center; color: #fffcf7; background: var(--navy); font-size: 30px; font-weight: 500; }
-.photoAction { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 15px; border: 1px solid #c5a369; border-radius: 999px; color: var(--navy); background: #fffcf7; font-size: 12px; cursor: pointer; }
+.photoAction { position: relative; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 15px; border: 1px solid #d5ccbd; border-radius: 999px; color: var(--navy); background: #fffcf7; font-size: 12px; cursor: pointer; }
 .photoAction input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .photoAction:focus-within, .page button:focus-visible { outline: 2px solid #536a7a; outline-offset: 3px; }
 .avatarEditor > small { color: var(--text-secondary); font-size: 11px; text-align: center; }
