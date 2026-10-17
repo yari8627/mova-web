@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), SSR = require('react-dom/server');
-const trip = { id: 'trip', name: 'Viaggio di prova', country: 'Italia', countryCode: 'IT', city: 'Roma', startDate: '2026-10-20', endDate: '2026-10-25', people: 3, theme: 'blue', participants: [{ email: 'confirmed@example.test', name: 'Confermato', status: 'confirmed' }, { email: 'pending@example.test', name: 'In attesa', status: 'pending' }] };
+const trip = { id: 'trip', name: 'Viaggio di prova', country: 'Italia', countryCode: 'IT', city: 'Roma', startDate: '2026-10-20', endDate: '2026-10-25', people: 3, theme: 'blue', owner: { email: 'owner@example.test' }, participants: [{ email: 'confirmed@example.test', name: 'Confermato', status: 'confirmed' }, { email: 'pending@example.test', name: 'In attesa', status: 'pending' }, { email: 'OWNER@example.test', name: 'Proprietario', status: 'confirmed' }, { email: 'legacy-owner@example.test', name: 'Proprietario precedente nei dati', status: 'confirmed', role: 'owner' }] };
 function harness(role = 'owner', { accepted = true, ok = true } = {}) {
   const state = [{ ...trip }, [], '', ''], calls = [], effects = [], storage = new Map([['mova-trips', JSON.stringify([{ id: 'trip' }, { id: 'other' }])]]);
   let cursor = 0;
@@ -54,6 +54,7 @@ test('saving uses the unchanged draft and reports existing success and error res
 test('archive, transfer, remove and leave never call APIs when confirmation is cancelled', async () => {
   for (const action of ['archive','transfer','remove','leave']) {
     const h = harness(action === 'leave' ? 'participant' : 'owner', { accepted: false });
+    h.render(); h.effects[0]();
     h.state[3] = 'confirmed@example.test';
     await button(h, action).props.onClick();
     assert(h.calls.some(c => c.confirm)); assert(!h.calls.some(c => c.url));
@@ -63,7 +64,7 @@ test('confirmed owner actions retain endpoints, cache cleanup and navigation in 
   const archived = harness(); await button(archived, 'archive').props.onClick();
   assert.deepEqual(JSON.parse(archived.calls.find(c => c.url).options.body), { archived: true });
   assert(archived.calls.some(c => c.push === '/'));
-  const transferred = harness(); transferred.state[3] = 'confirmed@example.test';
+  const transferred = harness(); transferred.render(); transferred.effects[0](); transferred.state[3] = 'confirmed@example.test';
   await button(transferred, 'transfer').props.onClick();
   const request = transferred.calls.find(c => c.url);
   assert.equal(request.url, '/api/trips/trip/transfer'); assert.equal(request.options.method, 'POST');
@@ -82,4 +83,26 @@ test('leave and failed destructive actions retain existing behavior without prod
   const failed = harness('owner', { ok: false }); await button(failed, 'remove').props.onClick();
   assert.equal(failed.state[2], 'Errore di prova'); assert(!failed.calls.some(c => c.replace));
   assert.equal(JSON.parse(failed.storage.get('mova-trips')).length, 2);
+});
+test('transfer is collapsed and inert by default, opens accessibly and enables only a valid confirmed recipient', async () => {
+  const h = harness(); h.render(); h.effects[0](); await flush();
+  const toggle = () => nodes(h.render()).find(n => n.props?.['aria-controls'] === 'trip-transfer-controls');
+  const panel = () => nodes(h.render()).find(n => n.props?.id === 'trip-transfer-controls');
+  assert.equal(toggle().props['aria-expanded'], false);
+  assert.equal(panel().props.inert, true); assert.equal(panel().props['aria-hidden'], true);
+  assert.equal(button(h, 'transfer').props.disabled, true);
+  toggle().props.onClick();
+  assert.equal(toggle().props['aria-expanded'], true); assert.equal(panel().props.inert, false);
+  assert.equal(button(h, 'transfer').props.disabled, true);
+  const select = () => nodes(h.render()).find(n => n.type === 'select');
+  assert.equal(select().props.disabled, false);
+  select().props.onChange({ target: { value: 'pending@example.test' } });
+  assert.equal(button(h, 'transfer').props.disabled, true);
+  await button(h, 'transfer').props.onClick(); assert(!h.calls.some(c => c.url));
+  select().props.onChange({ target: { value: 'owner@example.test' } });
+  assert.equal(button(h, 'transfer').props.disabled, true);
+  select().props.onChange({ target: { value: 'confirmed@example.test' } });
+  assert.equal(button(h, 'transfer').props.disabled, false);
+  toggle().props.onClick(); assert.equal(panel().props.inert, true);
+  assert.equal(button(h, 'transfer').props.disabled, true);
 });

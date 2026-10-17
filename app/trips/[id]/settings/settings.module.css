@@ -15,7 +15,9 @@
 .tripSettings :global(.settings-card input:focus), .tripSettings :global(.settings-card select:focus) { border-color: #536a7a; outline: none; box-shadow: none; }
 .tripSettings :global(.settings-save) { min-height: 44px; justify-self: end; font-size: 12px; }
 .tripSettings :global(.settings-message) { margin: 12px auto 0; padding: 10px 12px; border: 1px solid var(--border); color: var(--navy); background: #eee7d9; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
-.tripSettings :global(.settings-danger > div) { min-width: 0; min-height: 0; padding: 12px 0; grid-template-columns: 28px minmax(0,1fr) auto; gap: 6px 9px; align-items: start; border-color: var(--border); }
+.tripSettings :global(.settings-danger) { padding: 12px; }
+.tripSettings :global(.settings-danger h2) { margin-bottom: 8px; }
+.tripSettings :global(.settings-danger > div) { min-width: 0; min-height: 0; padding: 10px 0; grid-template-columns: 28px minmax(0,1fr) auto; gap: 4px 8px; align-items: start; border-color: var(--border); }
 .tripSettings :global(.settings-danger > div > span) { width: 28px; height: 28px; border-radius: 8px; color: #94723e; background: #eee7d9; }
 .tripSettings :global(.settings-danger > div > div) { min-width: 0; }
 .tripSettings :global(.settings-danger strong) { color: var(--navy); font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
@@ -27,6 +29,20 @@
 .tripSettings :global(.settings-danger .danger-row > span) { color: #9a4b46; background: #f7eeea; }
 .tripSettings :global(.danger-row strong) { color: #9a4b46; }
 .tripSettings :global(button:focus-visible) { outline: 2px solid #536a7a; outline-offset: 2px; }
+.tripSettings :global(.settings-danger) > .transferRow { display: block; }
+.transferToggle { width: 100%; min-height: 44px; padding: 0; display: grid; grid-template-columns: 28px minmax(0,1fr) 18px; align-items: start; gap: 8px; border: 0; border-radius: 8px; text-align: left; color: var(--navy); background: transparent; cursor: pointer; }
+.transferToggle > span { min-width: 0; }
+.transferIcon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: #94723e; background: #eee7d9; }
+.transferDescription { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.transferChevron { margin-top: 5px; color: #94723e; transition: transform 200ms ease; }
+.transferToggle[aria-expanded="true"] .transferChevron { transform: rotate(180deg); }
+.transferPanel { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 200ms ease, opacity 200ms ease; }
+.transferExpanded { grid-template-rows: 1fr; opacity: 1; }
+.transferPanel > div { min-height: 0; overflow: hidden; }
+.transferControls { min-width: 0; padding-top: 8px; padding-left: 36px; display: grid; gap: 6px; justify-items: start; }
+.tripSettings .transferControls select { margin-top: 0; }
+.transferControls button:disabled { opacity: .5; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .transferPanel, .transferChevron { transition: none; } }
 @media (max-width: 650px) {
   .tripSettings :global(.settings-danger > div) { grid-template-columns: 28px minmax(0,1fr); }
   .tripSettings :global(.settings-danger > div > button) { grid-column: 2; justify-self: start; }
