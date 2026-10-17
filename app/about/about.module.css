@@ -1,0 +1,34 @@
+.page {
+  --navy: #102538;
+  --champagne: #94723e;
+  --text-secondary: #6b6b69;
+  color: var(--navy);
+  background: #f8f5ef;
+  min-height: calc(100svh - 100px);
+  padding: max(16px, env(safe-area-inset-top)) max(32px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(32px, env(safe-area-inset-left));
+}
+.content { max-width: 880px; margin-inline: auto; }
+.header { min-height: 50px; display: flex; justify-content: center; align-items: center; }
+.header button:focus-visible { outline: 2px solid #536a7a; outline-offset: 4px; border-radius: 4px; }
+.intro { margin-top: 24px; }
+.eyebrow { margin: 0; color: var(--champagne); font-size: 10px; font-weight: 500; line-height: 1.5; letter-spacing: .2em; }
+.intro h1 { max-width: 640px; margin: 7px 0 10px; font: 400 clamp(30px, 4vw, 40px)/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; text-wrap: balance; }
+.description { max-width: 650px; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.photograph { margin-top: 18px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 16px; background: #eee7d9; }
+.photograph img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pillars { margin-top: 22px; }
+.cards { display: grid; gap: 9px; margin-top: 10px; }
+.card { min-width: 0; display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: start; gap: 12px; padding: 15px; border: 1px solid #e8e0d4; border-radius: 14px; background: #fffcf7; }
+.icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #eee7d9; color: var(--champagne); }
+.card h3 { margin: 0 0 4px; font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.card p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.closing { margin-top: 18px; padding: 17px 15px; border-radius: 14px; text-align: center; background: #eee7d9; }
+.closing p { max-width: 500px; margin: 7px auto 0; font: italic 400 24px/1.25 Georgia, 'Times New Roman', serif; text-wrap: balance; }
+@media (max-width: 620px) {
+  .page { padding-inline: max(13px, env(safe-area-inset-left)) max(13px, env(safe-area-inset-right)); }
+  .intro { margin-top: 16px; }
+  .description { font-size: 13px; }
+  .pillars { margin-top: 18px; }
+  .card { padding: 13px; gap: 10px; }
+  .closing p { font-size: 22px; }
+}
