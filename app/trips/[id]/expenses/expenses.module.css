@@ -13,8 +13,12 @@
 .expenses .budgetDetails > article > span small { font-size: 10px; }
 .expenses .budgetDetails strong { color: #fffcf7; font-size: 19px; font-weight: 500; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .expenses .budgetDetails :global(.budget-empty) { font-size: 13px !important; font-weight: 400; color: #d8d3ca; }
-.expenses .budgetDetails label { min-width: 0; min-height: 44px; margin-top: -5px; padding: 4px 7px; border: 1px solid #73808a; border-radius: 8px; color: #fffcf7; font-size: 17px; font-weight: 400; }
-.expenses .budgetDetails input { min-width: 0; max-width: 100%; min-height: 34px; color: #fffcf7; font-size: 17px; font-weight: 400; color-scheme: dark; }
+.expenses .budgetDetails label { min-width: 0; min-height: 44px; margin-top: -5px; padding: 4px 8px; display: flex; align-items: center; gap: 6px; border: 1px solid #73808a; border-radius: 8px; color: #fffcf7; font-size: 17px; font-weight: 400; line-height: 1.35; }
+.expenses .budgetDetails label > span { flex: 0 0 auto; color: #c8cfd3; }
+.expenses .budgetDetails label:focus-within { border-color: #e1e7eb; }
+.expenses .budgetDetails input { flex: 1 1 0; width: 0; min-width: 0; max-width: 100%; min-height: 34px; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: #fffcf7; font-size: 17px; font-weight: 400; line-height: 1.35; font-variant-numeric: tabular-nums; color-scheme: dark; appearance: textfield; }
+.expenses .budgetDetails input:focus, .expenses .budgetDetails input:focus-visible { outline: none; box-shadow: none; }
+.expenses .budgetDetails input::-webkit-inner-spin-button, .expenses .budgetDetails input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
 .expenses .budgetDetails input::placeholder { color: #d8d3ca; opacity: 1; }
 .expenses .budgetDetails :global(.positive) { color: #c4d4b7 !important; }
 .expenses .budgetDetails :global(.negative) { color: #f0c795 !important; }
