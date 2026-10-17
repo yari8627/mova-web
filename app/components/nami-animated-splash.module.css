@@ -21,7 +21,7 @@
 .departure, .upright { will-change: transform; }
 .upright { transform-origin: 50% 42%; }
 .upright img { display: block; width: 100%; height: auto; object-fit: contain; }
-.wordmark { text-align: center; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); height: calc(clamp(43.2px, 11.88vw, 66.96px) + clamp(25.5px, 6.75vw, 33px) + 5px); }
+.wordmark { text-align: center; font-family: var(--font-ui); opacity: 0; transform: translateY(8px); margin-top: clamp(8px, 2svh, 20px); height: calc(clamp(43.2px, 11.88vw, 66.96px) + clamp(25.5px, 6.75vw, 33px) + 5px); perspective: 900px; }
 /* Preserve the previous wordmark's line-box height so the centered composition
    keeps the balloon at its approved position throughout the flight. */
 /* Exact approved wordmark typography from trip-header.module.css at 311d654.
@@ -29,6 +29,8 @@
 .logo { min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; color: #102538; font-weight: 400; text-align: center; }
 .logo > span { display: block; margin: 0; padding-left: .16em; font: 400 36px/1 Georgia, 'Times New Roman', serif; letter-spacing: .16em; }
 .logo > small { display: block; margin-top: 5px; padding-left: .44em; color: #95743e; font-size: 9px; letter-spacing: .44em; }
+.logo { transform-style: preserve-3d; transform-origin: center center; }
+.play .logo { animation: namiLogoFloat3D 5.5s var(--wordmarkDelay) ease-in-out infinite; will-change: transform; }
 .play .flight { animation: arrive var(--entrance) 150ms cubic-bezier(.22, .55, .3, 1) both; }
 .play .rise { animation: rise var(--entrance) 150ms cubic-bezier(.16, .5, .35, 1) both; }
 .play .upright img { will-change: transform; animation: sway 3600ms ease-in-out infinite; }
@@ -54,10 +56,18 @@
 @keyframes depart { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--exit-x), -8svh, 0); } }
 @keyframes reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes namiLogoFloat3D {
+  0%, 100% { transform: rotateY(-6deg) rotateX(0deg); }
+  25% { transform: rotateY(0deg) rotateX(2deg); }
+  50% { transform: rotateY(6deg) rotateX(0deg); }
+  75% { transform: rotateY(0deg) rotateX(-2deg); }
+}
 .static.play .flight, .static.play .wordmark { transform: none; animation: fade var(--reduced) ease both; }
 .static .upright { animation: none; transform: rotate(var(--upright-angle)); }
 .static .departure, .static .rise, .static .upright img { animation: none; transform: none; will-change: auto; }
+.static .logo { animation: none; transform: none; will-change: auto; }
 @media (prefers-reduced-motion: reduce) {
+  .play .logo { animation: none; transform: none; will-change: auto; }
   .play .flight, .play .wordmark { transform: none; animation: fade var(--reduced) ease both; }
   .play .upright { animation: none; transform: rotate(var(--upright-angle)); }
   .play .departure, .play .rise, .play .upright img { animation: none; transform: none; will-change: auto; }
