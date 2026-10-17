@@ -1,20 +1,22 @@
 "use client";
+import styles from "./documents.module.css";
+import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
 
 import { ChangeEvent, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
+  Users,
+  Download,
+  Image as ImageIcon,
   BedDouble,
   CarFront,
   Check,
   Eye,
   FileCheck2,
   FileText,
-  FolderSearch,
-  Lightbulb,
   Lock,
   Plane,
-  Plus,
   Ticket,
   Trash2,
   UploadCloud,
@@ -362,30 +364,16 @@ export default function DocumentsPage() {
     requirements?.items.filter((item) => item.required) || [];
   const completedRequired = requiredItems.filter(isRequirementComplete).length;
   return (
-    <main className="trip-detail-shell documents-shell">
+    <main className={`trip-detail-shell documents-shell ${boutique.itinerary} ${styles.documents}`}>
       <header className="detail-topbar">
         <button
           className="detail-brand home-brand-button"
           onClick={() => router.push("/")}
           aria-label="Torna alla Home"
         >
-          NAMI
+          <span>NAMI</span><small>TRAVEL</small>
         </button>
-        {role && (
-          <label
-            className="primary-button file-button"
-            onClick={() => {
-              if (!canManage) setCategory("personal");
-            }}
-          >
-            <Plus size={18} /> {canManage ? "Aggiungi" : "Documento personale"}
-            <input
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={chooseFile}
-            />
-          </label>
-        )}
+
       </header>
       <TripCover tripId={id} />
       <div className="trip-swipe-body">
@@ -393,52 +381,75 @@ export default function DocumentsPage() {
       <div className="expenses-title">
         <p className="section-kicker">ARCHIVIO</p>
         <h1 className="trip-section-title">Documenti</h1>
-        <p>Tutto ciò che serve prima e durante il viaggio.</p>
+        <p>Tutto ciò che serve, sempre a portata di mano.</p>
       </div>
-      <section className="document-utility-tip">
-        <div className="document-tip-icon">
-          <FolderSearch size={27} />
+      <section className="documents-panel" aria-label="Archivio documenti">
+        <div className={styles.archiveChoices}>
+          <section className={styles.archiveChoice} aria-labelledby="shared-documents-title">
+            <Users size={24} aria-hidden="true" />
+            <h2 id="shared-documents-title">Documenti del gruppo</h2>
+            <p>Visibili ai partecipanti autorizzati.</p>
+            <small>{shared.length ? `${shared.length} ${shared.length === 1 ? "documento" : "documenti"}` : "Nessun file caricato"}</small>
+            {canManage && <label className="secondary-button file-button" onClick={() => setCategory("shared")}><UploadCloud size={17} /> Carica<input type="file" aria-label="Carica documenti del gruppo" accept=".pdf,.png,.jpg,.jpeg" onChange={chooseFile} /></label>}
+          </section>
+          <section className={styles.archiveChoice} aria-labelledby="personal-documents-title">
+            <Lock size={24} aria-hidden="true" />
+            <h2 id="personal-documents-title">Solo per te</h2>
+            <p>Riservati esclusivamente al tuo account.</p>
+            <small>{personal.length ? `${personal.length} ${personal.length === 1 ? "documento" : "documenti"}` : "Nessun file caricato"}</small>
+            {role && <label className="secondary-button file-button" onClick={() => setCategory("personal")}><UploadCloud size={17} /> Carica<input type="file" aria-label="Carica documenti personali" accept=".pdf,.png,.jpg,.jpeg" onChange={chooseFile} /></label>}
+          </section>
         </div>
-        <div>
-          <p className="section-kicker">IL TUO ARCHIVIO DI VIAGGIO</p>
-          <h2>Non perdere più una conferma</h2>
-          <p>
-            Salva qui PDF, voucher e biglietti che altrimenti resterebbero
-            dispersi tra email e download. Per esempio: parcheggio aeroportuale,
-            volo, hotel, transfer, assicurazione o ingresso a un’attività.
-          </p>
-          <div className="document-example-chips">
-            <span>
-              <CarFront size={15} /> Parcheggi
-            </span>
-            <span>
-              <Plane size={15} /> Voli
-            </span>
-            <span>
-              <BedDouble size={15} /> Hotel
-            </span>
-            <span>
-              <Ticket size={15} /> Biglietti
-            </span>
+        <p className={styles.archiveHint}>PDF, PNG e JPG · massimo 10 MB. Usa il gruppo per voucher e conferme; conserva i documenti d’identità in Solo per te.</p>
+        {shared.length > 0 && <section aria-labelledby="shared-documents-title"><h3 className={styles.listLabel}>CONDIVISI</h3>
+          <div className="document-list">
+            {shared.map((document) => (
+              <DocumentRow
+                key={document.id}
+                document={document}
+                canModify={canManage || (role === "participant" && document.category === "personal" && document.createdById === userId)}
+                onOpen={() => setPreviewDocument(document)}
+                onToggle={() =>
+                  persist(
+                    documents.map((item) =>
+                      item.id === document.id
+                        ? { ...item, offline: !item.offline }
+                        : item,
+                    ),
+                  )
+                }
+                onDelete={() =>
+                  persist(documents.filter((item) => item.id !== document.id))
+                }
+              />
+            ))}
           </div>
-        </div>
-        <label
-          className="primary-button file-button"
-          onClick={() => setCategory("shared")}
-        >
-          <UploadCloud size={18} /> Carica nel gruppo
-          <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={chooseFile} />
-        </label>
+        </section>}
+        {personal.length > 0 && <section aria-labelledby="personal-documents-title"><h3 className={styles.listLabel}>PERSONALI</h3>
+          <div className="document-list">
+            {personal.map((document) => (
+              <DocumentRow
+                key={document.id}
+                document={document}
+                canModify={canManage || (role === "participant" && document.category === "personal" && document.createdById === userId)}
+                onOpen={() => setPreviewDocument(document)}
+                onToggle={() =>
+                  persist(
+                    documents.map((item) =>
+                      item.id === document.id
+                        ? { ...item, offline: !item.offline }
+                        : item,
+                    ),
+                  )
+                }
+                onDelete={() =>
+                  persist(documents.filter((item) => item.id !== document.id))
+                }
+              />
+            ))}
+          </div>
+        </section>}
       </section>
-      <div className="document-privacy-hint">
-        <Lightbulb size={19} />
-        <p>
-          <strong>Quale sezione scegliere?</strong> Usa{" "}
-          <b>Documenti del gruppo</b> per prenotazioni utili a tutti. Usa{" "}
-          <b>Solo per te</b> per passaporto, carta d’identità e documenti che
-          non vuoi condividere.
-        </p>
-      </div>
       {requirements ? (
         <section className="entry-requirements">
           <div className="requirements-heading">
@@ -447,9 +458,9 @@ export default function DocumentsPage() {
                 INGRESSO IN {country.toLocaleUpperCase("it")}
               </p>
               <h2>
-                Requisiti per passaporto{" "}
-                {requirements.passportCountry || "italiano"}
+                Requisiti per {country}
               </h2>
+              <p className={styles.passportHint}>Passaporto {requirements.passportCountry || "italiano"}</p>
               {requirements.live && (
                 <span className="requirements-live">
                   Dati aggiornati automaticamente
@@ -483,7 +494,7 @@ export default function DocumentsPage() {
                   <strong>{item.title}</strong>
                   <p>{item.detail}</p>
                 </div>
-                <label className="requirement-upload">
+                {role && <label className="requirement-upload">
                   {isRequirementComplete(item) ? (
                     <>
                       <Check size={14} /> Caricato
@@ -497,8 +508,9 @@ export default function DocumentsPage() {
                     type="file"
                     accept=".pdf,.png,.jpg,.jpeg"
                     onChange={(event) => chooseFile(event, item)}
+                    aria-label={`Carica ${item.title}`}
                   />
-                </label>
+                </label>}
               </article>
             ))}
           </div>
@@ -535,91 +547,6 @@ export default function DocumentsPage() {
           </section>
         )
       )}
-      <div className="documents-layout">
-        <section className="documents-panel">
-          <div className="document-category-heading">
-            <div>
-              <p className="section-kicker">CONDIVISI</p>
-              <h2>Documenti del gruppo</h2>
-              <small>
-                Voucher e conferme che possono servire a tutti i partecipanti.
-              </small>
-            </div>
-            <label
-              className="secondary-button file-button"
-              onClick={() => setCategory("shared")}
-            >
-              <UploadCloud size={18} /> Carica
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                onChange={chooseFile}
-              />
-            </label>
-          </div>
-          <div className="document-list">
-            {shared.map((document) => (
-              <DocumentRow
-                key={document.id}
-                document={document}
-                onOpen={() => setPreviewDocument(document)}
-                onToggle={() =>
-                  persist(
-                    documents.map((item) =>
-                      item.id === document.id
-                        ? { ...item, offline: !item.offline }
-                        : item,
-                    ),
-                  )
-                }
-                onDelete={() =>
-                  persist(documents.filter((item) => item.id !== document.id))
-                }
-              />
-            ))}
-          </div>
-          <div className="document-category-heading second">
-            <div>
-              <p className="section-kicker">PERSONALI</p>
-              <h2>Solo per te</h2>
-              <small>
-                Documenti riservati, visibili esclusivamente dal tuo account.
-              </small>
-            </div>
-            <label
-              className="secondary-button file-button"
-              onClick={() => setCategory("personal")}
-            >
-              <UploadCloud size={18} /> Carica
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                onChange={chooseFile}
-              />
-            </label>
-          </div>
-          <div className="document-list">
-            {personal.map((document) => (
-              <DocumentRow
-                key={document.id}
-                document={document}
-                onOpen={() => setPreviewDocument(document)}
-                onToggle={() =>
-                  persist(
-                    documents.map((item) =>
-                      item.id === document.id
-                        ? { ...item, offline: !item.offline }
-                        : item,
-                    ),
-                  )
-                }
-                onDelete={() =>
-                  persist(documents.filter((item) => item.id !== document.id))
-                }
-              />
-            ))}
-          </div>
-        </section>
         <aside className="document-checklist">
           <div className="invite-icon">
             <FileCheck2 size={27} />
@@ -629,13 +556,15 @@ export default function DocumentsPage() {
             {country || "Destinazione"} · {completedRequired}/
             {requiredItems.length} obbligatori
           </p>
-          <div className="checklist-progress">
+          {requiredItems.length > 0 && <div className="checklist-progress" role="progressbar" aria-label="Documenti di ingresso caricati" aria-valuemin={0} aria-valuemax={requiredItems.length} aria-valuenow={completedRequired}>
             <span
               style={{
                 width: `${requiredItems.length ? (completedRequired / requiredItems.length) * 100 : 0}%`,
               }}
             />
           </div>
+          }
+          {requiredItems.length === 0 && <p>Nessun requisito obbligatorio elencato. Consulta la fonte ufficiale.</p>}
           {(requirements?.items ?? []).map((item) => {
             const complete = isRequirementComplete(item);
             return (
@@ -648,7 +577,6 @@ export default function DocumentsPage() {
             );
           })}
         </aside>
-      </div>
       {pendingUpload && (
         <div className="modal-backdrop" onMouseDown={() => setPendingUpload(null)}>
           <div
@@ -732,16 +660,18 @@ function DocumentRow({
   onOpen,
   onToggle,
   onDelete,
+  canModify,
 }: {
   document: TravelDocument;
   onOpen: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  canModify: boolean;
 }) {
   return (
     <article data-booking-id={document.bookingId || undefined}>
       <div className="document-icon">
-        <DocumentKindIcon name={`${document.name} ${document.fileName}`} />
+        {document.mimeType?.startsWith("image/") ? <ImageIcon size={20} /> : <DocumentKindIcon name={`${document.name} ${document.fileName}`} />}
       </div>
       <div>
         <strong>{document.name}</strong>
@@ -749,7 +679,7 @@ function DocumentRow({
           {document.fileName} · {formatSize(document.size)}
           {document.bookingId ? " · Collegato a una prenotazione" : ""}
         </span>
-        <span>{formatSize(document.size)}{document.bookingId ? " · Collegato a una prenotazione" : ""}</span>
+
       </div>
       {document.category === "personal" && (
         <Lock size={16} className="document-lock" />
@@ -757,23 +687,24 @@ function DocumentRow({
       <div className="document-row-actions">
         {document.storageKey && (
           <button type="button" className="document-open-link" onClick={onOpen}>
-            <Eye size={16} /> Preview
+            <Eye size={16} /> Apri
           </button>
         )}
-        <button
+        {document.storageKey && <a href={`/api/documents/${document.id}/download`} className="document-download-link" aria-label={`Scarica ${document.name}`}><Download size={16} /> Scarica</a>}
+        {canModify ? <button
           className={`offline-button ${document.offline ? "active" : ""}`}
           onClick={onToggle}
         >
           <WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}
-        </button>
-      </div>
-      <button
+        </button> : <span className={`offline-button ${document.offline ? "active" : ""}`}><WifiOff size={16} /> {document.offline ? "Offline" : "Solo online"}</span>}
+      {canModify && <button
         className="row-delete"
         onClick={onDelete}
         aria-label={`Elimina ${document.name}`}
       >
         <Trash2 size={17} />
-      </button>
+      </button>}
+      </div>
     </article>
   );
 }

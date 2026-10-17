@@ -1,0 +1,65 @@
+/* Documents only: approved trip chrome is reused from itinerary.module.css. */
+.documents:global(.documents-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.documents :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; }
+.documents :global(.expenses-title .trip-section-title) { margin: 0; font: 400 34px/1.1 Georgia, 'Times New Roman', serif; letter-spacing: -.7px; }
+.documents :global(.expenses-title > p:last-child) { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.documents :global(.documents-panel) { max-width: 1280px; margin: 12px auto 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.archiveChoices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.archiveChoice { min-width: 0; padding: 12px; display: grid; grid-template-columns: 24px minmax(0,1fr); grid-template-rows: auto auto auto 1fr; align-items: start; gap: 6px 8px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.archiveChoice > svg { color: #94723e; }
+.archiveChoice h2 { margin: 0; color: var(--navy); font: 400 20px/1.2 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; }
+.archiveChoice p, .archiveChoice > small { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+.documents .archiveChoice :global(.file-button) { grid-column: 1 / -1; justify-self: start; align-self: end; margin-top: 2px; }
+.archiveHint { margin: 10px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.listLabel { margin: 14px 0 0; color: #94723e; font-size: 10px; font-weight: 500; letter-spacing: .16em; }
+.documents :global(.secondary-button) { min-height: 44px; padding: 9px 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #eee4d2; color: var(--navy); font-size: 12px; font-weight: 600; }
+.documents :global(.file-button input), .documents :global(.requirement-upload input) { inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: auto; cursor: pointer; }
+.documents :global(.document-list) { margin-top: 7px; gap: 8px; }
+.documents :global(.document-list article) { min-width: 0; min-height: 0; padding: 10px; grid-template-columns: 28px minmax(0,1fr) 16px; gap: 6px 8px; align-items: start; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.documents :global(.document-icon) { width: 28px; height: 28px; border-radius: 8px; color: #94723e; background: #eee7d9; }
+.documents :global(.document-list article > div:nth-child(2)) { min-width: 0; }
+.documents :global(.document-list article strong) { display: block; color: var(--navy); font-size: 15px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.documents :global(.document-original-name) { display: block !important; margin-top: 3px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.documents :global(.document-lock) { grid-column: 3; grid-row: 1; color: #94723e; }
+.documents :global(.document-row-actions) { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.documents :global(.document-open-link), .documents :global(.document-download-link), .documents :global(.offline-button) { min-height: 44px; padding: 7px 9px; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1.25; border: 1px solid var(--border); border-radius: 9px; color: var(--navy); background: transparent; text-decoration: none; font-weight: 500; }
+.documents :global(.offline-button.active) { color: #65755d; background: #edf0e7; border-color: #cad4bd; }
+.documents :global(.document-list .row-delete) { grid-column: auto; grid-row: auto; margin-left: auto; width: 44px; height: 44px; min-height: 44px; border-color: var(--border); color: var(--text-secondary); }
+.documents :global(.entry-requirements), .documents :global(.document-checklist) { max-width: 1280px; margin: 12px auto 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: none; }
+.documents :global(.requirements-heading) { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.documents :global(.requirements-heading > div) { flex: 1 1 200px; min-width: 0; }
+.documents :global(.requirements-heading h2), .documents :global(.requirements-fallback h2), .documents :global(.document-checklist h2) { margin: 0; color: var(--navy); text-align: left; font: 400 24px/1.15 Georgia, 'Times New Roman', serif; }
+.passportHint { margin: 5px 0 0; font-size: 12px; color: var(--text-secondary); }
+.documents :global(.requirements-heading > span) { max-width: 100%; padding: 7px 10px; margin-top: 0; font-size: 11px; font-weight: 500; }
+.documents :global(.visa-free), .documents :global(.requirements-live) { color: #65755d; background: #edf0e7; }
+.documents :global(.visa-required) { color: #876831; background: #f3e9d6; }
+.documents :global(.requirements-list) { margin-top: 12px; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.documents :global(.requirements-list article) { min-width: 0; padding: 10px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 10px; }
+.documents :global(.requirements-list article > span) { justify-self: start; grid-column: 1; padding: 4px 6px; font-size: 9px; font-weight: 500; color: #78684d; background: #eee7d9; }
+.documents :global(.requirements-list article > div) { grid-column: 1; min-width: 0; }
+.documents :global(.requirements-list strong) { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.documents :global(.requirements-list p) { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.documents :global(.requirement-upload) { position: relative; top: auto; bottom: auto; right: auto; grid-column: 2; grid-row: 1 / 3; align-self: center; min-height: 44px; padding: 7px 9px; color: var(--navy); font-size: 11px; font-weight: 500; }
+.documents :global(.requirement-complete) { border-color: #cad4bd !important; background: #edf0e7; }
+.documents :global(.entry-requirements footer) { margin-top: 12px; padding-top: 8px; gap: 8px; font-size: 11px; }
+.documents :global(.entry-requirements footer a) { min-height: 44px; display: inline-flex; align-items: center; width: fit-content; }
+.documents :global(.requirements-fallback p) { font-size: 12px; line-height: 1.45; }
+.documents :global(.requirements-fallback .primary-button) { display: inline-flex; font-size: 12px; }
+.documents :global(.document-checklist > .invite-icon) { display: none; }
+.documents :global(.document-checklist > p) { margin: 6px 0 0; text-align: left; font-size: 12px; line-height: 1.4; }
+.documents :global(.checklist-progress) { height: 6px; margin: 10px 0; background: #e8e0d4; }
+.documents :global(.checklist-progress span) { background: #74836b; }
+.documents :global(.checklist-item) { min-height: 36px; padding: 6px 0; overflow-wrap: anywhere; border-color: var(--border); font-size: 12px; }
+.documents :global(.checklist-item > span) { flex-shrink: 0; }
+.documents :global(.checklist-item > span.checked) { background: #74836b; border-color: #74836b; }
+.documents :global(.document-upload-modal), .documents :global(.document-upload-modal .modal-header), .documents :global(.document-upload-modal .modal-actions), .documents :global(.document-preview-screen) { background: var(--surface); }
+.documents :global(.document-upload-modal h2), .documents :global(.document-preview-screen h2) { font: 400 24px/1.2 Georgia, 'Times New Roman', serif; overflow-wrap: anywhere; white-space: normal; overflow: visible; text-overflow: clip; }
+.documents :global(.document-upload-modal input) { min-width: 0; max-width: 100%; font-size: 16px; background: #f8f5ef; }
+.documents :global(.document-upload-modal .trip-form) { grid-template-columns: minmax(0,1fr); }
+.documents :global(.document-selected-file > div) { min-width: 0; }
+.documents :global(.document-selected-file strong) { overflow-wrap: anywhere; white-space: normal; }
+.documents :global(.document-upload-modal .icon-button), .documents :global(.document-preview-screen .icon-button) { width: 44px; height: 44px; flex-shrink: 0; }
+.documents :global(button:focus-visible), .documents :global(a:focus-visible), .documents :global(.file-button:focus-within), .documents :global(.requirement-upload:focus-within) { outline: 2px solid #94723e; outline-offset: 2px; }
+@media (max-width: 650px) { .documents :global(.requirements-list) { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 560px) { .documents :global(.expenses-title .trip-section-title) { font-size: 30px; } }
+@media (max-width: 360px) { .archiveChoices { grid-template-columns: minmax(0,1fr); } }
