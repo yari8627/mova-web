@@ -2,18 +2,27 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), SSR = require('react-dom/server');
 const fixture = ['IT','FR','GB','US','JP','AU','EG','BR'].map((countryCode, index) => ({ id: countryCode, countryCode, visitedAt: '2026-10-17', source: index === 1 ? 'position' : index === 2 ? 'trip' : 'manual' }));
-function harness({ visits = fixture, geo = 'success', detectOK = true } = {}) {
+function harness({ visits = fixture, geo = 'success', detectOK = true, progressOK = true, progressGate, progressVisits = visits } = {}) {
   const state = [visits, [], '', '', false, false], effects = [], calls = [];
   let cursor = 0, keyboard;
   const context = { exports: {}, Intl, Date, console, navigator: {} };
   if (geo !== 'unsupported') context.navigator.geolocation = { getCurrentPosition: (success, failure, options) => { calls.push({ geolocation: options }); if (geo === 'denied') failure(); else void success({ coords: { latitude: 0, longitude: 0 } }); } };
   context.fetch = async (url, options) => {
     calls.push({ url, options });
+    if (url === '/api/progress' && !options && progressGate) await progressGate;
     const body = JSON.parse(options?.body || '{}');
-    const result = url === '/world-countries.json' ? JSON.parse(fs.readFileSync('public/world-countries.json', 'utf8')) : url === '/api/progress/detect-country' ? { countryCode: 'JP', error: 'Paese non riconosciuto.' } : options?.method === 'POST' ? { id: body.countryCode, countryCode: body.countryCode, source: body.source, visitedAt: '2026-10-17' } : visits;
-    return { ok: url !== '/api/progress/detect-country' || detectOK, json: async () => result };
+    const result = url === '/world-countries.json' ? JSON.parse(fs.readFileSync('public/world-countries.json', 'utf8')) : url === '/api/progress/detect-country' ? { countryCode: 'JP', error: 'Paese non riconosciuto.' } : options?.method === 'POST' ? { id: body.countryCode, countryCode: body.countryCode, source: body.source, visitedAt: '2026-10-17' } : progressVisits;
+    return { ok: url === '/api/progress' && !options ? progressOK : url !== '/api/progress/detect-country' || detectOK, json: async () => result };
   };
   context.require = name => {
+    if (name.endsWith('/progress-map')) {
+      if (!context.mapModule) {
+        const mapContext = { exports: {}, fetch: context.fetch, require };
+        vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/progress-map.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, mapContext);
+        context.mapModule = mapContext.exports;
+      }
+      return context.mapModule;
+    }
     if (name === 'react') return { useEffect: fn => effects.push(fn), useMemo: fn => fn(), useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = typeof value === 'function' ? value(state[i]) : value]; } };
     if (name === 'next/navigation') return { useRouter: () => ({ push: path => calls.push({ route: path }) }) };
     if (name.endsWith('/use-autocomplete-keyboard')) return { useAutocompleteKeyboard: options => { keyboard = options; return { onKeyDown() {}, activeIndex: -1, setActiveIndex() {} }; } };
@@ -146,4 +155,35 @@ test('existing bottom navigation retains all four destinations and Progressi act
   for (const button of buttons) button.props.onClick();
   assert.deepEqual(calls, ['/', '/progress', '/about', '/settings/profile']);
   assert.equal(buttons[1].props['aria-current'], 'page');
+});
+
+test('failed personal data request reports an error while the independent map still loads', async () => {
+  const h = harness({ visits: [], progressOK: false });
+  h.render(); h.effects[0](); await flush();
+  assert(h.html().includes('I Paesi visitati non sono temporaneamente disponibili.'));
+  assert(h.state[1].length > 150);
+});
+
+test('an unmounted page ignores late data; a new account never inherits previous personal state', async () => {
+  let resolve;
+  const gate = new Promise(done => { resolve = done; });
+  const previous = harness({ visits: [], progressVisits: fixture, progressGate: gate });
+  previous.render(); const cleanup = previous.effects[0]();
+  cleanup(); resolve(); await flush();
+  assert.equal(previous.state[0].length, 0); assert.equal(previous.state[1].length, 0);
+  const current = harness({ visits: [] }); current.render(); current.effects[0](); await flush();
+  assert(current.html().includes('pronta per il primo Paese'));
+  assert.equal(current.calls.filter(c => c.url === '/api/progress').length, 1);
+});
+
+test('35 and 100 country fixtures keep world counts, progress and all six continent bars dynamic', () => {
+  for (const size of [35, 100]) {
+    const visits = require('country-state-city').Country.getAllCountries().slice(0,size).map(c => ({ id: c.isoCode, countryCode: c.isoCode, source: 'manual', visitedAt: '2026-01-01' }));
+    const h = harness({ visits });
+    assert.equal(find(h,n => n.props?.role === 'progressbar').props['aria-valuenow'], size / 195 * 100);
+    assert.equal(nodes(find(h,n => n.props?.className === 'continent-progress-grid')).filter(n => n.type === 'article').length,6);
+    assert.equal(nodes(find(h,n => n.props?.className === 'visited-list')).filter(n => n.type === 'article').length,6);
+    find(h,n => n.props?.['aria-controls'] === 'visited-country-list').props.onClick();
+    assert.equal(nodes(find(h,n => n.props?.className === 'visited-list')).filter(n => n.type === 'article').length,size);
+  }
 });

@@ -10,7 +10,14 @@ function countryCode(name: string) { const normalized = name.trim().toLocaleLowe
 export async function GET() {
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 });
   const trips = await prisma.trip.findMany({ where: { startDate: { lte: new Date() }, OR: [{ ownerId: user.id }, { participants: { some: { email: user.email, status: "confirmed" } } }] }, select: { country: true, startDate: true } });
-  for (const trip of trips) { const code = countryCode(trip.country); if (code) await prisma.visitedCountry.upsert({ where: { userId_countryCode: { userId: user.id, countryCode: code } }, update: {}, create: { id: randomUUID(), userId: user.id, countryCode: code, visitedAt: trip.startDate, source: "trip" } }); }
+  // Preserve the first occurrence, just like the former sequential upserts.
+  // Existing manual/position visits must never have their date or source overwritten.
+  const imported = new Map<string, { id: string; userId: string; countryCode: string; visitedAt: Date; source: string }>();
+  for (const trip of trips) {
+    const code = countryCode(trip.country);
+    if (code && !imported.has(code)) imported.set(code, { id: randomUUID(), userId: user.id, countryCode: code, visitedAt: trip.startDate, source: "trip" });
+  }
+  if (imported.size) await prisma.visitedCountry.createMany({ data: [...imported.values()], skipDuplicates: true });
   const countries = await prisma.visitedCountry.findMany({ where: { userId: user.id }, orderBy: { visitedAt: "desc" } });
   return NextResponse.json(countries);
 }

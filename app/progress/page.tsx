@@ -5,18 +5,14 @@ import brandStyles from "../components/trip-header.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Country } from "country-state-city";
-import { feature } from "topojson-client";
-import { geoNaturalEarth1, geoPath } from "d3-geo";
 import countries from "i18n-iso-countries";
 import localeIt from "i18n-iso-countries/langs/it.json";
 import { countries as countryMetadata, type TContinentCode, type TCountryCode } from "countries-list";
 import { Check, LocateFixed, MapPin, Plus, Search, Trash2 } from "lucide-react";
 import { useAutocompleteKeyboard } from "../../lib/use-autocomplete-keyboard";
+import { loadMapCountries, type MapCountry } from "../../lib/progress-map";
 
 type Visit = { id: string; countryCode: string; visitedAt: string; source: "manual" | "position" | "trip" };
-type MapCountry = { code: string; name: string; path: string };
-type WorldTopology = { type: "Topology"; objects: { countries: object } };
-type WorldFeature = { id?: string | number; geometry: Parameters<ReturnType<typeof geoPath>>[0] };
 countries.registerLocale(localeIt);
 const WORLD_COUNTRIES = 195;
 const CONTINENTS: Array<{ code: Exclude<TContinentCode, "AN">; name: string; total: number }> = [
@@ -29,17 +25,6 @@ const CONTINENTS: Array<{ code: Exclude<TContinentCode, "AN">; name: string; tot
 ];
 const regionNames = new Intl.DisplayNames(["it"], { type: "region" });
 const countryOptions = Country.getAllCountries().map((country) => ({ ...country, displayName: regionNames.of(country.isoCode) || country.name })).sort((a, b) => a.displayName.localeCompare(b.displayName, "it"));
-
-function normalizeMapFeature(item: WorldFeature, code: string): WorldFeature {
-  if (code !== "FR") return item;
-  const geometry = item.geometry as unknown as { type: string; coordinates?: number[][][][] };
-  if (geometry.type !== "MultiPolygon" || !geometry.coordinates) return item;
-
-  const europeanTerritories = geometry.coordinates.filter((polygon) =>
-    polygon[0]?.some(([longitude, latitude]) => longitude >= -6 && longitude <= 10 && latitude >= 41 && latitude <= 52),
-  );
-  return { ...item, geometry: { ...geometry, coordinates: europeanTerritories } as never };
-}
 
 export default function ProgressPage() {
   const router = useRouter();
@@ -59,7 +44,20 @@ export default function ProgressPage() {
     return { ...continent, visited, percentage: Math.min(100, visited / continent.total * 100) };
   }), [visits]);
 
-  useEffect(() => { fetch("/api/progress").then((response) => response.ok ? response.json() : []).then(setVisits).catch(() => undefined); fetch("/world-countries.json").then((response) => response.json()).then((topology: WorldTopology) => { const collection = feature(topology as never, topology.objects.countries as never) as unknown as { features: WorldFeature[] }; const projection = geoNaturalEarth1().fitExtent([[12, 12], [948, 488]], collection as never); const path = geoPath(projection); setMapCountries(collection.features.map((item) => { const numeric = String(item.id || "").padStart(3, "0"); const code = countries.numericToAlpha2(numeric) || ""; const displayFeature = normalizeMapFeature(item, code); return { code, name: countries.getName(code, "it") || code, path: path(displayFeature as never) || "" }; }).filter((item) => item.code && item.path)); }).catch(() => setMessage("La mappa non è temporaneamente disponibile.")); }, []);
+  useEffect(() => {
+    let active = true;
+    // Personal data stays fresh and account-scoped on the server; only geography is shared.
+    fetch("/api/progress").then(async response => {
+      if (!response.ok) throw new Error("Caricamento non riuscito");
+      return response.json() as Promise<Visit[]>;
+    }).then(value => { if (active) setVisits(value); }).catch(() => {
+      if (active) setMessage("I Paesi visitati non sono temporaneamente disponibili.");
+    });
+    loadMapCountries().then(value => { if (active) setMapCountries(value); }).catch(() => {
+      if (active) setMessage("La mappa non è temporaneamente disponibile.");
+    });
+    return () => { active = false; };
+  }, []);
 
   async function addCountry(code: string, source: "manual" | "position" = "manual") { const response = await fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countryCode: code, source }) }); if (!response.ok) return; const saved = await response.json() as Visit; setVisits((current) => [saved, ...current.filter((item) => item.countryCode !== code)]); setQuery(""); setMessage(""); }
   async function removeCountry(code: string) { const response = await fetch(`/api/progress?countryCode=${encodeURIComponent(code)}`, { method: "DELETE" }); if (response.ok) setVisits((current) => current.filter((item) => item.countryCode !== code)); }
