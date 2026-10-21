@@ -3,6 +3,7 @@ import { currentUser, verifyPassword } from "../../../../lib/auth";
 import { deleteAvatar } from "../../../../lib/avatar-storage";
 import { deleteDocumentFile } from "../../../../lib/document-storage";
 import { prisma } from "../../../../lib/prisma";
+import { endProgressScope } from "../../../../lib/progress-cache-scope";
 
 export async function GET() {
   const user = await currentUser(); if (!user) return NextResponse.json({ error: "Accesso richiesto" }, { status: 401 });
@@ -25,5 +26,6 @@ export async function DELETE(request: Request) {
     prisma.tripInvite.deleteMany({ where: { email: record.email, status: "pending" } }),
     prisma.user.delete({ where: { id: record.id } })
   ]);
+  await endProgressScope();
   return NextResponse.json({ deleted: true });
 }

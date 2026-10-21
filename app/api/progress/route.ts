@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { Country } from "country-state-city";
 import { currentUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
+import { progressCacheScope } from "../../../lib/progress-cache-scope";
+import { PROGRESS_SCOPE_HEADER, PROGRESS_OWNER_HEADER, PROGRESS_EXPIRY_HEADER } from "../../../lib/progress-cache-contract";
 
 const regionNames = new Intl.DisplayNames(["it"], { type: "region" });
 function countryCode(name: string) { const normalized = name.trim().toLocaleLowerCase("it"); return Country.getAllCountries().find((country) => country.name.toLocaleLowerCase() === normalized || regionNames.of(country.isoCode)?.toLocaleLowerCase("it") === normalized)?.isoCode; }
@@ -13,6 +15,7 @@ export async function GET() {
   const diagnostics = process.env.NAMI_PROGRESS_TIMING === "1";
   const started = performance.now();
   const spans: string[] = [];
+  let cacheScope: Awaited<ReturnType<typeof progressCacheScope>> | null = null;
   async function measure<T>(name: string, run: () => Promise<T>): Promise<T> {
     const start = performance.now();
     try { return await run(); }
@@ -21,6 +24,12 @@ export async function GET() {
   function respond(body: unknown, status = 200) {
     const start = performance.now();
     const response = NextResponse.json(body, { status });
+    response.headers.set("Cache-Control", "private, no-store");
+    if (cacheScope) {
+      response.headers.set(PROGRESS_SCOPE_HEADER, cacheScope.scope);
+      response.headers.set(PROGRESS_OWNER_HEADER, cacheScope.owner);
+      response.headers.set(PROGRESS_EXPIRY_HEADER, cacheScope.expiresAt);
+    }
     if (diagnostics) {
       spans.push(`serialize;dur=${(performance.now() - start).toFixed(2)}`, `total;dur=${(performance.now() - started).toFixed(2)}`);
       response.headers.set("Server-Timing", spans.join(", "));
@@ -28,6 +37,7 @@ export async function GET() {
     return response;
   }
   const user = await measure("auth", currentUser); if (!user) return respond({ error: "Accesso richiesto" }, 401);
+  cacheScope = await progressCacheScope(user.id, user.sessionExpiresAt);
   const countries = await measure("visits", () => prisma.visitedCountry.findMany({ where: { userId: user.id }, orderBy: { visitedAt: "desc" } }));
   const trips = await measure("trips", () => prisma.trip.findMany({ where: { startDate: { lte: new Date() }, OR: [{ ownerId: user.id }, { participants: { some: { email: user.email, status: "confirmed" } } }] }, select: { country: true, startDate: true } }));
   // Preserve the first occurrence, just like the former sequential upserts.

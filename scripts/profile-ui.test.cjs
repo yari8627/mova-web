@@ -11,6 +11,7 @@ function profileHarness({ saved = fixture, uploadOK = true, saveOK = true, email
   let persisted = { ...saved }, cursor = 0;
   const state = [null, '', '', '', false], calls = [], effects = [];
   const page = load('app/settings/profile/page.tsx', name => {
+    if (name.endsWith('/progress-memory')) return { resetProgressMemory: () => calls.push({ clearProgress: true }) };
     if (name === 'react') return { useEffect: fn => effects.push(fn), useState: initial => { const i = cursor++; return [state[i] === undefined ? initial : state[i], value => state[i] = typeof value === 'function' ? value(state[i]) : value]; } };
     if (name === 'next/navigation') return { useRouter: () => ({ push: path => calls.push({ push: path }), replace: path => calls.push({ replace: path }), refresh: () => calls.push({ refresh: true }) }) };
     if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };

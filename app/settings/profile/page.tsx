@@ -8,6 +8,7 @@ import italian from "i18n-iso-countries/langs/it.json";
 
 import brandStyles from "../../components/trip-header.module.css";
 import styles from "./profile.module.css";
+import { resetProgressMemory } from "../../../lib/progress-memory";
 
 countries.registerLocale(italian);
 const passportCountries = Object.entries(countries.getNames("it", { select: "official" })).map(([alpha2, name]) => ({ code: countries.alpha2ToAlpha3(alpha2) || alpha2, name })).sort((a, b) => a.name.localeCompare(b.name, "it"));
@@ -17,7 +18,7 @@ export default function ProfileSettingsPage() {
   useEffect(() => { fetch("/api/auth/me").then((response) => response.json()).then((result) => setProfile(result.user)); }, []);
   async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setMessage(""); const response = await fetch("/api/auth/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profile) }); const result = await response.json(); if (!response.ok) return setError(result.error); setMessage(result.emailChanged ? "Profilo salvato. Verifica il nuovo indirizzo email per renderlo attivo." : "Profilo aggiornato."); setPreviewUrl(result.previewUrl || ""); router.refresh(); }
   async function upload(file?: File) { if (!file) return; setError(""); const body = new FormData(); body.append("avatar", file); const response = await fetch("/api/auth/profile", { method: "POST", body }); const result = await response.json(); if (!response.ok) return setError(result.error); setProfile((value) => value ? { ...value, avatarUrl: result.avatarUrl } : value); setMessage("Foto profilo aggiornata."); }
-  async function logout() { setLoggingOut(true); await fetch("/api/auth/logout", { method: "POST" }); router.replace("/auth"); router.refresh(); }
+  async function logout() { resetProgressMemory(); setLoggingOut(true); await fetch("/api/auth/logout", { method: "POST" }); resetProgressMemory(); router.replace("/auth"); router.refresh(); }
   if (!profile) return <main className={styles.loading} role="status">Caricamento profilo…</main>;
   const initials = profile.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   return <main className={styles.page}>

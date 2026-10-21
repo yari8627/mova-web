@@ -4,6 +4,7 @@ import { currentUser } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
 import { tripAccess } from "../../../../../lib/trip-access";
 import { notifyTripMembers } from "../../../../../lib/notifications";
+import { rotateProgressScope } from "../../../../../lib/progress-cache-scope";
 
 type Item = Record<string, unknown>;
 
@@ -62,6 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (body.expenses) { await tx.expense.deleteMany({ where: { tripId: id } }); await tx.expense.createMany({ data: body.expenses.map((item: Item) => ({ id: String(item.id), tripId: id, description: String(item.description), amount: Number(item.amount), category: String(item.category), paidBy: String(item.paidBy), date: new Date(String(item.date)), sharedWith: item.sharedWith ? JSON.stringify(item.sharedWith) : null, kind: String(item.kind || "expense"), recipient: item.recipient ? String(item.recipient) : null })) }); }
     if (body.participants) { await tx.participant.deleteMany({ where: { tripId: id } }); await tx.participant.createMany({ data: body.participants.map((item: Item) => ({ id: String(item.id), tripId: id, name: String(item.name), email: String(item.email), role: String(item.role || "participant"), status: String(item.status || "pending") })) }); }
   });
+  if (!activitiesOnly && (!existing || existing.country !== trip.country || existing.startDate?.toISOString().slice(0, 10) !== trip.startDate || body.participants)) await rotateProgressScope(user.sessionExpiresAt);
   const change = body.activities ? { type: "itinerary", title: "Itinerario aggiornato", message: `${user.name} ha modificato l’itinerario.`, link: `/trips/${id}` } : body.bookings ? { type: "booking", title: "Prenotazioni aggiornate", message: `${user.name} ha modificato le prenotazioni.`, link: `/trips/${id}/bookings` } : body.documents ? { type: "document", title: "Documenti aggiornati", message: `${user.name} ha modificato i documenti.`, link: `/trips/${id}/documents` } : body.expenses ? { type: "expense", title: "Spese aggiornate", message: `${user.name} ha modificato le spese.`, link: `/trips/${id}/expenses` } : body.participants ? { type: "participants", title: "Gruppo aggiornato", message: `${user.name} ha modificato i partecipanti.`, link: `/trips/${id}/participants` } : null;
   if (change) await notifyTripMembers(id, user.id, change);
   return NextResponse.json({ synchronized: true });

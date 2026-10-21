@@ -11,6 +11,7 @@ import { countries as countryMetadata, type TContinentCode, type TCountryCode } 
 import { Check, LocateFixed, MapPin, Plus, Search, Trash2 } from "lucide-react";
 import { useAutocompleteKeyboard } from "../../lib/use-autocomplete-keyboard";
 import { loadMapCountries, type MapCountry } from "../../lib/progress-map";
+import { readProgressMemory, subscribeProgressMemory, refreshProgressMemory, progressMemoryMessage, addProgressCountry, removeProgressCountry } from "../../lib/progress-memory";
 
 type Visit = { id: string; countryCode: string; visitedAt: string; source: "manual" | "position" | "trip" };
 countries.registerLocale(localeIt);
@@ -28,7 +29,7 @@ const countryOptions = Country.getAllCountries().map((country) => ({ ...country,
 
 export default function ProgressPage() {
   const router = useRouter();
-  const [visits, setVisits] = useState<Visit[]>([]); const [mapCountries, setMapCountries] = useState<MapCountry[]>([]); const [query, setQuery] = useState(""); const [message, setMessage] = useState(""); const [locating, setLocating] = useState(false);
+  const [visits, setVisits] = useState<Visit[]>(() => readProgressMemory() || []); const [mapCountries, setMapCountries] = useState<MapCountry[]>([]); const [query, setQuery] = useState(""); const [message, setMessage] = useState(""); const [locating, setLocating] = useState(false);
   const [showAllVisits, setShowAllVisits] = useState(false);
   const visitedCodes = useMemo(() => new Set(visits.map((visit) => visit.countryCode)), [visits]);
   const alphabeticVisits = useMemo(() => [...visits].sort((a, b) => {
@@ -46,27 +47,23 @@ export default function ProgressPage() {
 
   useEffect(() => {
     let active = true;
-    // Personal data stays fresh and account-scoped on the server; only geography is shared.
-    fetch("/api/progress").then(async response => {
-      if (!response.ok) throw new Error("Caricamento non riuscito");
-      return response.json() as Promise<Visit[]>;
-    }).then(value => { if (active) setVisits(value); }).catch(() => {
-      if (active) setMessage("I Paesi visitati non sono temporaneamente disponibili.");
-    });
+    const update = () => { if (active) { setVisits(readProgressMemory() || []); setMessage(progressMemoryMessage()); } };
+    const unsubscribe = subscribeProgressMemory(update);
+    void refreshProgressMemory();
     loadMapCountries().then(value => { if (active) setMapCountries(value); }).catch(() => {
       if (active) setMessage("La mappa non è temporaneamente disponibile.");
     });
-    return () => { active = false; };
+    return () => { active = false; unsubscribe(); };
   }, []);
 
-  async function addCountry(code: string, source: "manual" | "position" = "manual") { const response = await fetch("/api/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countryCode: code, source }) }); if (!response.ok) return; const saved = await response.json() as Visit; setVisits((current) => [saved, ...current.filter((item) => item.countryCode !== code)]); setQuery(""); setMessage(""); }
-  async function removeCountry(code: string) { const response = await fetch(`/api/progress?countryCode=${encodeURIComponent(code)}`, { method: "DELETE" }); if (response.ok) setVisits((current) => current.filter((item) => item.countryCode !== code)); }
+  async function addCountry(code: string, source: "manual" | "position" = "manual") { try { await addProgressCountry(code, source); setVisits(readProgressMemory() || []); setQuery(""); setMessage(""); } catch { setMessage(progressMemoryMessage() || "Non è stato possibile aggiungere il Paese. Riprova."); } }
+  async function removeCountry(code: string) { try { await removeProgressCountry(code); setVisits(readProgressMemory() || []); } catch { setMessage(progressMemoryMessage() || "Non è stato possibile rimuovere il Paese. Riprova."); } }
   function detectCountry() { if (!navigator.geolocation) return setMessage("La posizione non è supportata su questo dispositivo."); setLocating(true); setMessage(""); navigator.geolocation.getCurrentPosition(async (position) => { const response = await fetch("/api/progress/detect-country", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ latitude: position.coords.latitude, longitude: position.coords.longitude }) }); const result = await response.json(); setLocating(false); if (!response.ok) return setMessage(result.error || "Paese non riconosciuto."); await addCountry(result.countryCode, "position"); }, () => { setLocating(false); setMessage("Permesso posizione non concesso o posizione non disponibile."); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 3600000 }); }
 
   return <main className={`progress-page ${styles.progress}`}>
     <header className="progress-topbar"><button className={brandStyles.wordmarkButton} onClick={() => router.push("/")} aria-label="NAMI Travel, torna alla Home"><span>NAMI</span><small>TRAVEL</small></button></header>
     <section className="progress-heading"><div><p className="section-kicker">IL TUO DIARIO DI VIAGGIO</p><h1>Il tuo mondo</h1><p>Ogni Paese visitato è una storia da raccontare.</p></div></section>
-    {message && <div className="progress-message" role="status">{message}</div>}
+    {message && <div className="progress-message" role="status">{message}{progressMemoryMessage() && <button type="button" className="secondary-button" onClick={() => { void refreshProgressMemory(); }}>Riprova</button>}</div>}
     <section className={styles.discovery} aria-label="Il mondo che hai scoperto">
       <div className={styles.countryTotal}><MapPin size={20} aria-hidden="true" /><div><strong>{visits.length}</strong><span>Paesi visitati su {WORLD_COUNTRIES}</span></div></div>
       <div className={styles.discoveryDetails}><div><strong>{percentage.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%</strong><span>del mondo visitato</span></div><div><span>Ultimo Paese aggiunto</span><strong>{visits[0] ? countries.getName(visits[0].countryCode, "it") : "—"}</strong></div></div>

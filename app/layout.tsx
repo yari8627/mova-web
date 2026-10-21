@@ -3,6 +3,7 @@ import "./globals.css";
 import { ModalScrollLock } from "./components/modal-scroll-lock";
 import { PwaInstall } from "./components/pwa-install";
 import { AppBottomNav } from "./components/app-bottom-nav";
+import { ProgressSessionGuard } from "./components/progress-session-guard";
 
 export const metadata: Metadata = {
   title: "NAMI Travel",
@@ -23,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body><ModalScrollLock /><PwaInstall />{children}<AppBottomNav /></body>
+      <body><ProgressSessionGuard /><ModalScrollLock /><PwaInstall />{children}<AppBottomNav /></body>
     </html>
   );
 }

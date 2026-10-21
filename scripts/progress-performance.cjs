@@ -8,6 +8,8 @@ function loadRoute({ source = fs.readFileSync(routeFile, 'utf8'), trips = [], vi
   const calls = [];
   const query = async (name, value, args) => { calls.push({ name, args }); if (latency) await new Promise(r => setTimeout(r, latency)); return value; };
   const context = { exports: {}, URL, process: { env: { NAMI_PROGRESS_TIMING: timing ? '1' : undefined } }, require: name => {
+    if (name.endsWith('/progress-cache-scope')) return { progressCacheScope: async (_, expiresAt) => ({ scope:'11111111-1111-4111-8111-111111111111',owner:'a'.repeat(64),expiresAt:expiresAt || '2099-01-01T00:00:00.000Z' }) };
+    if (name.endsWith('/progress-cache-contract')) { const module={exports:{},require}; vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/progress-cache-contract.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,module); return module.exports; }
     if (name === 'next/server') return { NextResponse: { json: (body, options) => ({ body, headers: new Headers(options?.headers), status: options?.status || 200 }) } };
     if (name.endsWith('/auth')) return { currentUser: async () => { if (latency) await new Promise(r => setTimeout(r, latency)); return user; } };
     if (name.endsWith('/prisma')) return { prisma: database || {

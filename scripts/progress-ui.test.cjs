@@ -1,7 +1,9 @@
-const { test } = require('node:test');
+const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), SSR = require('react-dom/server');
 const fixture = ['IT','FR','GB','US','JP','AU','EG','BR'].map((countryCode, index) => ({ id: countryCode, countryCode, visitedAt: '2026-10-17', source: index === 1 ? 'position' : index === 2 ? 'trip' : 'manual' }));
+const stores=[];
+afterEach(()=>{for(const store of stores) store.clear();stores.length=0;});
 function harness({ visits = fixture, geo = 'success', detectOK = true, progressOK = true, progressGate, progressVisits = visits, progressError } = {}) {
   const state = [visits, [], '', '', false, false], effects = [], calls = [];
   let cursor = 0, keyboard;
@@ -9,13 +11,23 @@ function harness({ visits = fixture, geo = 'success', detectOK = true, progressO
   if (geo !== 'unsupported') context.navigator.geolocation = { getCurrentPosition: (success, failure, options) => { calls.push({ geolocation: options }); if (geo === 'denied') failure(); else void success({ coords: { latitude: 0, longitude: 0 } }); } };
   context.fetch = async (url, options) => {
     calls.push({ url, options });
-    if (url === '/api/progress' && !options && progressError) throw progressError;
-    if (url === '/api/progress' && !options && progressGate) await progressGate;
+    const get=!options?.method || options.method==='GET';
+    if (url === '/api/progress' && get && progressError) throw progressError;
+    if (url === '/api/progress' && get && progressGate) await (typeof progressGate==='function'?progressGate():progressGate);
     const body = JSON.parse(options?.body || '{}');
     const result = url === '/world-countries.json' ? JSON.parse(fs.readFileSync('public/world-countries.json', 'utf8')) : url === '/api/progress/detect-country' ? { countryCode: 'JP', error: 'Paese non riconosciuto.' } : options?.method === 'POST' ? { id: body.countryCode, countryCode: body.countryCode, source: body.source, visitedAt: '2026-10-17' } : progressVisits;
-    return { ok: url === '/api/progress' && !options ? progressOK : url !== '/api/progress/detect-country' || detectOK, json: async () => result };
+    const ok=url === '/api/progress' && get ? progressOK : url !== '/api/progress/detect-country' || detectOK;
+    return { ok,status:ok?200:500,headers:new Headers({'X-Nami-Progress-Scope':'11111111-1111-4111-8111-111111111111','X-Nami-Progress-Owner':'a'.repeat(64),'X-Nami-Progress-Expiry':'2099-01-01T00:00:00.000Z'}), json: async () => result };
   };
   context.require = name => {
+    if (name.endsWith('/progress-memory')) {
+      if(!context.memory) {
+        const load = file => {const module={exports:{},AbortController,setTimeout,clearTimeout,require:name=>name.endsWith('/progress-cache-contract')?load('lib/progress-cache-contract.ts'):require(name)};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,module);return module.exports;};
+        const store=load('lib/progress-memory-store.ts').createProgressMemoryStore({fetch:context.fetch,readScope:()=> '11111111-1111-4111-8111-111111111111',seedScope(){}});stores.push(store);
+        context.memory={readProgressMemory:store.read,subscribeProgressMemory:store.subscribe,refreshProgressMemory:store.revalidate,addProgressCountry:store.add,removeProgressCountry:store.remove,progressMemoryMessage:()=>({load:'I Paesi visitati non sono temporaneamente disponibili.',stale:'Aggiornamento non riuscito. Stai visualizzando gli ultimi dati disponibili.',mutation:'Modifica non salvata. Riprova.',session:'La sessione è cambiata o scaduta. Riprova per aggiornare i dati.'}[store.issue()] || '')};
+      }
+      return context.memory;
+    }
     if (name.endsWith('/progress-map')) {
       if (!context.mapModule) {
         const mapContext = { exports: {}, fetch: context.fetch, require };
@@ -24,7 +36,7 @@ function harness({ visits = fixture, geo = 'success', detectOK = true, progressO
       }
       return context.mapModule;
     }
-    if (name === 'react') return { useEffect: fn => effects.push(fn), useMemo: fn => fn(), useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = typeof value === 'function' ? value(state[i]) : value]; } };
+    if (name === 'react') return { useEffect: fn => effects.push(fn), useMemo: fn => fn(), useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = typeof initial==='function'?initial():initial; return [state[i], value => state[i] = typeof value === 'function' ? value(state[i]) : value]; } };
     if (name === 'next/navigation') return { useRouter: () => ({ push: path => calls.push({ route: path }) }) };
     if (name.endsWith('/use-autocomplete-keyboard')) return { useAutocompleteKeyboard: options => { keyboard = options; return { onKeyDown() {}, activeIndex: -1, setActiveIndex() {} }; } };
     if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
@@ -32,7 +44,7 @@ function harness({ visits = fixture, geo = 'success', detectOK = true, progressO
   };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/progress/page.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, context);
   const render = () => { cursor = 0; return context.exports.default(); };
-  return { state, effects, calls, render, html: () => SSR.renderToStaticMarkup(render()), keyboard: () => keyboard };
+  return { state, effects, calls, render, html: () => SSR.renderToStaticMarkup(render()), keyboard: () => keyboard, remount:()=>{state.splice(0,state.length,undefined,[], '', '',false,false);effects.length=0;cursor=0;} };
 }
 const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
 const find = (h, predicate) => nodes(h.render()).find(predicate);
@@ -208,4 +220,14 @@ test('a rejected or timed-out personal request surfaces an error while independe
     assert(h.state[1].length>150);
     assert.equal(h.calls.filter(c=>c.url==='/api/progress').length,1);
   }
+});
+
+test('actual page remount renders cached statistics before a slow GET completes',async()=>{
+  let release;let gate=Promise.resolve();
+  const h=harness({progressGate:()=>gate});h.render();const cleanup=h.effects[0]();await flush();
+  const cached=h.state[0];assert.equal(cached.length,fixture.length);cleanup();
+  gate=new Promise(done=>{release=done;});h.remount();
+  assert(h.html().includes('4,1%'));assert.equal(h.state[0],cached,'the initializer reads the existing memory snapshot');
+  h.effects[0]();await flush();assert.equal(h.state[0],cached);assert.equal(h.calls.filter(c=>c.url==='/api/progress').length,2);
+  release();await flush();assert.equal(h.state[0],cached,'identical revalidation does not replace the data array');
 });

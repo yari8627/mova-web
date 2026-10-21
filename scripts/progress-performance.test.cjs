@@ -29,7 +29,10 @@ test('empty or unrecognized trip countries never create records; unauthorized re
     assert(!h.calls.some(call => call.name === 'createMany'));
   }
   const h = loadRoute({ user: null });
-  assert.equal((await h.api.GET()).status, 401); assert.equal(h.calls.length, 0);
+  const denied = await h.api.GET();
+  assert.equal(denied.status, 401); assert.equal(h.calls.length, 0);
+  assert.equal(denied.headers.get('X-Nami-Progress-Owner'), null);
+  assert.equal(denied.headers.get('Cache-Control'), 'private, no-store');
 });
 
 test('bulk import preserves existing manual/position records and account isolation across reloads', async () => {
