@@ -129,7 +129,12 @@ export function createProgressMemoryStore(environment: Environment) {
   }
 
   return {
-    read: () => valid()?.visits || null,
+    read: () => {
+      // A detected scope change must destroy the snapshot synchronously, before
+      // an old public marker or a late response can make it readable again.
+      checkSession();
+      return valid()?.visits || null;
+    },
     issue: () => issue,
     clear, checkSession, revalidate,
     invalidateData() { cancelRead(); },
