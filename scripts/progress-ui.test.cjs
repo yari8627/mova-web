@@ -2,13 +2,14 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), SSR = require('react-dom/server');
 const fixture = ['IT','FR','GB','US','JP','AU','EG','BR'].map((countryCode, index) => ({ id: countryCode, countryCode, visitedAt: '2026-10-17', source: index === 1 ? 'position' : index === 2 ? 'trip' : 'manual' }));
-function harness({ visits = fixture, geo = 'success', detectOK = true, progressOK = true, progressGate, progressVisits = visits } = {}) {
+function harness({ visits = fixture, geo = 'success', detectOK = true, progressOK = true, progressGate, progressVisits = visits, progressError } = {}) {
   const state = [visits, [], '', '', false, false], effects = [], calls = [];
   let cursor = 0, keyboard;
   const context = { exports: {}, Intl, Date, console, navigator: {} };
   if (geo !== 'unsupported') context.navigator.geolocation = { getCurrentPosition: (success, failure, options) => { calls.push({ geolocation: options }); if (geo === 'denied') failure(); else void success({ coords: { latitude: 0, longitude: 0 } }); } };
   context.fetch = async (url, options) => {
     calls.push({ url, options });
+    if (url === '/api/progress' && !options && progressError) throw progressError;
     if (url === '/api/progress' && !options && progressGate) await progressGate;
     const body = JSON.parse(options?.body || '{}');
     const result = url === '/world-countries.json' ? JSON.parse(fs.readFileSync('public/world-countries.json', 'utf8')) : url === '/api/progress/detect-country' ? { countryCode: 'JP', error: 'Paese non riconosciuto.' } : options?.method === 'POST' ? { id: body.countryCode, countryCode: body.countryCode, source: body.source, visitedAt: '2026-10-17' } : progressVisits;
@@ -185,5 +186,26 @@ test('35 and 100 country fixtures keep world counts, progress and all six contin
     assert.equal(nodes(find(h,n => n.props?.className === 'visited-list')).filter(n => n.type === 'article').length,6);
     find(h,n => n.props?.['aria-controls'] === 'visited-country-list').props.onClick();
     assert.equal(nodes(find(h,n => n.props?.className === 'visited-list')).filter(n => n.type === 'article').length,size);
+  }
+});
+
+test('personal GET starts in the mounting effect before geography and data becomes available without another dependency', async () => {
+  let resolve;
+  const h=harness({visits:[],progressVisits:fixture,progressGate:new Promise(done=>{resolve=done;})});
+  h.render(); h.effects[0]();
+  assert.equal(h.calls[0].url,'/api/progress');
+  assert.equal(h.calls.filter(c=>c.url==='/api/progress').length,1);
+  await flush(); assert(h.state[1].length>150); assert.equal(h.state[0].length,0);
+  resolve(); await flush();
+  assert.equal(h.state[0].length,fixture.length);
+  assert(h.html().includes('4,1%'));
+});
+
+test('a rejected or timed-out personal request surfaces an error while independent geography remains usable', async () => {
+  for(const error of [new Error('network unavailable'),new DOMException('timed out','TimeoutError')]) {
+    const h=harness({visits:[],progressError:error});h.render();h.effects[0]();await flush();
+    assert(h.html().includes('I Paesi visitati non sono temporaneamente disponibili.'));
+    assert(h.state[1].length>150);
+    assert.equal(h.calls.filter(c=>c.url==='/api/progress').length,1);
   }
 });

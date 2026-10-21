@@ -4,11 +4,11 @@ const { performance } = require('node:perf_hooks');
 const { execFileSync } = require('node:child_process');
 const routeFile = 'app/api/progress/route.ts';
 const BASELINE = 'ea53ba0';
-function loadRoute({ source = fs.readFileSync(routeFile, 'utf8'), trips = [], visits = [], user = { id: 'test-user', email: 'test@example.invalid' }, latency = 0, database } = {}) {
+function loadRoute({ source = fs.readFileSync(routeFile, 'utf8'), trips = [], visits = [], user = { id: 'test-user', email: 'test@example.invalid' }, latency = 0, database, timing = false } = {}) {
   const calls = [];
   const query = async (name, value, args) => { calls.push({ name, args }); if (latency) await new Promise(r => setTimeout(r, latency)); return value; };
-  const context = { exports: {}, URL, require: name => {
-    if (name === 'next/server') return { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } };
+  const context = { exports: {}, URL, process: { env: { NAMI_PROGRESS_TIMING: timing ? '1' : undefined } }, require: name => {
+    if (name === 'next/server') return { NextResponse: { json: (body, options) => ({ body, headers: new Headers(options?.headers), status: options?.status || 200 }) } };
     if (name.endsWith('/auth')) return { currentUser: async () => { if (latency) await new Promise(r => setTimeout(r, latency)); return user; } };
     if (name.endsWith('/prisma')) return { prisma: database || {
       trip: { findMany: args => query('trips', trips, args) },
