@@ -24,6 +24,8 @@ function fixture({ email = 'guest@example.invalid', status = 'pending', member =
   const emailMatches = (actual, expected) => typeof expected === 'object' ? expected.in ? expected.in.includes(actual) : actual.toLowerCase() === expected.equals.toLowerCase() : actual === expected;
   const membership = where => members.find(row => where.id ? row.id === where.id : row.tripId === where.tripId_email.tripId && row.email === where.tripId_email.email);
   const prisma = {
+    $queryRaw: async () => [{ id: trip.id }],
+    notification: { upsert: async () => { notifications++; } },
     trip: {
       findUnique: async () => exists ? ({ ...trip, owner, activities: [], bookings: [], expenses: [], documents: [], invites: [{ email: invite.email, name: invite.name }], participants: members.map(row => ({ ...row })) }) : null,
       findMany: async ({ where }) => exists && trip.archivedAt === null && where.OR.some(condition => condition.ownerId === user?.id && trip.ownerId === user?.id || condition.participants && members.some(row => row.status === 'confirmed' && emailMatches(row.email, condition.participants.some.email))) ? [{ ...trip, owner, participants: members.map(row => ({ ...row })) }] : [],
@@ -31,7 +33,7 @@ function fixture({ email = 'guest@example.invalid', status = 'pending', member =
       update: async ({ data }) => Object.assign(trip, data),
       delete: async () => { exists = false; return trip; },
     },
-    tripInvite: { findUnique: async () => ({ ...invite }), update: async ({ data }) => Object.assign(invite, data),
+    tripInvite: { findUnique: async () => ({ ...invite }), findFirst: async () => invite.status === 'accepted' ? invite : null, update: async ({ data }) => Object.assign(invite, data),
       updateMany: async ({ where, data }) => {
         if (where.code && invite.code === where.code && invite.status === where.status && invite.expiresAt > where.expiresAt.gt) { Object.assign(invite, data); return { count: 1 }; }
         return { count: 0 };
@@ -39,6 +41,7 @@ function fixture({ email = 'guest@example.invalid', status = 'pending', member =
     user: { findUnique: async () => guest },
     document: { findMany: async () => [] },
     participant: {
+      findFirst: async () => members[0] || null,
       findUnique: async ({ where }) => membership(where) || null,
       upsert: async ({ where, update, create }) => { const row = membership(where); if (row) return Object.assign(row, update); const added = { ...create }; members.push(added); return added; },
       update: async ({ where, data }) => { const row = membership(where); if (!row) throw Error('Missing member'); return Object.assign(row, data); },
@@ -216,7 +219,7 @@ function inviteClient({ signedIn = true, ok = true, networkError = false } = {})
   const state = [{ code: 'NAMI-FIXTURE', email: 'guest@example.invalid', user: signedIn ? { email: 'guest@example.invalid' } : null,
     role: 'participant', status: 'pending', expired: false, trip: { id: 'trip', name: 'Trip', country: 'Italia', city: 'Roma', startDate: '2099-01-01', endDate: '2099-01-02' } }, '', false];
   const api = load('app/invite/[code]/page.tsx', { fetch: async () => { if (networkError) throw Error('offline'); return { ok, json: async () => ok ? { accepted: true, tripId: 'trip', userId: 'guest' } : { error: 'Accesso negato' } }; } }, {
-    react: { useEffect() {}, useState(initial) { const at = cursor++; if (state[at] === undefined) state[at] = initial; return [state[at], value => { state[at] = value; }]; } },
+    react: { useEffect() {}, useRef: value => ({ current: value }), useState(initial) { const at = cursor++; if (state[at] === undefined) state[at] = initial; return [state[at], value => { state[at] = value; }]; } },
     'next/navigation': { useParams: () => ({ code: 'NAMI-FIXTURE' }), useRouter: () => ({ push: path => calls.push({ push: path }), refresh: () => calls.push({ refresh: true }) }) },
     '../../../lib/page-cache': { invalidatePageCache: (...args) => calls.push({ invalidate: args }) },
     '../../../lib/trip-client-cache': { setTripCacheAccount: id => calls.push({ account: id }), removeTripSnapshot: id => calls.push({ snapshot: id }) },

@@ -111,6 +111,7 @@ function tripHarness() {
     memberStatus: 'confirmed', inviteStatus: 'pending', inviteEmail: user.email, passwordValid: true };
   const write = async () => { state.writes++; return {}; };
   const prisma = {
+      $queryRaw: async () => [{ id: 'trip' }],
     trip: { findUnique: async () => state.existing, update: write, upsert: write },
     participant: { findUnique: async () => ({ id: 'member', email: user.email, status: state.memberStatus }), update: write, delete: write, upsert: write, deleteMany: write, createMany: write },
     activity: { deleteMany: write, createMany: write },

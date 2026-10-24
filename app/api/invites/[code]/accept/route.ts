@@ -24,6 +24,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ code: str
   if (invite.expiresAt <= new Date()) return NextResponse.json({ error: "Questo invito è scaduto" }, { status: 410 });
 
   const accepted = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "Trip" WHERE "id" = ${invite.tripId} FOR UPDATE`;
     // Claim only a still-valid pending invite; concurrent revocation/replacement
     // cannot be overwritten by a stale request that validated it earlier.
     const claimed = await tx.tripInvite.updateMany({ where: { code, status: "pending", expiresAt: { gt: new Date() } }, data: { status: "accepted", acceptedAt: new Date() } });
