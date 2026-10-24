@@ -112,10 +112,10 @@ function tripHarness() {
   const write = async () => { state.writes++; return {}; };
   const prisma = {
     trip: { findUnique: async () => state.existing, update: write, upsert: write },
-    participant: { findUnique: async () => ({ status: state.memberStatus }), delete: write, upsert: write, deleteMany: write, createMany: write },
+    participant: { findUnique: async () => ({ id: 'member', email: user.email, status: state.memberStatus }), update: write, delete: write, upsert: write, deleteMany: write, createMany: write },
     activity: { deleteMany: write, createMany: write },
     tripInvite: { findUnique: async () => ({ tripId: 'trip', trip: { ownerId: 'owner', name: 'Trip' }, email: state.inviteEmail,
-      status: state.inviteStatus, expiresAt: new Date('2099-01-01'), role: 'participant' }), update: write, deleteMany: write },
+      status: state.inviteStatus, expiresAt: new Date('2099-01-01'), role: 'participant' }), update: write, updateMany: async () => ({ count: 1 }), deleteMany: write },
     user: { findUnique: async () => ({ id: 'target', email: user.email, passwordLogin: true, passwordHash: 'fixture', trips: [], documents: [] }), delete: write },
   };
   prisma.$transaction = async action => typeof action === 'function' ? action(prisma) : Promise.all(action);
@@ -123,7 +123,7 @@ function tripHarness() {
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
     [depth + 'lib/auth']: { currentUser: async () => state.signedIn ? user : null, verifyPassword: () => state.passwordValid },
     [depth + 'lib/prisma']: { prisma },
-    [depth + 'lib/trip-access']: { tripAccess: async () => ({ allowed: state.allowed, role: state.role }) },
+    [depth + 'lib/trip-access']: { tripAccess: async () => ({ allowed: state.allowed, role: state.role, trip: { ...state.existing, participants: [{ email: user.email }] } }) },
     [depth + 'lib/progress-cache-scope']: { rotateProgressScope: async () => { state.rotations++; }, endProgressScope: async () => { state.endings++; } },
     [depth + 'lib/notifications']: { notifyUser: async () => {}, notifyTripMembers: async () => {} },
     [depth + 'lib/activity-order-storage']: { ensureActivityOrder: async () => {} },

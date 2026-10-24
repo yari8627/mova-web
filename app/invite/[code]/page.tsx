@@ -3,13 +3,30 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Check, MapPin, Users } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { invalidatePageCache } from "../../../lib/page-cache";
+import { removeTripSnapshot, setTripCacheAccount } from "../../../lib/trip-client-cache";
 
 type Invite = { code: string; email: string; role: string; status: string; expired: boolean; user: { email: string } | null; trip: { id: string; name: string; country: string; city: string; startDate: string; endDate: string } };
 const date = (value: string) => new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
 
 export default function InvitePage() { const { code } = useParams<{ code: string }>(); const router = useRouter(); const [invite, setInvite] = useState<Invite | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
   useEffect(() => { fetch(`/api/invites/${code}`).then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error); setInvite(result); }).catch((reason) => setError(reason.message)).finally(() => setLoading(false)); }, [code]);
-  async function accept() { if (!invite?.user) { router.push(`/auth?next=${encodeURIComponent(`/invite/${invite?.code || code}`)}`); return; } setLoading(true); setError(""); const response = await fetch(`/api/invites/${invite.code}/accept`, { method: "POST" }); const result = await response.json(); setLoading(false); if (!response.ok) { setError(result.error); return; } router.push(`/trips/${result.tripId}/overview`); router.refresh(); }
+  async function accept() {
+    if (!invite?.user) { router.push(`/auth?next=${encodeURIComponent(`/invite/${invite?.code || code}`)}`); return; }
+    setLoading(true); setError("");
+    try {
+      const response = await fetch(`/api/invites/${invite.code}/accept`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) { setError(result.error); return; }
+      invalidatePageCache(result.userId, "trips");
+      invalidatePageCache(result.userId, `access-${result.tripId}`);
+      invalidatePageCache(result.userId, `participants-${result.tripId}`);
+      setTripCacheAccount(result.userId);
+      removeTripSnapshot(result.tripId);
+      router.push(`/trips/${result.tripId}/overview`); router.refresh();
+    } catch { setError("Non è stato possibile verificare l’accettazione. Riprova."); }
+    finally { setLoading(false); }
+  }
   if (loading && !invite) return <main className="invite-shell"><p>Caricamento invito…</p></main>;
   if (!invite) return <main className="invite-shell"><section className="invite-accept-card"><div className="auth-brand">NAMI</div><h1>Invito non disponibile</h1><p>{error}</p><button className="primary-button" onClick={() => router.push("/")}>Torna alla home</button></section></main>;
   const unavailable = invite.expired || invite.status !== "pending";

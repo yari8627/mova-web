@@ -5,6 +5,16 @@ const versions = new Map<string, number>();
 const refreshed = new Map<string, number>();
 const listeners = new Map<string, Set<() => void>>();
 
+export function invalidatePageCache(userId: string, resource: string) {
+  if (!userId) return;
+  const key = `${userId}:${resource}`;
+  versions.set(key, (versions.get(key) || 0) + 1);
+  refreshed.delete(key);
+  pending.delete(key);
+  try { sessionStorage.removeItem(`mova-page:${key}`); } catch { /* Storage is optional. */ }
+  for (const listener of listeners.get(key) || []) { try { listener(); } catch { /* Isolated subscribers. */ } }
+}
+
 // Subscribers receive no payload: each reads only its account/resource copy.
 export function subscribePageCache(userId: string, resource: string, listener: () => void) {
   if (!userId) return () => {};
@@ -52,7 +62,7 @@ export async function fetchPageCache<T>(userId: string, resource: string, url: s
     writePageCache(userId, resource, value);
     refreshed.set(key, Date.now());
     return value;
-  }).catch(() => readPageCache<T>(userId, resource)).finally(() => pending.delete(key));
+  }).catch(() => readPageCache<T>(userId, resource)).finally(() => { if (pending.get(key) === request) pending.delete(key); });
   pending.set(key, request);
   return request;
 }

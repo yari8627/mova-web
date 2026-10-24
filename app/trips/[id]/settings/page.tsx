@@ -9,12 +9,13 @@ import { fetchTripSnapshot, readTripSnapshot, removeTripSnapshot } from "../../.
 import { TripTabs } from "../../../components/trip-tabs";
 import { TripCover } from "../../../components/trip-cover";
 import { useTripPermissions } from "../../../../lib/use-trip-permissions";
+import { invalidatePageCache } from "../../../../lib/page-cache";
 
 type Draft = { name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: string };
 type Person = { email: string; name: string; status: string; role?: string };
 const empty: Draft = { name: "", country: "", countryCode: "🌍", city: "", startDate: "", endDate: "", people: 1, theme: "blue" };
 
-export default function SettingsPage() { const { id } = useParams<{ id: string }>(); const router = useRouter(); const { role, canManage } = useTripPermissions(id); const [draft, setDraft] = useState(empty); const [people, setPeople] = useState<Person[]>([]); const [message, setMessage] = useState(""); const [transferEmail, setTransferEmail] = useState("");
+export default function SettingsPage() { const { id } = useParams<{ id: string }>(); const router = useRouter(); const { role, canManage, userId } = useTripPermissions(id); const [draft, setDraft] = useState(empty); const [people, setPeople] = useState<Person[]>([]); const [message, setMessage] = useState(""); const [transferEmail, setTransferEmail] = useState("");
   const [transferOpen, setTransferOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -30,7 +31,7 @@ export default function SettingsPage() { const { id } = useParams<{ id: string }
   async function save(event: FormEvent) { event.preventDefault(); const response = await fetch(`/api/trips/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) }); if (response.ok) removeTripSnapshot(id); setMessage(response.ok ? "Modifiche salvate" : (await response.json()).error); }
   async function archive() { if (!confirm("Archiviare questo viaggio? Non comparirà più nella Home.")) return; const response = await fetch(`/api/trips/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: true }) }); if (response.ok) removeTripSnapshot(id); if (response.ok) router.push("/"); }
   async function remove() { if (!confirm("Eliminare definitivamente il viaggio e tutti i suoi dati?")) return; setMessage(""); const response = await fetch(`/api/trips/${id}`, { method: "DELETE" }); if (response.ok) removeTripSnapshot(id); if (!response.ok) { const result = await response.json().catch(() => ({})); setMessage(result.error || "Non è stato possibile eliminare il viaggio."); return; } const savedTrips = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Array<{ id: string }>; localStorage.setItem("mova-trips", JSON.stringify(savedTrips.filter((trip) => trip.id !== id))); ["itinerary", "bookings", "documents", "expenses", "participants", "budget"].forEach((resource) => localStorage.removeItem(`mova-${resource}-${id}`)); router.replace("/"); router.refresh(); }
-  async function leave() { if (!confirm("Vuoi uscire da questo viaggio?")) return; const response = await fetch(`/api/trips/${id}/leave`, { method: "POST" }); if (response.ok) removeTripSnapshot(id); if (response.ok) router.push("/"); else setMessage((await response.json()).error); }
+  async function leave() { if (!confirm("Vuoi uscire da questo viaggio?")) return; const response = await fetch(`/api/trips/${id}/leave`, { method: "POST" }); if (response.ok) { removeTripSnapshot(id); if (userId) invalidatePageCache(userId, "trips"); router.push("/"); } else setMessage((await response.json()).error); }
   const validTransfer = people.some(person => person.email === transferEmail);
   // Confirmation gate: a future security dialog can replace confirm here.
   async function transfer() { if (!validTransfer || !confirm("Trasferire definitivamente la proprietà?")) return; const response = await fetch(`/api/trips/${id}/transfer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: transferEmail }) }); if (response.ok) removeTripSnapshot(id); if (response.ok) router.push(`/trips/${id}/overview`); else setMessage((await response.json()).error); }

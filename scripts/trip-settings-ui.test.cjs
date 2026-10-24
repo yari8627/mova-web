@@ -10,7 +10,8 @@ function harness(role = 'owner', { accepted = true, ok = true } = {}) {
   context.require = name => {
     if (name === 'react') return { useEffect: fn => effects.push(fn), useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = value]; } };
     if (name === 'next/navigation') return { useParams: () => ({ id: 'trip' }), useRouter: () => ({ push: url => calls.push({ push: url }), replace: url => calls.push({ replace: url }), refresh: () => calls.push({ refresh: true }) }) };
-    if (name.endsWith('/use-trip-permissions')) return { useTripPermissions: () => ({ role, canManage: role === 'owner' || role === 'co-organizer' }) };
+    if (name.endsWith('/use-trip-permissions')) return { useTripPermissions: () => ({ role, userId: 'test-user', canManage: role === 'owner' || role === 'co-organizer' }) };
+    if (name.endsWith('/page-cache')) return { invalidatePageCache: (...args) => calls.push({ listInvalidated: args }) };
     if (name.endsWith('/trip-client-cache')) return { readTripSnapshot: () => trip, fetchTripSnapshot: async () => trip, removeTripSnapshot: id => calls.push({ invalidated: id }) };
     if (/\/trip-(header|tabs|cover)$/.test(name)) return { TripHeader: () => null, TripTabs: () => null, TripCover: () => null };
     if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
@@ -80,6 +81,9 @@ test('confirmed owner actions retain endpoints, cache cleanup and navigation in 
 test('leave and failed destructive actions retain existing behavior without production data', async () => {
   const left = harness('participant'); await button(left, 'leave').props.onClick();
   assert.equal(left.calls.find(c => c.url).url, '/api/trips/trip/leave');
+  assert.deepEqual([...left.calls.find(c => c.listInvalidated).listInvalidated], ['test-user', 'trips']);
+  const failedLeave = harness('participant', { ok: false }); await button(failedLeave, 'leave').props.onClick();
+  assert(!failedLeave.calls.some(c => c.listInvalidated || c.push));
   const failed = harness('owner', { ok: false }); await button(failed, 'remove').props.onClick();
   assert.equal(failed.state[2], 'Errore di prova'); assert(!failed.calls.some(c => c.replace));
   assert.equal(JSON.parse(failed.storage.get('mova-trips')).length, 2);

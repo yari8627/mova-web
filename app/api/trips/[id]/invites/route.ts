@@ -13,7 +13,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json(); const email = String(body.email || "").trim().toLowerCase(); const pendingName = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toLocaleUpperCase("it")) || "Invitato"; const name = String(body.name || "").trim() || pendingName; const role = access.role === "owner" && body.role === "co-organizer" ? "co-organizer" : "participant";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Inserisci un indirizzo email valido" }, { status: 400 });
   if (email === user.email.toLowerCase()) return NextResponse.json({ error: "Sei già il proprietario del viaggio" }, { status: 400 });
-  const participant = await prisma.participant.upsert({ where: { tripId_email: { tripId: id, email } }, update: { name, role, status: "pending" }, create: { id: randomUUID(), tripId: id, name, email, role, status: "pending" } });
+  // Re-sending an invite must not demote a confirmed member or change their role.
+  await prisma.participant.updateMany({ where: { tripId: id, email, status: { not: "confirmed" } }, data: { name, role, status: "pending" } });
+  const participant = await prisma.participant.upsert({ where: { tripId_email: { tripId: id, email } }, update: {}, create: { id: randomUUID(), tripId: id, name, email, role, status: "pending" } });
   await prisma.tripInvite.updateMany({ where: { tripId: id, email, status: "pending" }, data: { status: "replaced" } });
   const code = `NAMI-${randomBytes(5).toString("hex").toUpperCase()}`; const invite = await prisma.tripInvite.create({ data: { id: randomUUID(), code, tripId: id, email, name, role, expiresAt: new Date(Date.now() + 14 * 86400000) } });
   const invitedUser = await prisma.user.findUnique({ where: { email } }); if (invitedUser) await notifyUser(invitedUser.id, { tripId: id, type: "invite", title: "Nuovo invito", message: `${user.name} ti ha invitato a ${trip.name}.`, link: `/invite/${invite.code}` });

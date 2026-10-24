@@ -186,6 +186,7 @@ export default function Page() {
         if (cancelled) return;
         if (response.ok) {
           const accountTrips = (await response.json() as Array<Omit<Trip, "status"> & { startDate: string; endDate: string }>).map((trip) => ({ ...trip, startDate: trip.startDate.slice(0, 10), endDate: trip.endDate.slice(0, 10), status: "upcoming" as const }));
+          if (cancelled) return;
           setTrips(accountTrips);
           writePageCache(userId, "trips", accountTrips);
           const priority = priorityTrip(accountTrips);
