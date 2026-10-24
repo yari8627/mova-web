@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load, fixture } = require('./invite-visibility.test.cjs');
 
-function scenario() {
+function scenario({ emailDelayMs = 0, failEmail = false } = {}) {
   const h = fixture({ member: null });
   Object.assign(h.trip, { name: 'Italia 2026', city: 'Milano', startDate: new Date('2026-10-31T12:00:00Z'), endDate: new Date('2026-10-31T12:00:00Z') });
   const invites = [], notices = [], emails = [];
@@ -13,12 +13,13 @@ function scenario() {
     return row[key] === value;
   });
   h.prisma.tripInvite = {
-    findUnique: async ({ where }) => invites.find(row => row.code === where.code) || null,
+    findUnique: async ({ where }) => invites.find(row => where.id ? row.id === where.id : row.code === where.code) || null,
     findFirst: async ({ where }) => [...invites].reverse().find(row => match(row, where)) || null,
     create: async ({ data }) => { const row = { ...data, createdAt: new Date(), status: 'pending', acceptedAt: null, trip: h.trip }; invites.push(row); return row; },
     updateMany: async ({ where, data }) => { const rows = invites.filter(row => match(row, where)); rows.forEach(row => Object.assign(row, data)); return { count: rows.length }; },
   };
   h.prisma.$queryRaw = async () => [{ id: h.trip.id }];
+  h.prisma.user.findUnique = async ({ where }) => [h.guest, h.outsider].find(user => user.email === where.email) || null;
   h.prisma.notification = { upsert: async ({ where, create }) => { const found = notices.find(row => row.dedupeKey === where.dedupeKey); if (found) return found; notices.push(create); return create; } };
   let transactions = Promise.resolve();
   h.prisma.$transaction = action => {
@@ -35,11 +36,11 @@ function scenario() {
   h.prisma.participant.createMany = async ({ data }) => { h.members.push(...data); return { count: data.length }; };
   h.prisma.trip.upsert = async () => h.trip;
   const api = (file, depth) => load(file, {}, {
-    'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200 }) } },
+    'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status || 200, headers: options?.headers || {} }) } },
     [depth + 'lib/auth']: { currentUser: async () => h.active },
     [depth + 'lib/prisma']: { prisma: h.prisma }, './prisma': { prisma: h.prisma },
     [depth + 'lib/notifications']: { notifyUser: async (userId, data) => notices.push({ userId, ...data }), notifyTripMembers: async () => {} },
-    [depth + 'lib/email']: { appUrl: () => 'https://example.invalid', sendMovaEmail: async message => emails.push(message) },
+    [depth + 'lib/email']: { appUrl: () => 'https://example.invalid', sendMovaEmail: async message => { emails.push(message); if (emailDelayMs) await new Promise(resolve => setTimeout(resolve, emailDelayMs)); if (failEmail) throw Error('email unavailable'); return { sent: true }; } },
     [depth + 'lib/progress-cache-scope']: { rotateProgressScope: async () => {} },
     [depth + 'lib/activity-order-storage']: { ensureActivityOrder: async () => {} },
   });
@@ -48,10 +49,12 @@ function scenario() {
   const accept = api('app/api/invites/[code]/accept/route.ts', '../../../../../');
   const get = api('app/api/invites/[code]/route.ts', '../../../../');
   const sync = api('app/api/trips/[id]/sync/route.ts', '../../../../../');
-  const request = { json: async () => ({ email: h.guest.email, role: 'participant' }) };
+  const request = (body = {}, key) => ({ json: async () => ({ email: h.guest.email, role: 'participant', ...body }), headers: { get: () => key || null } });
   const params = code => ({ params: Promise.resolve({ id: h.trip.id, code }) });
-  return { h, invites, notices, emails, params, send: () => send.POST(request, params()), accept: code => accept.POST({}, params(code)), get: code => get.GET({}, params(code)), sync };
+  return { h, invites, notices, emails, params, api, send: (body, key) => send.POST(request(body, key), params()), accept: code => accept.POST({}, params(code)), get: code => get.GET({}, params(code)), sync };
 }
+
+module.exports = { scenario };
 
 test('four sequential invitation submissions reuse one valid invitation and one notification', async () => {
   const s = scenario();
@@ -91,14 +94,15 @@ test('accepted membership survives stale owner participant status and a subseque
 
 test('expired/revoked invitations may be renewed without erasing legitimate historical notifications', async () => {
   const s = scenario(); await s.send(); s.invites[0].status = 'revoked';
-  await s.send(); assert.equal(s.invites.length, 2); assert.equal(s.notices.length, 2);
-  s.invites[1].expiresAt = new Date('2000-01-01'); await s.send();
+  assert.equal((await s.send()).status, 409);
+  await s.send({ intent: 'resend', resendOf: s.invites[0].id }, 'renewal-operation-1'); assert.equal(s.invites.length, 2); assert.equal(s.notices.length, 2);
+  s.invites[1].expiresAt = new Date('2000-01-01'); await s.send({ intent: 'resend', resendOf: s.invites[1].id }, 'renewal-operation-2');
   assert.equal(s.invites.length, 3); assert.equal(s.notices.length, 3);
 });
 
 test('invitation and notification commit together; failure leaves no phantom invitation or participant', async () => {
   const s = scenario(); s.h.prisma.notification.upsert = async () => { throw Error('notification storage unavailable'); };
-  await assert.rejects(s.send());
+  assert.equal((await s.send()).status, 503);
   assert.equal(s.invites.length, 0); assert.equal(s.h.members.length, 0); assert.equal(s.emails.length, 0);
 });
 
@@ -114,7 +118,7 @@ test('unrelated, anonymous and ordinary participants cannot send invitations or 
 test('four historical invitations, pending screen and absent Home become visible after one real acceptance in fixtures', async () => {
   const s = scenario();
   // Existing historical duplicates are retained; each explicit revocation makes renewal legitimate.
-  for (let i = 0; i < 4; i++) { await s.send(); if (i < 3) s.invites.at(-1).status = 'replaced'; }
+  for (let i = 0; i < 4; i++) { if (i === 0) await s.send(); else await s.send({ intent: 'resend', resendOf: s.invites.at(-1).id }, 'historical-operation-' + i); if (i < 3) s.invites.at(-1).status = 'replaced'; }
   assert.equal(s.notices.length, 4);
   s.h.active = s.h.guest; s.h.user(s.h.guest);
   const code = s.invites.at(-1).code;

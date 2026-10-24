@@ -1,4 +1,11 @@
 /* Participants only; reuse the approved trip chrome without changing shared CSS. */
+.inviteSubmit { min-inline-size: 168px; min-block-size: 44px; }
+@media (min-width: 761px) { .inviteSubmit { inline-size: 184px; } }
+.inviteFeedback { min-height: 1.45em; margin: 6px 0; color: var(--navy); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.inviteFeedback:empty { min-height: 0; margin: 0; }
+.inviteSpinner { animation: invite-spin 1s linear infinite; flex-shrink: 0; }
+@keyframes invite-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .inviteSpinner { animation: none; } }
 .participants:global(.participants-shell) { min-height: 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
 .participants :global(.expenses-title) { max-width: 1280px; margin: 14px auto 0; }
 .titleRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }

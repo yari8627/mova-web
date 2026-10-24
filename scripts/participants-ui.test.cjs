@@ -7,21 +7,26 @@ const people = [
   { id: 'bob', name: 'Bob', email: 'bob@example.test', role: 'co-organizer', status: 'confirmed' },
   { id: 'carol', name: 'Carol', email: 'carol@example.test', role: 'participant', status: 'pending' }
 ];
-function harness({ role = 'owner', members = people, syncOK = true, inviteOK = true } = {}) {
+function harness({ role = 'owner', members = people, syncOK = true, inviteOK = true, deferred = false, source, lagMs = 0 } = {}) {
   const state = [members, undefined, null, false, false, '', ''], calls = [], storage = new Map();
-  let cursor = 0;
-  const context = { exports: {}, console, CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } } };
+  let cursor = 0, refCursor = 0, release;
+  const refs = [];
+  const context = { exports: {}, console, AbortController, setTimeout, clearTimeout, crypto: require('node:crypto'), CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } } };
   const localStorage = { setItem: (k,v) => storage.set(k,v), getItem: k => storage.get(k) || null };
   context.localStorage = localStorage;
   context.window = { localStorage, location: { origin: 'https://nami.example.test' }, dispatchEvent: e => calls.push({ event: e.type }), setTimeout() {} };
   context.navigator = { clipboard: { writeText: async value => calls.push({ copied: value }) } };
   context.fetch = async (url, options) => {
     calls.push({ url, options });
+    if (deferred) await new Promise(resolve => { release = resolve; });
+    if (lagMs) await new Promise(resolve => setTimeout(resolve, lagMs));
     const body = JSON.parse(options.body);
-    return { ok: inviteOK, json: async () => inviteOK ? { participant: { id: 'invited', name: 'Invitato', email: body.email, role: body.role, status: 'pending' }, code: 'NAMI-TEST', link: '/invite/NAMI-TEST' } : { error: 'Invito non valido' } };
+    return { ok: inviteOK, status: inviteOK ? 201 : 400, json: async () => inviteOK ? { userId: 'alice', participant: { id: 'invited', name: 'Invitato', email: body.email, role: body.role, status: 'pending' }, code: 'NAMI-TEST', link: '/invite/NAMI-TEST' } : { error: 'Invito non valido' } };
   };
   context.require = name => {
-    if (name === 'react') return { useEffect() {}, useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = value]; } };
+    if (name === 'react') return { useEffect() {}, useRef: initial => { const i = refCursor++; return refs[i] || (refs[i] = { current: initial }); }, useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = value]; } };
+    if (name.endsWith('/invite-submission')) { const helper = { ...context, exports: {} }; vm.runInNewContext(compile(fs.readFileSync('lib/invite-submission.ts', 'utf8')), helper); return helper.exports; }
+    if (name.endsWith('/progress-cache-contract')) return { PROGRESS_SCOPE_COOKIE: 'nami_progress_scope' };
     if (name === 'next/navigation') return { useParams: () => ({ id: 'trip' }), useRouter: () => ({ push() {} }) };
     if (name.endsWith('/use-trip-permissions')) return { useTripPermissions: () => ({ canInvite: role === 'owner' || role === 'co-organizer', canAssignRoles: role === 'owner' }) };
     if (name.endsWith('/trip-session')) return { useTripUserId: () => 'alice' };
@@ -34,9 +39,9 @@ function harness({ role = 'owner', members = people, syncOK = true, inviteOK = t
     if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
     return require(name);
   };
-  vm.runInNewContext(compile(fs.readFileSync('app/trips/[id]/participants/page.tsx', 'utf8')), context);
-  const render = () => { cursor = 0; return context.exports.default(); };
-  return { state, calls, render, html: () => SSR.renderToStaticMarkup(render()) };
+  vm.runInNewContext(compile(source || fs.readFileSync('app/trips/[id]/participants/page.tsx', 'utf8')), context);
+  const render = () => { cursor = 0; refCursor = 0; return context.exports.default(); };
+  return { state, calls, render, release: () => release(), html: () => SSR.renderToStaticMarkup(render()) };
 }
 const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
 const find = (h, predicate) => nodes(h.render()).find(predicate);
@@ -73,7 +78,8 @@ test('existing invite flow preserves required email, pending state, creation end
   await flush();
   const request = h.calls.find(c => c.url);
   assert.equal(request.url, '/api/trips/trip/invites');
-  assert.deepEqual(JSON.parse(request.options.body), { email: 'invitee@example.test', role: 'participant' });
+  assert.deepEqual(JSON.parse(request.options.body), { email: 'invitee@example.test', role: 'participant', intent: 'send' });
+  assert(request.options.headers['Idempotency-Key']);
   assert.equal(h.state[0].at(-1).status, 'pending'); assert.equal(h.state[3], false);
   find(h, n => n.props?.['aria-label'] === 'Copia link invito').props.onClick();
   await flush();
@@ -105,4 +111,19 @@ test('rejected invitation keeps existing people and editor without fabricating s
   find(h, n => n.type === 'form').props.onSubmit({ preventDefault() {} });
   await flush();
   assert.equal(h.state[0].length, 3); assert.equal(h.state[3], true); assert.equal(h.state[5], '');
+});
+
+test('five rapid click/Enter submissions lock the actual form before network completion and announce success', async () => {
+  const h = harness({ deferred: true });
+  find(h, n => n.props?.onClick?.name === 'openNew').props.onClick();
+  h.state[1] = { ...h.state[1], email: 'invitee@example.test' };
+  const submit = find(h, n => n.type === 'form').props.onSubmit;
+  for (let i = 0; i < 5; i++) submit({ preventDefault() {} });
+  assert.equal(h.calls.filter(c => c.url).length, 1);
+  const button = find(h, n => n.type === 'button' && n.props.type === 'submit');
+  assert.equal(button.props.disabled, true); assert.equal(button.props['aria-busy'], true);
+  assert(h.html().includes('Invio in corso…')); assert.equal(h.state[3], true);
+  h.release(); await flush();
+  assert(h.html().includes('Invito inviato')); assert.equal(h.state[0].at(-1).email, 'invitee@example.test');
+  assert.equal(h.state[3], false); assert.equal(h.state[1].email, '');
 });
