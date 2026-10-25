@@ -27,12 +27,32 @@ function DestinationPhoto({ country, city, kind }: Props) {
   useEffect(() => {
     if (visible) return;
     if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
+    const carousel = kind === "completed" ? root.current?.closest("#completed-trips-carousel") : null;
+    if (carousel && root.current) {
+      // A viewport rootMargin cannot expand the clipping of an overflow ancestor.
+      // Gate vertical visibility separately, then preload beside the scrollport.
+      let nearViewport = false, nearCard = false, activated = false;
+      const activate = () => {
+        if (activated || !nearViewport || !nearCard) return;
+        activated = true;
+        setVisible(true);
+        viewportObserver.disconnect(); cardObserver.disconnect();
+      };
+      const viewportObserver = new IntersectionObserver(entries => {
+        nearViewport = entries.some(entry => entry.isIntersecting); activate();
+      }, { rootMargin: "80px" });
+      const cardObserver = new IntersectionObserver(entries => {
+        nearCard = entries.some(entry => entry.isIntersecting); activate();
+      }, { root: carousel, rootMargin: "0px 160px" });
+      viewportObserver.observe(carousel); cardObserver.observe(root.current);
+      return () => { viewportObserver.disconnect(); cardObserver.disconnect(); };
+    }
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
     }, { rootMargin: "80px" });
     if (root.current) observer.observe(root.current);
     return () => observer.disconnect();
-  }, [visible]);
+  }, [visible, kind]);
   useEffect(() => {
     if (!visible) return;
     let active = true;
@@ -48,10 +68,12 @@ function DestinationPhoto({ country, city, kind }: Props) {
     // Cached images can finish before React attaches onLoad; decode them here too.
     const cachedImage = image.current;
     if (cachedImage?.complete && cachedImage.naturalWidth) void loaded(cachedImage);
+    // An already-failed cached request can also finish before onError is attached.
+    else if (kind === "completed" && cachedImage?.complete) failed(cachedImage);
     // A stalled image gets a deliberate fallback; a late valid load can recover.
     const timeout = window.setTimeout(() => setState(current => current === "ready" ? current : "error"), 20000);
     return () => window.clearTimeout(timeout);
-  }, [visible, source, originalOnly, retry]);
+  }, [visible, source, originalOnly, retry, kind]);
   useEffect(() => {
     const online = () => {
       if (state !== "error" || retriedOnline.current) return;
@@ -91,7 +113,10 @@ function DestinationPhoto({ country, city, kind }: Props) {
       sizes={kind === "hero" ? "(max-width: 700px) calc(100vw - 32px), (max-width: 1100px) calc(100vw - 280px), 850px" : kind === "completed" ? "(max-width: 700px) 55vw, 210px" : "86px"}
       alt="" loading="eager" fetchPriority={kind === "hero" ? "high" : "auto"} decoding="async"
       style={{ opacity: state === "ready" ? 1 : 0 }} onLoad={event => { void loaded(event.currentTarget); }} onError={event => failed(event.currentTarget)} />}
-    {state === "error" && <Compass className={styles.unavailable} size={28} />}
+    {kind === "completed" && state !== "ready" ? <div className={styles.feedback}>
+      <Compass size={24} />
+      <span>{state === "loading" ? "Caricamento foto…" : "Foto non disponibile"}</span>
+    </div> : state === "error" && <Compass className={styles.unavailable} size={28} />}
     <div className={styles.tint} />
   </div>;
 }

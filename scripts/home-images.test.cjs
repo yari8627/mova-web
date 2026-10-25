@@ -88,7 +88,7 @@ test('responsive Wikimedia sources keep the exact photo and use supported standa
   }
 });
 
-function component({ kind = 'hero', source = photo, resolve = async () => source } = {}) {
+function component({ kind = 'hero', source = photo, resolve = async () => source, carousel = null } = {}) {
   const hooks = [], effects = [], listeners = new Map(), timers = new Map(), intersections = [], calls = [];
   let cursor = 0, tree;
   const react = {
@@ -98,7 +98,8 @@ function component({ kind = 'hero', source = photo, resolve = async () => source
   };
   const window = { setTimeout(callback) { const id = timers.size + 1; timers.set(id, callback); return id; }, clearTimeout(id) { timers.delete(id); },
     addEventListener(name, callback) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(callback); }, removeEventListener(name, callback) { listeners.get(name)?.delete(callback); } };
-  class Observer { constructor(callback) { intersections.push(callback); } observe() {} disconnect() {} }
+  const observers = [];
+  class Observer { constructor(callback, options) { intersections.push(callback); observers.push({ callback, options, targets: [], disconnected: false }); this.record = observers.at(-1); } observe(target) { this.record.targets.push(target); } disconnect() { this.record.disconnected = true; } }
   const api = load('app/components/home-trip-photo.tsx', { window, IntersectionObserver: Observer }, {
     react, './home-trip-photo.module.css': { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) },
     '../../lib/home-trip-images': { cachedHomePhoto: () => source, homePhotoKey: (country, city) => JSON.stringify([country, city]),
@@ -106,10 +107,10 @@ function component({ kind = 'hero', source = photo, resolve = async () => source
       resolveHomePhoto: (...args) => { calls.push(args); return resolve(...args); } },
   });
   const props = { country: 'Capo Verde', city: 'Sal Rei', kind };
-  function render(commit = true) { cursor = 0; const child = api.HomeTripPhoto(props); tree = child.type(child.props); tree.props.ref.current = {}; if (commit) for (const effect of effects.splice(0)) effect(); return tree; }
+  function render(commit = true) { cursor = 0; const child = api.HomeTripPhoto(props); tree = child.type(child.props); tree.props.ref.current = { closest: () => carousel }; if (commit) for (const effect of effects.splice(0)) effect(); return tree; }
   function img() { return [tree.props.children].flat().find(node => node?.type === 'img'); }
   function target(extra = {}) { const node = img(), image = { naturalWidth: 500, currentSrc: source, decode: async () => {}, ...extra }; node.props.ref.current = image; return image; }
-  return { render, img, target, calls, props, api, timers,
+  return { render, img, target, calls, props, api, timers, observers,
     state: () => tree.props['data-photo-state'], enter: () => intersections.forEach(callback => callback([{ isIntersecting: true }])),
     online: () => [...listeners.get('online') || []].forEach(callback => callback()),
     unmount: () => hooks.forEach(hook => hook.cleanup?.()),
@@ -187,4 +188,71 @@ test('rate limiting preserves a previously valid cached image',async()=>{
   let requests=0;const api=load('lib/home-trip-images.ts',{fetch:async()=>++requests===1?{ok:true,json:async()=>({image:photo})}:{ok:false,status:429,headers:{get:()=> '600'}}});
   await api.resolveHomePhoto('Italia','Milano');assert.equal(await api.resolveHomePhoto('Italia','Milano',true),photo);
   assert.equal(await api.resolveHomePhoto('Italia','Milano'),photo);assert.equal(requests,2);
+});
+
+
+test('completed carousel preloads beyond its overflow edge only when the carousel approaches the viewport', async () => {
+  const carousel = {};
+  const h = component({ kind: 'completed', carousel }); h.render();
+  assert.equal(h.calls.length, 0);
+  const viewport = h.observers.find(observer => !observer.options.root);
+  const horizontal = h.observers.find(observer => observer.options.root === carousel);
+  assert(horizontal, 'an explicit carousel root must expand the horizontal preload area past overflow');
+  assert.equal(horizontal.options.rootMargin, '0px 160px');
+  horizontal.callback([{ isIntersecting: true }]); h.render();
+  assert.equal(h.calls.length, 0, 'do not load a carousel still below the viewport');
+  viewport.callback([{ isIntersecting: true }]); h.render(); await flush(); h.render();
+  assert.equal(h.calls.length, 1); assert(h.img());
+  assert(h.observers.every(observer => observer.disconnected)); h.unmount();
+});
+
+test('a visible carousel alone does not load distant cards; rapid entry/exit never cancels an activated photo', async () => {
+  let finish;
+  const carousel = {}, h = component({ kind: 'completed', carousel, source: '', resolve: () => new Promise(resolve => finish = resolve) });
+  h.render(); const viewport=h.observers.find(o=>!o.options.root), horizontal=h.observers.find(o=>o.options.root===carousel);
+  viewport.callback([{isIntersecting:true}]); h.render(); assert.equal(h.calls.length,0);
+  horizontal.callback([{isIntersecting:true}]); h.render(); assert.equal(h.calls.length,1);
+  horizontal.callback([{isIntersecting:false}]); h.render(); finish(photo); await flush(); h.render();
+  assert(h.img()); await h.img().props.onLoad({currentTarget:h.target()}); await flush();h.render();
+  assert.equal(h.state(),'ready'); assert.equal(h.img().props.style.opacity,1);assert.equal(h.calls.length,1);h.unmount();
+});
+
+test('completed cards expose distinct neutral loading and unavailable feedback without changing their image box', async () => {
+  const h=component({kind:'completed',source:'',resolve:async()=>''});h.render();
+  const text=tree=>JSON.stringify(tree.props.children);
+  assert.match(text(h.render()),/Caricamento foto/);
+  h.enter();h.render();await flush();h.render();
+  assert.equal(h.state(),'error');assert.match(text(h.render()),/Foto non disponibile/);assert.equal(h.img(),undefined);h.unmount();
+});
+
+
+test('a completed cached image that already failed before effects runs recovery immediately, not a 20 second blank wait',async()=>{
+  const h=component({kind:'completed',resolve:async()=>photo});h.render();h.enter();h.render(false);
+  h.target({complete:true,naturalWidth:0});h.render();await flush();h.render();
+  assert.equal(h.state(),'error');assert.equal(h.calls.length,2,'initial lookup plus one same-place alternative');h.unmount();
+});
+
+for(const count of [1,8])test('first Home opening with '+count+' completed cards loads nearby cards once and retains photos on return to the first',async()=>{
+ const carousel={},cards=Array.from({length:count},()=>component({kind:'completed',carousel}));
+ for(const h of cards){h.render();h.observers.find(o=>!o.options.root).callback([{isIntersecting:true}]);h.render();}
+ for(let index=0;index<cards.length;index++){
+  const h=cards[index];h.observers.find(o=>o.options.root===carousel).callback([{isIntersecting:true}]);h.render();await flush();h.render();
+  await h.img().props.onLoad({currentTarget:h.target()});await flush();h.render();assert.equal(h.state(),'ready');
+ }
+ for(const h of cards){h.render();assert.equal(h.state(),'ready');assert.equal(h.calls.length,1);assert.equal(h.img().props.style.opacity,1);h.unmount();}
+});
+
+for(const scenario of ['slow','404','decode'])test('completed photo '+scenario+' terminates with explicit fallback and can never stay blank',async()=>{
+ const h=component({kind:'completed',source:scenario==='decode'?'/corrupt.webp':photo});h.render();h.enter();h.render();await flush();h.render();
+ if(scenario==='slow'){for(const timeout of [...h.timers.values()])timeout();}
+ else if(scenario==='decode'){await h.img().props.onLoad({currentTarget:h.target({decode:async()=>{throw Error('decode failed')}})});await flush();}
+ else{h.img().props.onError({currentTarget:h.target()});await flush();h.render();h.img().props.onError({currentTarget:h.target()});await flush();}
+ h.render();assert.equal(h.state(),'error');assert.match(JSON.stringify(h.render().props.children),/Foto non disponibile/);h.unmount();
+});
+
+test('returning to Home and a fresh mount after refresh handle already decoded completed photos',async()=>{
+ for(const kindOfReturn of ['tab','refresh']){
+  const h=component({kind:'completed'});h.render();h.enter();h.render(false);h.target({complete:true});h.render();await flush();h.render();
+  assert.equal(h.state(),'ready',kindOfReturn);assert.equal(h.calls.length,1);assert.equal(h.img().props.style.opacity,1);h.unmount();
+ }
 });

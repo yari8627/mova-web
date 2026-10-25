@@ -5,7 +5,8 @@ const { performance } = require('node:perf_hooks');
 const origin = performance.now(), events = [];
 const upstreamPort = Number(process.env.NAMI_FIXTURE_UPSTREAM || 3134), fixturePort = Number(process.env.NAMI_FIXTURE_PORT || 3136);
 const dateKey = offset => new Date(Date.now() + offset * 86400000).toISOString().slice(0,10);
-const trips = Array.from({ length: 8 }, (_, index) => ({ id: `fixture-${index}`, name: index ? `Francia ${index}` : 'Capo Verde 2026',
+const completedCount = Math.max(1, Math.min(30, Number(process.env.NAMI_FIXTURE_COMPLETED_COUNT || 6)));
+const trips = Array.from({ length: completedCount + 2 }, (_, index) => ({ id: `fixture-${index}`, name: index ? `Francia ${index}` : 'Capo Verde 2026',
   country: index ? 'Francia' : 'Capo Verde', countryCode: index ? '🇫🇷' : '🇨🇻', city: index ? `Paris ${index}` : 'Sal Rei',
   startDate: dateKey(index < 2 ? index + 2 : -index - 2), endDate: dateKey(index < 2 ? index + 3 : -index - 1), people: 2, theme: 'blue' }));
 const photo = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Aerial-Sal-Reis-Cape-Verde-2012.JPG/1920px-Aerial-Sal-Reis-Cape-Verde-2012.JPG';
@@ -23,9 +24,13 @@ http.createServer((request, response) => {
       response.statusCode = 429; response.setHeader('Retry-After', '120'); response.setHeader('Cache-Control', 'no-store');
       json(response, { image: null }); return;
     }
+    if (process.env.NAMI_FIXTURE_IMAGE_MODE === 'missing' || process.env.NAMI_FIXTURE_IMAGE_MODE === '404') {
+      response.statusCode = process.env.NAMI_FIXTURE_IMAGE_MODE === '404' ? 404 : 200;
+      json(response, { image: null }); return;
+    }
     const city = url.searchParams.get('city');
     // Offscreen lookup gates expose whether all history is loaded unnecessarily.
-    setTimeout(() => json(response, { image: photo }), city === 'Sal Rei' ? 100 : 1600);
+    setTimeout(() => json(response, { image: photo }), city === 'Sal Rei' ? 100 : Number(process.env.NAMI_FIXTURE_IMAGE_DELAY || 1600));
     return;
   }
   if (/^\/api\/trips\/[^/]+$/.test(url.pathname)) {

@@ -5,3 +5,5 @@
 .upcoming .tint { background: linear-gradient(rgba(12,23,51,.08), rgba(12,23,51,.18)); }
 .completed .tint { background: linear-gradient(rgba(12,23,51,.28), rgba(12,23,51,.42)); }
 .unavailable { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #94723e; }
+.feedback { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 12px; color: #94723e; text-align: center; text-shadow: none; }
+.feedback > span { font: 12px/1.4 var(--font-ui); }
