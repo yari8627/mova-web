@@ -6,7 +6,7 @@ import { setTripCacheAccount } from "../lib/trip-client-cache";
 import { useRouter } from "next/navigation";
 import { readPageCache, writePageCache, preloadOverview } from "../lib/page-cache";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
-import { curatedDestinationImages, fetchDestinationImage } from "../lib/destination-images";
+import { HomeTripPhoto } from "./components/home-trip-photo";
 import {
   Bell,
   CalendarDays,
@@ -153,7 +153,6 @@ export default function Page() {
   const [tripGuests, setTripGuests] = useState<TripGuest[]>([]);
   const [guestEmail, setGuestEmail] = useState("");
   const [guestError, setGuestError] = useState("");
-  const [tripImages, setTripImages] = useState<Record<string, string>>({});
   const tripProgress = { flights: 0, hotels: 0, activities: 0 };
   const [mobileMenu, setMobileMenu] = useState(false);
   const [countrySearchOpen, setCountrySearchOpen] = useState(false);
@@ -209,7 +208,6 @@ export default function Page() {
   function openInvite(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setInviteEntryError(""); const value = inviteEntry.trim(); let code = value; try { const parsed = new URL(value); const match = parsed.pathname.match(/\/invite\/([^/]+)/i); if (match) code = decodeURIComponent(match[1]); } catch { /* È stato inserito direttamente il codice. */ } code = code.trim().toUpperCase(); if (!/^(?:NAMI|MOVA)-[A-Z0-9]+$/.test(code)) { setInviteEntryError("Inserisci un codice NAMI valido."); return; } router.push(`/invite/${encodeURIComponent(code)}`); }
   async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "NAMI — Travel together", text: "Organizza e condividi i tuoi viaggi con NAMI. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("NAMI condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
 
-  useEffect(() => { if (!authReady) return; let active = true; const missing = trips.filter((trip) => !curatedDestinationImages[trip.country]); if (!missing.length) return; void Promise.all(missing.map(async (trip) => [trip.id, await fetchDestinationImage(trip.country, trip.city)] as const)).then((entries) => { if (active) setTripImages((current) => ({ ...current, ...Object.fromEntries(entries.filter(([, image]) => image)) })); }); return () => { active = false; }; }, [trips, authReady]);
 
   const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
   const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
@@ -220,7 +218,6 @@ export default function Page() {
   function warmOverview(tripId: string) {
     if (currentUser) void preloadOverview(currentUser.id, tripId);
   }
-  function imageForTrip(trip: Trip) { return curatedDestinationImages[trip.country] || tripImages[trip.id] || ""; }
   const userInitials = currentUser?.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("it")).join("") || "MV";
 
   useEffect(() => {
@@ -365,7 +362,8 @@ export default function Page() {
         <div className="page-grid">
           <section className="primary-column">
             {selectedTrip ? (
-              <article className={`hero-card theme-${selectedTrip.theme}`} style={imageForTrip(selectedTrip) ? { backgroundImage: `url(${imageForTrip(selectedTrip)})` } : undefined}>
+              <article className={`hero-card theme-${selectedTrip.theme}`}>
+                <HomeTripPhoto country={selectedTrip.country} city={selectedTrip.city} kind="hero" />
                 <div className="hero-overlay" />
                 <div className="hero-content">
                   <div className={styles.heroLabel}>IL TUO VIAGGIO</div>
@@ -407,7 +405,8 @@ export default function Page() {
                   className={`trip-card ${selectedTrip?.id === trip.id ? "selected" : ""}`}
                   onPointerEnter={() => warmOverview(trip.id)} onTouchStart={() => warmOverview(trip.id)} onFocus={() => warmOverview(trip.id)} onClick={() => { warmOverview(trip.id); router.push(`/trips/${trip.id}/overview`); }}
                 >
-                  <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.08), rgba(12,23,51,.18)), url(${imageForTrip(trip)})` } : undefined}>
+                  <div className={`trip-thumbnail theme-${trip.theme}`}>
+                    <HomeTripPhoto country={trip.country} city={trip.city} kind="upcoming" />
                     <span>{trip.countryCode}</span>
                   </div>
                   <div className="trip-card-copy">
@@ -442,7 +441,8 @@ export default function Page() {
                   className="trip-card completed"
                   onPointerEnter={() => warmOverview(trip.id)} onTouchStart={() => warmOverview(trip.id)} onFocus={() => warmOverview(trip.id)} onClick={() => { warmOverview(trip.id); router.push(`/trips/${trip.id}/overview`); }}
                 >
-                  <div className={`trip-thumbnail theme-${trip.theme}`} style={imageForTrip(trip) ? { backgroundImage: `linear-gradient(rgba(12,23,51,.28), rgba(12,23,51,.42)), url(${imageForTrip(trip)})` } : undefined}>
+                  <div className={`trip-thumbnail theme-${trip.theme}`}>
+                    <HomeTripPhoto country={trip.country} city={trip.city} kind="completed" />
                     <span>{trip.countryCode}</span>
                   </div>
                   <div className="trip-card-copy">

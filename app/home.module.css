@@ -43,6 +43,7 @@
   box-shadow: var(--shadow);
 }
 .home :global(.hero-card::before) { background: linear-gradient(90deg, rgba(7,25,37,.46), rgba(7,25,37,0) 78%), linear-gradient(180deg, rgba(7,25,37,0) 10%, rgba(7,25,37,.2) 40%, rgba(7,25,37,.92) 100%); }
+.home :global(.hero-card::before) { z-index: 0; }
 .home :global(.hero-overlay) { display: none; }
 .home :global(.hero-content) { position: relative; z-index: 1; width: 100%; max-width: none; text-shadow: 0 1px 3px rgba(7,25,37,.4); }
 .heroLabel { margin: 0 0 8px; color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .22em; }
@@ -68,7 +69,8 @@
 .home :global(.trip-card) { min-width: 0; min-height: 112px; padding: 10px; display: grid; grid-template-columns: 86px minmax(0, 1fr) 18px; gap: 13px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); box-shadow: var(--shadow-sm); text-align: left; }
 .home :global(.trip-card.selected) { background: var(--surface); border-color: #bba577; }
 .home :global(.trip-card:hover) { background: #fffdf9; border-color: #bba577; box-shadow: var(--shadow); }
-.home :global(.trip-thumbnail) { width: 86px; height: 86px; border-radius: 10px; background-size: cover; background-position: center; }
+.home :global(.trip-thumbnail) { position: relative; width: 86px; height: 86px; border-radius: 10px; background-size: cover; background-position: center; }
+.home :global(.trip-thumbnail > span) { z-index: 1; }
 .home :global(.trip-thumbnail > span) { font-size: 22px; }
 .home :global(.trip-card-copy) { min-width: 0; }
 .home :global(.trip-card-copy strong) { font-family: Georgia, 'Times New Roman', serif; font-size: 21px; font-weight: 400; line-height: 1.12; overflow-wrap: anywhere; }

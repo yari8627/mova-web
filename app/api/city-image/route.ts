@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveSpecificHomePhoto } from "../../../lib/home-photo-provider";
 
 type WikiPage = { title?: string; thumbnail?: { source?: string }; pageprops?: { disambiguation?: string } };
 type WikiResponse = { query?: { pages?: Record<string, WikiPage> } };
@@ -35,6 +36,11 @@ export async function GET(request: Request) {
   const city = searchParams.get("city")?.trim().split("·")[0]?.trim().slice(0, 100) || "";
   const country = searchParams.get("country")?.trim().slice(0, 100) || "";
   if (!city && !country) return NextResponse.json({ error: "Destinazione richiesta" }, { status: 400 });
+
+  if (searchParams.get("scope") === "home-v2") {
+    const photo = await resolveSpecificHomePhoto(country, city, fetch, searchParams.get("fallback") === "local");
+    return NextResponse.json(photo || { image: null }, { headers: { "Cache-Control": photo ? "public, max-age=86400, stale-while-revalidate=2592000" : "public, max-age=60" } });
+  }
 
   const candidates = [...new Set([city && country ? `${city}, ${country}` : "", city, country].filter(Boolean))];
   try {
