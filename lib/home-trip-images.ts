@@ -1,8 +1,9 @@
-import { primaryHomeDestination, photoText, safeHomePhotoUrl } from "./home-photo-destination";
+import { primaryHomeDestination, photoText, photoRetryDelay, safeHomePhotoUrl } from "./home-photo-destination";
 
 // Public destination-photo metadata only; no trip/account IDs or persistent storage.
 const photos = new Map<string, { url: string; expires: number }>();
 const pending = new Map<string, Promise<string>>();
+let providerBlockedUntil = 0;
 export function homePhotoKey(country: string, city: string) { return JSON.stringify([photoText(country), photoText(primaryHomeDestination(country, city)?.locality || "")]); }
 export function cachedHomePhoto(country: string, city: string) {
   const key = homePhotoKey(country, city), value = photos.get(key);
@@ -16,6 +17,7 @@ export function resolveHomePhoto(country: string, city: string, refresh = false,
   const key = homePhotoKey(country, city), cached = cachedHomePhoto(country, city);
   const remembered = photos.get(key);
   if (!refresh && remembered && remembered.expires > Date.now()) return Promise.resolve(cached);
+  if (providerBlockedUntil > Date.now()) return Promise.resolve(cached);
   const requestKey = `${key}|${localFallback}`;
   if (pending.has(requestKey)) return pending.get(requestKey)!;
   const request = (async () => {
@@ -25,6 +27,10 @@ export function resolveHomePhoto(country: string, city: string, refresh = false,
       const params = new URLSearchParams({ city: destination.locality, country: destination.country, scope: "home-v2" });
       if (localFallback) params.set("fallback", "local");
       const response = await fetch(`/api/city-image?${params}`, { signal: controller.signal });
+      if (response.status === 429 || response.status === 503) {
+        providerBlockedUntil = Math.max(providerBlockedUntil, Date.now() + photoRetryDelay(response.headers?.get('retry-after')));
+        return cached;
+      }
       if (!response.ok) return "";
       const result = await response.json();
       const url = safeHomePhotoUrl(result.image);

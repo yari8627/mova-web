@@ -19,6 +19,10 @@ http.createServer((request, response) => {
   if (url.pathname === '/api/trips') { setTimeout(() => json(response, trips), 80); return; }
   if (url.pathname === '/api/notifications') { json(response, { notifications: [] }); return; }
   if (url.pathname === '/api/city-image') {
+    if (process.env.NAMI_FIXTURE_IMAGE_MODE === '429') {
+      response.statusCode = 429; response.setHeader('Retry-After', '120'); response.setHeader('Cache-Control', 'no-store');
+      json(response, { image: null }); return;
+    }
     const city = url.searchParams.get('city');
     // Offscreen lookup gates expose whether all history is loaded unnecessarily.
     setTimeout(() => json(response, { image: photo }), city === 'Sal Rei' ? 100 : 1600);

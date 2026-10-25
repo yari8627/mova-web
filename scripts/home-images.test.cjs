@@ -36,7 +36,7 @@ test('a fast destination becomes available independently of an unrelated slow lo
   assert.equal(api.cachedHomePhoto('Francia', 'Paris'), '');
   calls[0]({ ok: false }); await slow;
 });
-for (const status of [403, 404, 429, 500]) test(`metadata HTTP ${status} is not cached and a later attempt can recover`, async () => {
+for (const status of [403, 404, 500]) test(`metadata HTTP ${status} is not cached and a later attempt can recover`, async () => {
   let calls = 0;
   const api = load('lib/home-trip-images.ts', { fetch: async () => ++calls === 1 ? { ok: false, status } : { ok: true, json: async () => ({ image: photo }) } });
   assert.equal(await api.resolveHomePhoto('Capo Verde', 'Sal Rei'), '');
@@ -176,4 +176,15 @@ test('a broken original photo makes one local alternative lookup before neutral 
   h.img().props.onError({currentTarget:h.target()});await flush();h.render();
   assert.equal(h.img().props.src,alternative);assert.equal(h.calls[1][3],true);assert.equal(h.calls[1][0],'Capo Verde');assert.equal(h.calls[1][1],'Sal Rei');
   await h.img().props.onLoad({currentTarget:h.target()});await flush();h.render();assert.equal(h.state(),'ready');h.unmount();
+});
+test('client respects 429 across destinations and forced recovery, then allows an explicit request after cooldown',async()=>{
+  let now=100000,requests=0;const api=load('lib/home-trip-images.ts',{Date:{now:()=>now,parse:Date.parse},fetch:async()=>{requests++;return requests===1?{ok:false,status:429,headers:{get:()=> '120'}}:{ok:true,json:async()=>({image:photo})}}});
+  assert.equal(await api.resolveHomePhoto('Italia','Milano'),'');assert.equal(requests,1);
+  assert.equal(await api.resolveHomePhoto('Italia','Napoli'),'');await api.resolveHomePhoto('Italia','Milano',true,true);assert.equal(requests,1);
+  now+=120001;assert.equal(await api.resolveHomePhoto('Italia','Milano'),photo);assert.equal(requests,2);
+});
+test('rate limiting preserves a previously valid cached image',async()=>{
+  let requests=0;const api=load('lib/home-trip-images.ts',{fetch:async()=>++requests===1?{ok:true,json:async()=>({image:photo})}:{ok:false,status:429,headers:{get:()=> '600'}}});
+  await api.resolveHomePhoto('Italia','Milano');assert.equal(await api.resolveHomePhoto('Italia','Milano',true),photo);
+  assert.equal(await api.resolveHomePhoto('Italia','Milano'),photo);assert.equal(requests,2);
 });

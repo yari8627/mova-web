@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSpecificHomePhoto } from "../../../lib/home-photo-provider";
+import { HomePhotoRateLimitError, resolveSpecificHomePhoto } from "../../../lib/home-photo-provider";
 
 type WikiPage = { title?: string; thumbnail?: { source?: string }; pageprops?: { disambiguation?: string } };
 type WikiResponse = { query?: { pages?: Record<string, WikiPage> } };
@@ -38,8 +38,15 @@ export async function GET(request: Request) {
   if (!city && !country) return NextResponse.json({ error: "Destinazione richiesta" }, { status: 400 });
 
   if (searchParams.get("scope") === "home-v2") {
-    const photo = await resolveSpecificHomePhoto(country, city, fetch, searchParams.get("fallback") === "local");
-    return NextResponse.json(photo || { image: null }, { headers: { "Cache-Control": photo ? "public, max-age=86400, stale-while-revalidate=2592000" : "public, max-age=60" } });
+    try {
+      const photo = await resolveSpecificHomePhoto(country, city, fetch, searchParams.get("fallback") === "local");
+      return NextResponse.json(photo || { image: null }, { headers: { "Cache-Control": photo ? "public, max-age=86400, stale-while-revalidate=2592000" : "public, max-age=60" } });
+    } catch (error) {
+      if (error instanceof HomePhotoRateLimitError) return NextResponse.json({ image: null }, {
+        status: 429, headers: { "Cache-Control": "no-store", "Retry-After": String(error.retryAfterSeconds) },
+      });
+      throw error;
+    }
   }
 
   const candidates = [...new Set([city && country ? `${city}, ${country}` : "", city, country].filter(Boolean))];

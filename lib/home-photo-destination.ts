@@ -28,3 +28,12 @@ export function mentionsLocality(text: string, locality: string) {
   const needle = photoText(locality.split(',')[0]);
   return !!needle && ` ${photoText(text)} `.includes(` ${needle} `);
 }
+
+// Retry-After allows seconds or an HTTP date. Missing/invalid values use a
+// conservative minute; never retry sooner than a valid provider instruction.
+export function photoRetryDelay(value: string | null | undefined, now = Date.now()) {
+  if (!value?.trim()) return 60000;
+  const seconds = /^\d+(?:\.\d+)?$/.test(value.trim()) ? Number(value) : NaN;
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now;
+  return Number.isFinite(delay) ? Math.max(5000, delay) : 60000;
+}

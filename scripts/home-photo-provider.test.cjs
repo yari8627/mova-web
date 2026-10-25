@@ -73,3 +73,56 @@ test('legacy country-thumbnail path can select a flag; Home-specific country-onl
   assert.equal((await route.GET(new Request('http://local/api/city-image?country=USA'))).body.image,image('Flag_of_USA'));
   assert.equal((await route.GET(new Request('http://local/api/city-image?country=USA&scope=home-v2'))).body.image,null);
 });
+test('Retry-After supports seconds, HTTP dates and safe defaults without shortening waits',()=>{
+  const now=Date.parse('2026-10-25T20:00:00Z');
+  assert.equal(pure.photoRetryDelay('120',now),120000);
+  assert.equal(pure.photoRetryDelay('Sun, 25 Oct 2026 20:03:00 GMT',now),180000);
+  assert.equal(pure.photoRetryDelay(null,now),60000);assert.equal(pure.photoRetryDelay('invalid',now),60000);
+});
+test('429 blocks all Wikimedia hosts, fallback and queued work until Retry-After, with no automatic retry',async()=>{
+  let now=100000,calls=0;const api=load('lib/home-photo-provider.ts',{Date:{now:()=>now,parse:Date.parse}});
+  const transport=async()=>{calls++;return{ok:false,status:429,headers:{get:()=> '120'}}};
+  await assert.rejects(api.resolveSpecificHomePhoto('Italia','Milano',transport),e=>e.retryAfterSeconds===120);
+  assert.equal(calls,2,'only the two already-started languages are in flight; no Commons bypass');
+  await assert.rejects(api.resolveSpecificHomePhoto('Italia','Napoli',transport),e=>e.retryAfterSeconds===120);
+  await assert.rejects(api.resolveSpecificHomePhoto('Italia','Milano',transport,true));assert.equal(calls,2);
+  now+=120001;
+  const recovered=await api.resolveSpecificHomePhoto('Italia','Milano',async()=>response([wiki('Milano','Italia')]));assert.equal(recovered.title,'Milano');
+});
+test('server deduplicates equivalent concurrent destination resolutions',async()=>{
+  const api=photoModule();let calls=0,resolve;
+  const gate=new Promise(done=>resolve=done),transport=async()=>{calls++;await gate;return response([wiki('Milano','Italia')]);};
+  const first=api.resolveSpecificHomePhoto('Italia','Milano',transport),same=api.resolveSpecificHomePhoto('italia','MILANO',transport);
+  assert.equal(first,same);await Promise.resolve();assert.equal(calls,2);resolve();await Promise.all([first,same]);assert.equal(calls,2);
+});
+test('provider has at most three active requests across different destinations',async()=>{
+  const api=photoModule();let active=0,peak=0;const releases=[];
+  const transport=()=>new Promise(resolve=>{active++;peak=Math.max(peak,active);releases.push(()=>{active--;resolve(response([]));});});
+  let complete=false;const all=Promise.all(['Milano','Napoli','Torino'].map(city=>api.resolveSpecificHomePhoto('Italia',city,transport))).then(()=>{complete=true;});
+  while(!complete){await new Promise(r=>setImmediate(r));for(const release of releases.splice(0))release();}
+  await all;assert.equal(peak,3);
+});
+test('Home API propagates 429 and Retry-After instead of caching it as a missing photograph',async()=>{
+  const next={NextResponse:{json:(body,options)=>({body,status:options?.status||200,headers:options?.headers})}};
+  const route=load('app/api/city-image/route.ts',{fetch:async()=>({ok:false,status:429,headers:{get:()=> '90'}})},{'next/server':next});
+  const result=await route.GET(new Request('http://local/api/city-image?city=Milano&country=Italia&scope=home-v2'));
+  assert.equal(result.status,429);assert.equal(result.headers['Retry-After'],'90');assert.equal(result.headers['Cache-Control'],'no-store');
+});
+test('multiple stops always use the first explicit locality, never the trip name or country',()=>{
+  assert.equal(pure.primaryHomeDestination('Italia','Milano · Napoli · Roma').locality,'Milano');
+  assert.equal(pure.primaryHomeDestination('Italia','Napoli · Milano').locality,'Napoli');
+  assert.equal(pure.primaryHomeDestination('Italia',' · Milano'),null);
+  assert.equal(pure.primaryHomeDestination('Italia','Italia · Milano'),null);
+});
+test('unscaled original PNG is not downloaded for a card; a sized same-city photo is selected',async()=>{
+  const api=photoModule(),original={...wiki('Milano','Italia'),thumbnail:{source:'https://upload.wikimedia.org/wikipedia/commons/5/58/Milan.Proper.Wikipedia.Image.png'}};
+  const result=await api.resolveSpecificHomePhoto('Italia','Milano',async url=>response(url.includes('commons.wikimedia')?[{title:'File:Milano skyline',imageinfo:[{mime:'image/jpeg',thumburl:image('Milano_skyline'),extmetadata:{ImageDescription:{value:'Milano, Italia'}}}]}]:[original]));
+  assert.equal(result.image,image('Milano_skyline'));assert.equal(result.source,'Wikimedia Commons');
+});
+test('authoritative Wikipedia redirect allows a localized city name without accepting an unrelated title',async()=>{
+  const api=photoModule();const result=await api.resolveSpecificHomePhoto('Italia','Milano',async url=>{
+    if(url.includes('it.wikipedia'))return response([]);
+    return{ok:true,json:async()=>({query:{redirects:[{from:'Milano',to:'Milan'}],pages:{1:wiki('Milan','Italy')}}})};
+  });
+  assert.equal(result.title,'Milan');assert.equal(result.image,image('Milan'));
+});
