@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { CalendarDays, Users } from "lucide-react";
-import { useDestinationImage } from "./use-destination-image";
+import { HomeTripPhoto } from "./home-trip-photo";
 import { fetchTripSnapshot, readTripSnapshot } from "../../lib/trip-client-cache";
+import styles from "./trip-cover.module.css";
 
 type Trip = {
   id: string;
@@ -24,7 +25,6 @@ function formatDate(value?: string) {
 
 export function TripCover({ tripId }: { tripId: string }) {
   const [trip, setTrip] = useState<Trip | null>(null);
-  const image = useDestinationImage(trip?.country, trip?.city);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("mova-trips") || "[]") as Trip[];
@@ -47,10 +47,10 @@ export function TripCover({ tripId }: { tripId: string }) {
   const dateRange = [formatDate(trip.startDate), formatDate(trip.endDate)].filter(Boolean).join(" – ");
 
   return <section
-    className={`shared-trip-cover theme-${trip.theme || "blue"}`}
-    style={image ? { backgroundImage: `linear-gradient(90deg, rgba(5, 17, 47, .82), rgba(5, 17, 47, .18)), url(${image})` } : undefined}
+    className={`shared-trip-cover theme-${trip.theme || "blue"} ${styles.cover}`}
   >
-    <div>
+    <HomeTripPhoto country={trip.country} city={trip.city || ""} kind="trip" />
+    <div className={styles.content}>
       <p className="detail-eyebrow">{trip.countryCode} {trip.country}</p>
       <h1>{trip.name}</h1>
       <p>{trip.city || trip.country}</p>

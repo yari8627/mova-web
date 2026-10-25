@@ -1,0 +1,4 @@
+.cover { position: relative; isolation: isolate; }
+/* Keep the photograph full width despite the existing cover copy max-width. */
+.cover > [data-photo-state] { max-width: none; }
+.content { position: relative; z-index: 1; }

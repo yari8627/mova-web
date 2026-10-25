@@ -256,3 +256,19 @@ test('returning to Home and a fresh mount after refresh handle already decoded c
   assert.equal(h.state(),'ready',kindOfReturn);assert.equal(h.calls.length,1);assert.equal(h.img().props.style.opacity,1);h.unmount();
  }
 });
+
+
+test('trip cover shares the priority photo lifecycle instead of waiting for intersection',async()=>{
+ const h=component({kind:'trip'});h.render();assert(h.img());assert.equal(h.img().props.fetchPriority,'high');assert.equal(h.calls.length,1);
+ await h.img().props.onLoad({currentTarget:h.target()});await flush();h.render();assert.equal(h.state(),'ready');h.unmount();
+});
+
+test('trip cover uses responsive renditions of the same canonical cached photo',async()=>{
+ const h=component({kind:'trip'});h.render();assert.equal(h.img().props.src,photo);assert.match(h.img().props.sizes,/100vw/);
+ assert(h.img().props.srcSet.includes('Aerial-Sal-Reis'));h.unmount();
+});
+
+test('trip cover has the same explicit neutral fallback for missing photographs',async()=>{
+ const h=component({kind:'trip',source:'',resolve:async()=>''});h.render();await flush();h.render();
+ assert.equal(h.state(),'error');assert.match(JSON.stringify(h.render().props.children),/Foto non disponibile/);h.unmount();
+});

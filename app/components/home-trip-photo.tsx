@@ -5,7 +5,7 @@ import { Compass } from "lucide-react";
 import { cachedHomePhoto, homePhotoKey, homePhotoSrcSet, resolveHomePhoto } from "../../lib/home-trip-images";
 import styles from "./home-trip-photo.module.css";
 
-type Props = { country: string; city: string; kind: "hero" | "upcoming" | "completed" };
+type Props = { country: string; city: string; kind: "hero" | "upcoming" | "completed" | "trip" };
 
 // A destination change remounts its own lifecycle, including pending decode callbacks.
 export function HomeTripPhoto(props: Props) { return <DestinationPhoto key={homePhotoKey(props.country, props.city)} {...props} />; }
@@ -16,7 +16,7 @@ function DestinationPhoto({ country, city, kind }: Props) {
   const mounted = useRef(false);
   const retriedOnline = useRef(false);
   const triedLocalFallback = useRef(false);
-  const [visible, setVisible] = useState(kind === "hero");
+  const [visible, setVisible] = useState(kind === "hero" || kind === "trip");
   const [source, setSource] = useState(() => cachedHomePhoto(country, city));
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [originalOnly, setOriginalOnly] = useState(false);
@@ -69,7 +69,7 @@ function DestinationPhoto({ country, city, kind }: Props) {
     const cachedImage = image.current;
     if (cachedImage?.complete && cachedImage.naturalWidth) void loaded(cachedImage);
     // An already-failed cached request can also finish before onError is attached.
-    else if (kind === "completed" && cachedImage?.complete) failed(cachedImage);
+    else if ((kind === "completed" || kind === "trip") && cachedImage?.complete) failed(cachedImage);
     // A stalled image gets a deliberate fallback; a late valid load can recover.
     const timeout = window.setTimeout(() => setState(current => current === "ready" ? current : "error"), 20000);
     return () => window.clearTimeout(timeout);
@@ -110,10 +110,10 @@ function DestinationPhoto({ country, city, kind }: Props) {
 
   return <div ref={root} className={`${styles.photo} ${styles[kind]}`} data-photo-state={state} aria-hidden="true">
     {visible && source && <img key={`${source}|${originalOnly}|${retry}`} ref={image} className={styles.image} src={source} srcSet={srcSet}
-      sizes={kind === "hero" ? "(max-width: 700px) calc(100vw - 32px), (max-width: 1100px) calc(100vw - 280px), 850px" : kind === "completed" ? "(max-width: 700px) 55vw, 210px" : "86px"}
-      alt="" loading="eager" fetchPriority={kind === "hero" ? "high" : "auto"} decoding="async"
+      sizes={kind === "trip" ? "(max-width: 700px) calc(100vw - 32px), (max-width: 1100px) calc(100vw - 280px), 1280px" : kind === "hero" ? "(max-width: 700px) calc(100vw - 32px), (max-width: 1100px) calc(100vw - 280px), 850px" : kind === "completed" ? "(max-width: 700px) 55vw, 210px" : "86px"}
+      alt="" loading="eager" fetchPriority={kind === "hero" || kind === "trip" ? "high" : "auto"} decoding="async"
       style={{ opacity: state === "ready" ? 1 : 0 }} onLoad={event => { void loaded(event.currentTarget); }} onError={event => failed(event.currentTarget)} />}
-    {kind === "completed" && state !== "ready" ? <div className={styles.feedback}>
+    {(kind === "completed" || kind === "trip") && state !== "ready" ? <div className={styles.feedback}>
       <Compass size={24} />
       <span>{state === "loading" ? "Caricamento foto…" : "Foto non disponibile"}</span>
     </div> : state === "error" && <Compass className={styles.unavailable} size={28} />}

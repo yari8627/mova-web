@@ -1,0 +1,24 @@
+// Builds an isolated localhost-only UI fixture from actual source files.
+// No .env, authentication, production database or application route is copied.
+const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
+const source=process.cwd(),target=path.resolve(source,'../nami-bug011-browser');
+function write(file,text){const output=path.join(target,file);fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,text);}
+function copy(file){const output=path.join(target,file);fs.mkdirSync(path.dirname(output),{recursive:true});fs.copyFileSync(path.join(source,file),output);}
+for(const file of ['package.json','tsconfig.json','app/globals.css','app/home.module.css','app/components/home-trip-photo.tsx','app/components/home-trip-photo.module.css','app/components/trip-cover.tsx','app/components/trip-cover.module.css','app/components/use-destination-image.ts','lib/home-trip-images.ts','lib/home-photo-destination.ts','lib/trip-client-cache.ts','lib/destination-images.ts','public/destinations/italy.webp'])copy(file);
+write('app/itinerary.module.css',fs.readFileSync('app/trips/[id]/itinerary.module.css','utf8'));
+write('app/components/trip-cover-baseline.tsx',execFileSync('git',['show','5df1d30:app/components/trip-cover.tsx'],{encoding:'utf8'}));
+if(!fs.existsSync(path.join(target,'node_modules')))fs.symlinkSync(fs.realpathSync('node_modules'),path.join(target,'node_modules'),'junction');
+write('app/layout.tsx',`import './globals.css';export const metadata={title:'NAMI BUG-011 — synthetic fixture'};export default function Layout({children}:{children:React.ReactNode}){return <html lang="it"><body>{children}</body></html>}`);
+write('app/page.tsx',`"use client";
+import {useEffect,useState} from 'react';import {HomeTripPhoto} from './components/home-trip-photo';import {TripCover} from './components/trip-cover';import {TripCover as BaselineCover} from './components/trip-cover-baseline';import {setTripCacheAccount,writeTripSnapshot} from '../lib/trip-client-cache';import home from './home.module.css';import boutique from './itinerary.module.css';
+export default function Page(){useEffect(()=>{if(new URLSearchParams(window.location.search).get('view')==='trip')setView('trip');},[]);const [view,setView]=useState('home'),[city,setCity]=useState('Milano'),[ready,setReady]=useState(false);const country=city==='Tromsø'?'Norvegia':city==='New York'?'Stati Uniti':'Italia';
+useEffect(()=>{setTripCacheAccount('synthetic-only');writeTripSnapshot('synthetic-trip',{id:'synthetic-trip',name:'Viaggio di prova',country,city,startDate:'2026-10-30',endDate:'2026-10-31',people:4,theme:'blue',activities:[],bookings:[],documents:[],expenses:[],participants:[]});setReady(true);},[city,country]);
+return <><nav aria-label="Controlli fixture" style={{padding:12,display:'flex',flexWrap:'wrap',gap:8}}>{['home','trip','baseline'].map(v=><button key={v} onClick={()=>setView(v)}>{v}</button>)}{['Milano','Tromsø','Napoli','New York','Milano · Napoli'].map(c=><button key={c} onClick={()=>setCity(c)}>{c}</button>)}</nav><main className={view==='home'?home.home:boutique.itinerary}><div style={{padding:16}}>{ready&&(view==='home'?<article className="hero-card theme-blue" data-test-home><HomeTripPhoto country={country} city={city} kind="hero"/><div className="hero-content"><h2>Viaggio di prova</h2><p>{city}</p><button onClick={()=>setView('trip')}>Apri viaggio</button></div></article>:view==='baseline'?<BaselineCover tripId="synthetic-trip"/>:<TripCover tripId="synthetic-trip"/>)}</div></main></>}
+`);
+const photos={
+'Milano':'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/Milan_Cathedral_from_Piazza_del_Duomo.jpg/1280px-Milan_Cathedral_from_Piazza_del_Duomo.jpg',
+'Tromsø':'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Troms%C3%B8_sentrum_%285835702754%29.jpg/1280px-Troms%C3%B8_sentrum_%285835702754%29.jpg',
+'Napoli':'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/Napoli_-_Maschio_Angioino_-_202209302342_3.jpg/1280px-Napoli_-_Maschio_Angioino_-_202209302342_3.jpg',
+'New York':'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7a/View_of_Empire_State_Building_from_Rockefeller_Center_New_York_City_dllu_%28cropped%29.jpg/1280px-View_of_Empire_State_Building_from_Rockefeller_Center_New_York_City_dllu_%28cropped%29.jpg'};
+write('app/api/city-image/route.ts',`const photos:Record<string,string>=${JSON.stringify(photos)};export async function GET(request:Request){const params=new URL(request.url).searchParams;const mode=new URL(request.headers.get('referer')||'http://fixture').searchParams.get('mode');if(mode==='429')return Response.json({image:null},{status:429,headers:{'Retry-After':'120'}});if(mode==='missing')return Response.json({image:null});return Response.json({image:photos[params.get('city')||'']||null});}`);
+console.log('Synthetic UI fixture prepared at '+target+'; start Next dev there bound to 127.0.0.1.');
