@@ -1,53 +1,100 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Check, MapPin, Users } from "lucide-react";
+import { CalendarDays, Check, LoaderCircle, MailOpen, MapPin, Users } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { NamiWordmark } from "../../components/nami-wordmark";
+import { createInviteAcceptance, type AcceptFeedback, type AcceptedInvite } from "../../../lib/invite-acceptance";
 import { invalidatePageCache } from "../../../lib/page-cache";
 import { removeTripSnapshot, setTripCacheAccount } from "../../../lib/trip-client-cache";
+import styles from "./invite.module.css";
 
 type Invite = { code: string; email: string; role: string; status: string; expired: boolean; canAccess?: boolean; user: { id: string; email: string } | null; trip: { id: string; name: string; country: string; city: string; startDate: string; endDate: string } };
 const date = (value: string) => new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
 
-export default function InvitePage() { const { code } = useParams<{ code: string }>(); const router = useRouter(); const [invite, setInvite] = useState<Invite | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
-  const accepting = useRef(false);
+export default function InvitePage() {
+  const { code } = useParams<{ code: string }>();
+  const router = useRouter();
+  const [invite, setInvite] = useState<Invite | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState<AcceptFeedback>({ phase: "idle", message: "" });
+  const [accepted, setAccepted] = useState<AcceptedInvite | null>(null);
+  const acceptance = useRef<ReturnType<typeof createInviteAcceptance> | null>(null);
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError("");
-    fetch(`/api/invites/${code}`, { cache: "no-store" }).then(async response => {
+    const abort = new AbortController();
+    acceptance.current?.cancel(); acceptance.current = null;
+    setInvite(null); setAccepted(null); setLoading(true); setError("");
+    setFeedback({ phase: "idle", message: "" });
+    fetch(`/api/invites/${encodeURIComponent(code)}`, { cache: "no-store", signal: abort.signal }).then(async response => {
       const result = await response.json();
       if (cancelled) return;
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) throw new Error(result.error || "Invito non disponibile");
       setInvite(result);
-      if (result.canAccess && result.user?.id) {
-        prepareTrip(result.user.id, result.trip.id);
-        router.replace(`/trips/${result.trip.id}/overview`);
-      }
-    }).catch(reason => { if (!cancelled) setError(reason.message); }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [code, router]);
+    }).catch(() => { if (!cancelled) setError("Non è stato possibile caricare l’invito. Verifica il collegamento e la connessione, poi riapri la pagina."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; abort.abort(); acceptance.current?.cancel(); };
+  }, [code]);
+
   function prepareTrip(userId: string, tripId: string) {
     invalidatePageCache(userId, "trips");
     invalidatePageCache(userId, `access-${tripId}`);
     invalidatePageCache(userId, `participants-${tripId}`);
     setTripCacheAccount(userId); removeTripSnapshot(tripId);
   }
+  function openTrip() {
+    const userId = accepted?.userId || invite?.user?.id;
+    const tripId = accepted?.tripId || (invite?.canAccess ? invite.trip.id : null);
+    if (!userId || !tripId) return;
+    prepareTrip(userId, tripId);
+    router.push(`/trips/${tripId}/overview`); router.refresh();
+  }
   async function accept() {
     if (!invite?.user) { router.push(`/auth?next=${encodeURIComponent(`/invite/${invite?.code || code}`)}`); return; }
-    if (accepting.current) return;
-    accepting.current = true;
-    setLoading(true); setError("");
-    try {
-      const response = await fetch(`/api/invites/${invite.code}/accept`, { method: "POST" });
-      const result = await response.json();
-      if (!response.ok) { setError(result.error); return; }
-      prepareTrip(result.userId, result.tripId);
-      router.push(`/trips/${result.tripId}/overview`); router.refresh();
-    } catch { setError("Non è stato possibile verificare l’accettazione. Riprova."); }
-    finally { accepting.current = false; setLoading(false); }
+    if (invite.user.email.trim().toLowerCase() !== invite.email.trim().toLowerCase() || invite.expired || invite.status !== "pending") return;
+    if (!acceptance.current) acceptance.current = createInviteAcceptance({
+      code: invite.code, userId: invite.user.id, tripId: invite.trip.id,
+      onState: state => { setFeedback(state); setError(state.phase === "error" ? state.message : ""); },
+      onSuccess: result => { prepareTrip(result.userId, result.tripId); setAccepted(result); },
+    });
+    await acceptance.current.accept();
   }
-  if (loading && !invite) return <main className="invite-shell"><p>Caricamento invito…</p></main>;
-  if (!invite) return <main className="invite-shell"><section className="invite-accept-card"><div className="auth-brand">NAMI</div><h1>Invito non disponibile</h1><p>{error}</p><button className="primary-button" onClick={() => router.push("/")}>Torna alla home</button></section></main>;
-  const unavailable = invite.expired || invite.status !== "pending";
-  return <main className="invite-shell"><section className="invite-accept-card"><div className="auth-brand">NAMI</div><p className="section-kicker">INVITO AL VIAGGIO</p><h1>{invite.trip.name}</h1><p>{invite.trip.country}</p><div className="invite-trip-meta"><span><MapPin size={18} /> {invite.trip.city}</span><span><CalendarDays size={18} /> {date(invite.trip.startDate)} – {date(invite.trip.endDate)}</span><span><Users size={18} /> Ruolo: {invite.role === "co-organizer" ? "Co-organizzatore" : "Partecipante"}</span></div>{error && <div className="auth-error">{error}</div>}{invite.status === "accepted" ? <div className="invite-accepted"><Check size={20} /> {invite.canAccess ? "Invito già accettato" : "Invito già utilizzato. Se il viaggio non è visibile, richiedi un nuovo invito al proprietario."}</div> : <button className="primary-button invite-accept-button" disabled={loading || unavailable} onClick={accept}>{invite.expired ? "Invito scaduto" : invite.user ? "Accetta e partecipa" : "Accedi per accettare"}</button>}<small>L’invito è riservato a {invite.email}</small></section></main>;
+
+  const busy = feedback.phase === "accepting" || feedback.phase === "checking";
+  const authorized = invite?.user && invite.user.email.trim().toLowerCase() === invite.email.trim().toLowerCase();
+  const canOpen = Boolean(accepted || invite?.canAccess);
+  const unavailable = Boolean(invite && (invite.expired || invite.status !== "pending"));
+  const accountError = invite?.user && !authorized ? "Questo invito è destinato a un altro account. Accedi con l’indirizzo indicato nell’invito." : "";
+
+  return <main className={styles.shell}>
+    <header className={styles.header}><NamiWordmark /></header>
+    <section className={styles.card} aria-labelledby="invite-title" aria-busy={loading || busy}>
+      <div className={styles.emblem} aria-hidden="true"><MailOpen size={27} strokeWidth={1.5} /></div>
+      <p className={styles.kicker}>INVITO AL VIAGGIO</p>
+      <h1 id="invite-title" className={styles.title}>{!invite && !loading ? "Invito non disponibile" : "Un nuovo viaggio ti aspetta"}</h1>
+      {loading ? <p className={styles.status} role="status"><LoaderCircle className={styles.spinner} size={20} aria-hidden="true" /> Caricamento invito…</p> : invite ? <>
+        <p className={styles.intro}>Sei stato invitato a partecipare</p>
+        <h2 className={styles.tripName}>{invite.trip.name}</h2>
+        <dl className={styles.details}>
+          <div><MapPin size={19} aria-hidden="true" /><dt>Destinazione</dt><dd>{[invite.trip.city, invite.trip.country].filter(Boolean).join(", ")}</dd></div>
+          <div><CalendarDays size={19} aria-hidden="true" /><dt>Date</dt><dd>{date(invite.trip.startDate)} – {date(invite.trip.endDate)}</dd></div>
+          <div><Users size={19} aria-hidden="true" /><dt>Ruolo assegnato</dt><dd>{invite.role === "co-organizer" ? "Co-organizzatore" : "Partecipante"}</dd></div>
+        </dl>
+        <div className={styles.feedback} role="status" aria-live="polite" aria-atomic="true">
+          {canOpen ? <p className={styles.success}><Check size={20} aria-hidden="true" /> {accepted ? "Invito accettato!" : "Invito già accettato"}</p>
+            : feedback.phase !== "error" && feedback.message ? <p className={busy ? styles.srOnly : undefined}>{feedback.message}</p>
+            : unavailable ? <p>{invite.status === "accepted" ? "Invito già utilizzato. Se il viaggio non è visibile, richiedi un nuovo invito al proprietario." : invite.expired ? "Questo invito è scaduto." : "Questo invito è stato sostituito o revocato. Apri il collegamento più recente."}</p> : null}
+        </div>
+        {(error || accountError) && <p className={styles.error} role="alert">{error || accountError}</p>}
+        {canOpen ? <button className={styles.cta} onClick={openTrip}>Apri il viaggio</button>
+          : <button className={`invite-accept-button ${styles.cta}`} disabled={busy || unavailable || Boolean(accountError)} aria-busy={busy} onClick={accept}>
+            {busy && <LoaderCircle size={19} className={styles.spinner} aria-hidden="true" />}
+            {feedback.phase === "accepting" ? "Accettazione in corso…" : feedback.phase === "checking" ? "Verifica in corso…" : feedback.phase === "uncertain" ? "Verifica stato" : invite.expired ? "Invito scaduto" : invite.status !== "pending" ? "Invito non disponibile" : invite.user ? "Accetta l’invito" : "Accedi per accettare"}
+          </button>}
+        <small className={styles.reserved}>L’invito è riservato a {invite.email}</small>
+      </> : <><p className={styles.error} role="alert">{error}</p><button className={styles.cta} onClick={() => router.push("/")}>Torna alla Home</button></>}
+    </section>
+  </main>;
 }

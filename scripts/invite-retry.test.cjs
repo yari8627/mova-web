@@ -133,15 +133,15 @@ test('four historical invitations, pending screen and absent Home become visible
 });
 
 function screen({ canAccess = true, status = 'accepted', delayed = false } = {}) {
-  const effects = [], calls = [], state = [], ref = { current: false };
-  const invite = { code: 'NAMI-FIXTURE', status, expired: false, canAccess, user: { id: 'guest', email: 'guest@example.invalid' },
+  const effects = [], calls = [], state = [], ref = { current: null };
+  const invite = { code: 'NAMI-FIXTURE', email: 'guest@example.invalid', status, expired: false, canAccess, user: { id: 'guest', email: 'guest@example.invalid' },
     trip: { id: 'trip', name: 'Italia 2026', city: 'Milano', country: 'Italia', startDate: '2026-10-31', endDate: '2026-10-31' } };
   let cursor = 0, resolvePost;
   const router = { replace: path => calls.push({ replace: path }), push: path => calls.push({ push: path }), refresh() {} };
   const page = load('app/invite/[code]/page.tsx', { fetch: async (url, options) => {
     calls.push({ method: options?.method || 'GET' });
     if (options?.method === 'POST' && delayed) await new Promise(resolve => { resolvePost = resolve; });
-    return { ok: true, json: async () => options?.method === 'POST' ? { accepted: true, tripId: 'trip', userId: 'guest' } : invite };
+    return { ok: true, status: 200, json: async () => options?.method === 'POST' ? { accepted: true, tripId: 'trip', userId: 'guest' } : invite };
   } }, {
     react: { useEffect: effect => effects.push(effect), useRef: () => ref, useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => { state[i] = value; }]; } },
     'next/navigation': { useParams: () => ({ code: invite.code }), useRouter: () => router },
@@ -152,14 +152,16 @@ function screen({ canAccess = true, status = 'accepted', delayed = false } = {})
   const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)];
   return { calls, state, mount: () => { render(); return effects.shift()(); }, render, nodes,
     button: () => nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('invite-accept-button')),
+    open: () => nodes(render()).find(node => node.type === 'button' && node.props.children === 'Apri il viaggio').props.onClick(),
     finish: () => resolvePost() };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test('opening an accepted link verifies membership and enters the trip without a new POST', async () => {
+test('opening an accepted link offers authorized trip navigation without a new POST', async () => {
   const s = screen(); s.mount(); await flush();
   assert.equal(s.calls.filter(row => row.method === 'POST').length, 0);
-  assert.equal(s.calls.at(-1).replace, '/trips/trip/overview');
+  assert.equal(s.calls.some(row => row.push || row.replace), false); s.open();
+  assert.equal(s.calls.at(-1).push, '/trips/trip/overview');
   assert.deepEqual(s.calls.filter(row => row.invalidate).map(row => [...row.invalidate]), [['guest', 'trips'], ['guest', 'access-trip'], ['guest', 'participants-trip']]);
 });
 
@@ -174,6 +176,8 @@ test('two accept clicks in the same render issue one POST and keep the pending s
   const s = screen({ canAccess: false, status: 'pending', delayed: true }); s.mount(); await flush();
   const button = s.button(); const first = button.props.onClick(); const second = button.props.onClick();
   assert.equal(s.calls.filter(row => row.method === 'POST').length, 1);
-  assert.equal(s.state[2], true); s.finish(); await Promise.all([first, second]);
-  assert.equal(s.calls.filter(row => row.push).length, 1); assert.equal(s.state[2], false);
+  assert.equal(s.state[3].phase, 'accepting'); assert.equal(s.button().props.disabled, true);
+  s.finish(); await Promise.all([first, second]);
+  assert.equal(s.state[3].phase, 'success'); assert.equal(s.calls.filter(row => row.push).length, 0);
+  s.open(); assert.equal(s.calls.filter(row => row.push).length, 1); assert.equal(s.state[2], false);
 });

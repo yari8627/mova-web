@@ -4,9 +4,9 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 function load(file, globals = {}, dependencies = {}) {
   const cache = new Map();
   function read(file) {
-    file = path.resolve(file); if (cache.has(file)) return cache.get(file);
-    const context = { exports: {}, Date, URL, AbortSignal, setTimeout, clearTimeout, ...globals }; cache.set(file, context.exports);
-    context.require = name => name in dependencies ? dependencies[name] : name.startsWith('.') ? read(path.resolve(path.dirname(file), name + '.ts')) : require(name);
+    file = path.resolve(file); if (!fs.existsSync(file) && file.endsWith('.ts') && fs.existsSync(file + 'x')) file += 'x'; if (cache.has(file)) return cache.get(file);
+    const context = { exports: {}, Date, URL, AbortSignal, AbortController, setTimeout, clearTimeout, ...globals }; cache.set(file, context.exports);
+    context.require = name => name in dependencies ? dependencies[name] : name.endsWith('.css') ? { default: new Proxy({}, { get: (_, key) => key }) } : name.startsWith('.') ? read(path.resolve(path.dirname(file), name + '.ts')) : require(name);
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText, context);
     return context.exports;
   }
@@ -216,27 +216,28 @@ test('Home trip-list invalidation rejects stale in-flight data and keeps account
 
 function inviteClient({ signedIn = true, ok = true, networkError = false } = {}) {
   let cursor = 0; const calls = [];
-  const state = [{ code: 'NAMI-FIXTURE', email: 'guest@example.invalid', user: signedIn ? { email: 'guest@example.invalid' } : null,
+  const state = [{ code: 'NAMI-FIXTURE', email: 'guest@example.invalid', user: signedIn ? { id: 'guest', email: 'guest@example.invalid' } : null,
     role: 'participant', status: 'pending', expired: false, trip: { id: 'trip', name: 'Trip', country: 'Italia', city: 'Roma', startDate: '2099-01-01', endDate: '2099-01-02' } }, '', false];
-  const api = load('app/invite/[code]/page.tsx', { fetch: async () => { if (networkError) throw Error('offline'); return { ok, json: async () => ok ? { accepted: true, tripId: 'trip', userId: 'guest' } : { error: 'Accesso negato' } }; } }, {
+  const api = load('app/invite/[code]/page.tsx', { fetch: async () => { if (networkError) throw Error('offline'); return { ok, status: ok ? 200 : 403, json: async () => ok ? { accepted: true, tripId: 'trip', userId: 'guest' } : { error: 'Accesso negato' } }; } }, {
     react: { useEffect() {}, useRef: value => ({ current: value }), useState(initial) { const at = cursor++; if (state[at] === undefined) state[at] = initial; return [state[at], value => { state[at] = value; }]; } },
     'next/navigation': { useParams: () => ({ code: 'NAMI-FIXTURE' }), useRouter: () => ({ push: path => calls.push({ push: path }), refresh: () => calls.push({ refresh: true }) }) },
     '../../../lib/page-cache': { invalidatePageCache: (...args) => calls.push({ invalidate: args }) },
     '../../../lib/trip-client-cache': { setTripCacheAccount: id => calls.push({ account: id }), removeTripSnapshot: id => calls.push({ snapshot: id }) },
   });
   const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)];
-  return { calls, state, accept: async () => { cursor = 0; const tree = api.default(); const button = nodes(tree).find(node => node.type === 'button' && node.props.className?.includes('invite-accept-button')); await button.props.onClick(); } };
+  return { calls, state, accept: async () => { cursor = 0; const tree = api.default(); const button = nodes(tree).find(node => node.type === 'button' && node.props.className?.includes('invite-accept-button')); await button.props.onClick(); }, open: () => { cursor = 0; const tree = api.default(); nodes(tree).find(node => node.type === 'button' && node.props.children === 'Apri il viaggio').props.onClick(); } };
 }
 test('confirmed acceptance invalidates only the authenticated guest list and role snapshots before navigation', async () => {
   const h = inviteClient(); await h.accept();
   assert.deepEqual(h.calls.filter(row => row.invalidate).map(row => [...row.invalidate]), [['guest', 'trips'], ['guest', 'access-trip'], ['guest', 'participants-trip']]);
-  assert.equal(h.calls.at(-2).push, '/trips/trip/overview'); assert.equal(h.calls.at(-1).refresh, true);
+  assert.equal(h.calls.some(row => row.push), false, 'success is visible before explicit navigation');
+  h.open(); assert.equal(h.calls.at(-2).push, '/trips/trip/overview'); assert.equal(h.calls.at(-1).refresh, true);
 });
 test('a login detour retains the original invitation and a denied/offline acceptance never clears cache or redirects', async () => {
   const anonymous = inviteClient({ signedIn: false }); await anonymous.accept();
   assert.equal(anonymous.calls[0].push, '/auth?next=%2Finvite%2FNAMI-FIXTURE');
   for (const config of [{ ok: false }, { networkError: true }]) {
-    const h = inviteClient(config); await h.accept(); assert.equal(h.calls.length, 0); assert(h.state[1]); assert.equal(h.state[2], false);
+    const h = inviteClient(config); await h.accept(); assert.equal(h.calls.length, 0); assert(config.networkError ? h.state[3].phase === 'uncertain' : h.state[1]); assert.equal(h.state[2], false);
   }
 });
 
