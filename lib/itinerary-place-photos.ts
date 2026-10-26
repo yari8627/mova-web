@@ -29,9 +29,10 @@ function exactCandidate(target: PlacePhotoTarget, candidate: { name?: string; ad
 }
 function samePredictionName(target: PlacePhotoTarget, candidate: { name?: string; type?: string }) {
   if (photoText(target.place) === photoText(candidate.name || '')) return true;
-  // Airport autocomplete may append an IATA code absent from canonical details.
-  // This only admits a candidate for the subsequent full identity check.
-  return /(?:^|_)airport$/.test(candidate.type || '')
+  // Autocomplete may append an IATA code while exposing a generic first type
+  // such as point_of_interest. That type cannot decide identity. This only
+  // admits a candidate for the mandatory canonical name + coordinate check.
+  return (/(?:^|_)airport$/.test(candidate.type || '') || ['point_of_interest', 'establishment', 'place'].includes(candidate.type || ''))
     && photoText(target.place) === photoText((candidate.name || '').replace(/\s*\([A-Z]{3}\)\s*$/, ''));
 }
 function sameCoordinates(target: PlacePhotoTarget, detail: { latitude?: number; longitude?: number }) {
@@ -83,9 +84,17 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
             if (!matches.length || matches.length > 3 || (matches.length > 1 && !hasCoordinates)) return null;
             if (matches.length > 1) {
               const verified = [];
-              for (const match of matches) {
-                const detail = await get('/api/places?' + new URLSearchParams({ placeId: match.placeId, sessionToken: crypto.randomUUID() }));
-                if (detail?.placeId === match.placeId && photoText(target.place) === photoText(detail.name || '') && sameCoordinates(target, detail)) verified.push(detail);
+              // Independent identity checks may overlap, but remain bounded.
+              // Wait for the entire batch, including failures, before releasing
+              // the photo-job slot; never select a partially verified candidate.
+              for (let offset = 0; offset < matches.length; offset += 2) {
+                const batch = matches.slice(offset, offset + 2);
+                const results = await Promise.allSettled(batch.map(match => get('/api/places?' + new URLSearchParams({ placeId: match.placeId, sessionToken: crypto.randomUUID() }))));
+                for (const [index, result] of results.entries()) {
+                  if (result.status === 'rejected') throw result.reason;
+                  const detail = result.value;
+                  if (detail?.placeId === batch[index].placeId && photoText(target.place) === photoText(detail.name || '') && sameCoordinates(target, detail)) verified.push(detail);
+                }
               }
               if (verified.length !== 1) return null;
               verifiedDetail = verified[0];

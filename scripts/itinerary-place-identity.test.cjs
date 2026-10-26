@@ -23,3 +23,36 @@ for(const point of [{place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard M
  }
 });
 test('429 while disambiguating keeps fallback and cooldown, never selects a partially verified photo',async()=>{const{api,calls}=fixture({limitedId:'housing'});assert.equal(await api.resolvePlacePhoto(town,'Norvegia','NO'),null);const count=calls.length;assert.equal(await api.resolvePlacePhoto(town,'Norvegia','NO'),null);assert.equal(await api.resolvePlacePhoto(town,'Norvegia','NO',true),null);assert.equal(calls.length,count);assert(!calls.some(u=>u.pathname==='/api/places/photo'));});
+
+test('Farsund: bounded overlap verifies every homonym before requesting media', async()=>{
+ const gates=new Map(),started=[];let active=0,peak=0,media=0;
+ const api=load('lib/itinerary-place-photos.ts',{crypto:{randomUUID:()=> 'fixture'},fetch:async value=>{
+  const url=new URL(value,'https://fixture');
+  if(url.searchParams.has('q'))return ok(predictions);
+  const id=url.searchParams.get('placeId');
+  if(id){started.push(id);active++;peak=Math.max(peak,active);await new Promise(resolve=>gates.set(id,resolve));active--;return ok(details[id]);}
+  media++;return ok({photoUri:'https://lh3.googleusercontent.com/town.jpg'});
+ }});api.setPlacePhotoAccount('fixture');const result=api.resolvePlacePhoto(town,'Norvegia','NO');
+ try {
+  await new Promise(setImmediate);assert.deepEqual(started,['town','housing'],'independent identity checks must overlap');assert.equal(media,0);
+  gates.get('town')();gates.get('housing')();await new Promise(setImmediate);
+  assert.deepEqual(started,['town','housing','camp']);assert.equal(media,0,'do not choose a partial match');
+  gates.get('camp')();assert.equal((await result)?.url,'https://lh3.googleusercontent.com/town.jpg');assert.equal(peak,2);assert.equal(media,1);
+ } finally {for(let i=0;i<4;i++){for(const release of gates.values())release();await new Promise(setImmediate);}await result;}
+});
+
+test('Oslo first load: generic Google prediction type still reaches canonical identity verification',async()=>{
+ const point={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard Munchs veg, 2061 Gardermoen, Norvegia',latitude:60.1978446,longitude:11.0963701};
+ for(const type of ['point_of_interest','establishment','international_airport']) {
+  const record={placeId:'osl',name:point.place,address:point.placeAddress,latitude:point.latitude,longitude:point.longitude,photoName:'places/osl/photos/fresh'};
+  const candidates=[{provider:'google',placeId:'osl',name:point.place+' (OSL)',address:'Edvard Munchs veg, Gardermoen, Norvegia',type}];
+  for(let opening=0;opening<2;opening++) {
+   const{api,calls}=fixture({candidates,records:{osl:record}});
+   assert.equal((await api.resolvePlacePhoto(point,'Norvegia','NO'))?.url,'https://lh3.googleusercontent.com/osl.jpg',type);
+   assert.equal(calls.length,3);const count=calls.length;await api.resolvePlacePhoto(point,'Norvegia','NO');assert.equal(calls.length,count);
+  }
+  for(const wrong of [{...record,address:'Altro indirizzo',latitude:59},{...record,name:'Altro aeroporto'}]) {
+   const{api,calls}=fixture({candidates,records:{osl:wrong}});assert.equal(await api.resolvePlacePhoto(point,'Norvegia','NO'),null);assert(!calls.some(u=>u.pathname==='/api/places/photo'));
+  }
+ }
+});
