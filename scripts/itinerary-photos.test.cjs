@@ -42,9 +42,53 @@ test('429 respects Retry-After across points and forced recovery without automat
  let now=100000,calls=0;const api=service({Date:{now:()=>now,parse:Date.parse},fetch:async()=>{calls++;return{ok:false,status:429,headers:{get:()=> '120'}};}});
  assert.equal(await api.resolvePlacePhoto(point,'Italia','IT'),null);assert.equal(await api.resolvePlacePhoto({...point,placeId:'other'},'Italia','IT',true),null);assert.equal(calls,1);now+=120001;await api.resolvePlacePhoto(point,'Italia','IT',true);assert.equal(calls,2);
 });
-for(const status of [404,500])test('HTTP '+status+' is negatively reused briefly and explicit recovery refreshes the place reference',async()=>{
+for(const status of [403,404,500])test('HTTP '+status+' is negatively reused briefly and explicit recovery refreshes the place reference',async()=>{
  let calls=0;const api=service({fetch:async url=>{calls++;if(calls===1)return{ok:false,status};return url.includes('?placeId=')?ok({...point,name:point.place,address:point.placeAddress}):ok({photoUri:photo});}});
  assert.equal(await api.resolvePlacePhoto(point,'Italia','IT'),null);assert.equal(await api.resolvePlacePhoto(point,'Italia','IT'),null);assert.equal(calls,1);assert.equal((await api.resolvePlacePhoto(point,'Italia','IT',true)).url,photo);assert.equal(calls,3);
+});
+
+test('Oslo-Gardermoen legacy activity validates canonical details rather than autocomplete secondary text',async()=>{
+ // Synthetic provider responses: not an observation of the user's activity or live Google results.
+ const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard Munchs veg, 2061 Gardermoen, Norvegia',latitude:60.1939,longitude:11.1004};
+ const urls=[],api=service({fetch:async url=>{urls.push(url);
+   if(url.includes('?q='))return ok([{provider:'google',placeId:'airport-fixture',name:airport.place,address:'Gardermoen, Norvegia'}]);
+   if(url.includes('?placeId='))return ok({placeId:'airport-fixture',name:airport.place,address:airport.placeAddress,latitude:airport.latitude,longitude:airport.longitude,photoName:'places/airport-fixture/photos/fresh'});
+   return ok({photoUri:'https://lh3.googleusercontent.com/airport-fixture.jpg'});
+ }});
+ assert.equal((await api.resolvePlacePhoto(airport,'Norvegia','NO'))?.url,'https://lh3.googleusercontent.com/airport-fixture.jpg');
+ assert.equal(urls.length,3);assert(!urls.some(url=>url.includes('city-image')));
+});
+
+test('airport translated display name is irrelevant when the selected exact place ID exists',async()=>{
+ const urls=[],api=service({fetch:async url=>{urls.push(url);return url.includes('?placeId=')?ok({placeId:'airport-fixture',name:'Oslo Airport',photoName:'places/airport-fixture/photos/fresh'}):ok({photoUri:photo});}});
+ assert.equal((await api.resolvePlacePhoto({place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia',placeId:'airport-fixture'},'Norvegia','NO')).url,photo);
+ assert.equal(urls.length,2);assert(!urls.some(url=>url.includes('?q=')));
+});
+
+test('same-name airport suggestion with short address must still pass canonical details and coordinates',async()=>{
+ let calls=0;const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia',latitude:60.1939,longitude:11.1004};
+ const api=service({fetch:async url=>{calls++;return url.includes('?q=')?ok([{provider:'google',placeId:'wrong-airport',name:airport.place,address:'Norvegia'}]):ok({placeId:'wrong-airport',name:airport.place,address:'Different airport',latitude:59,longitude:10,photoName:'places/wrong-airport/photos/x'});}});
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,2);
+});
+
+test('multiple same-name airport suggestions remain ambiguous even with stored coordinates',async()=>{
+ let calls=0;const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia',latitude:60.1939,longitude:11.1004};
+ const api=service({fetch:async()=>{calls++;return ok(['a','b'].map(placeId=>({provider:'google',placeId,name:airport.place,address:'Norvegia'})));}});
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,1);
+});
+
+test('airport with no provider candidates stays neutral and reuses the failed cache until manual retry',async()=>{
+ let calls=0;const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia'};
+ const api=service({fetch:async()=>{calls++;return ok([]);}});
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,1);
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO',true),null);assert.equal(calls,2);
+});
+
+test('exact airport without provider photo never requests a media URL or substitutes a city photograph',async()=>{
+ const urls=[],api=service({fetch:async url=>{urls.push(url);return ok({placeId:'airport-fixture'});}});
+ assert.equal(await api.resolvePlacePhoto({place:'Aeroporto di Oslo-Gardermoen',placeId:'airport-fixture'},'Norvegia','NO'),null);
+ assert.equal(urls.length,1);assert.match(urls[0],/detail=photo/);
 });
 test('timeout releases pending lookups without blocking the itinerary',async()=>{
  let timeout;const api=service({setTimeout:fn=>{timeout=fn;return 1},clearTimeout(){},fetch:(_,o)=>new Promise((_,reject)=>o.signal.addEventListener('abort',()=>reject(Error('aborted'))))});const pending=api.resolvePlacePhoto(point,'Italia','IT');timeout();assert.equal(await pending,null);

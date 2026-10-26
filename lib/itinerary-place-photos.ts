@@ -57,7 +57,12 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
           if (!placeId) {
             if (!target.placeAddress?.trim()) return null;
             const candidates = await get('/api/places?' + new URLSearchParams({ q: [target.place, target.placeAddress, country].filter(Boolean).join(', '), countryCode }));
-            const matches = Array.isArray(candidates) ? candidates.filter(item => item.provider === 'google' && item.placeId && exactCandidate(target, item)) : [];
+            // Autocomplete secondary text is not a canonical address. With stored
+            // coordinates, allow one same-name candidate through to the existing
+            // full-details identity check; never trust the suggestion alone.
+            const hasCoordinates = Number.isFinite(target.latitude) && Number.isFinite(target.longitude);
+            const matches = Array.isArray(candidates) ? candidates.filter(item => item.provider === 'google' && item.placeId
+              && (exactCandidate(target, item) || (hasCoordinates && photoText(target.place) === photoText(item.name || '')))) : [];
             if (matches.length !== 1) return null;
             placeId = matches[0].placeId;
           }
