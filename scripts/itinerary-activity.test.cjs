@@ -84,6 +84,8 @@ test('failed form save keeps draft and editor open; valid blank title is filled 
 });
 test('Google details preserve photo references and attribution without blocking on photo resolution; auth is required',async()=>{
  const urls=[];const deps={'next/server':{NextResponse:{json:(body,options)=>({body,status:options?.status||200})}},'../../../lib/auth':{currentUser:async()=>({id:'test'})}};
+ deps['../../../lib/google-place-requests']={googlePlaceRequest:(...args)=>extrasFetch(...args),GooglePlaceLimitError:class extends Error{}};
+ const extrasFetch=async url=>{urls.push(url);return{ok:true,json:async()=>({id:'test-place',displayName:{text:'Museo'},formattedAddress:'Via Museo',location:{latitude:1,longitude:2},photos:[{name:'places/test/photos/p',authorAttributions:[{displayName:'Autore',uri:'https://example.test'}]}]})}};
  const api=load('app/api/places/route.ts',deps,{URL,process:{env:{GOOGLE_MAPS_API_KEY:'test-only'}},fetch:async url=>{urls.push(url);return{ok:true,json:async()=>({id:'test-place',displayName:{text:'Museo'},formattedAddress:'Via Museo',location:{latitude:1,longitude:2},photos:[{name:'places/test/photos/p',authorAttributions:[{displayName:'Autore',uri:'https://example.test'}]}]})}}});
  const result=await api.GET({url:'https://example.test/api/places?placeId=test-place&sessionToken=test'});assert.equal(urls.length,1);assert.equal(result.body.photoName,'places/test/photos/p');assert.equal(result.body.photoAttribution,'Autore');assert.equal(result.body.latitude,1);
  deps['../../../lib/auth'].currentUser=async()=>null;assert.equal((await api.GET({url:'https://example.test/api/places?placeId=test'})).status,401);assert.equal(urls.length,1);
@@ -156,4 +158,10 @@ test('editing another activity remains available while a checkbox request is pen
  Object.assign(h.context,{selectionRequests:{current:helper.latestActivityRequest()},setPlaceSelecting(){},setEditingId(){},setDraft:value=>draft=value,setEditorStep(){},setShowEditor:value=>opened=value});
  vm.runInContext(pageFunction('openEdit'),h.context);
  const toggle=h.context.toggleActivity('a');h.context.openEdit(h.context.activitiesRef.current[1]);assert.equal(opened,true);assert.equal(draft.title,'B');assert.equal(h.context.savingActivity.current,false);release(true);await toggle;
+});
+
+
+test('selected Google place ID survives only matching metadata and is cleared when the place changes',()=>{
+ const chosen=helper.applyActivityPlace({title:'',place:''},{...place,provider:'google',placeId:'exact-point'});assert.equal(chosen.placeId,'exact-point');assert.equal(helper.editActivityPlace(chosen,'Other').placeId,undefined);
+ assert.equal(helper.restoreActivityMetadata({id:'one',...chosen},{id:'one',...chosen}).placeId,'exact-point');assert.equal(helper.restoreActivityMetadata({id:'one',title:'A',place:'Other'},{id:'one',...chosen}).placeId,undefined);
 });

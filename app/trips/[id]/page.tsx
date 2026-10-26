@@ -1,5 +1,7 @@
 "use client";
 
+import { ItineraryPlacePhoto } from "../../components/itinerary-place-photo";
+import { useTripUserId } from "../../components/trip-session";
 import { TripHeader } from "../../components/trip-header";
 import { applyActivityPlace, editActivityPlace, prepareActivityDraft, restoreActivityMetadata, activityRoute, latestActivityRequest, type TitleSource } from "../../../lib/itinerary-activity";
 import styles from "./itinerary.module.css";
@@ -18,7 +20,7 @@ import { useAutocompleteKeyboard } from "../../../lib/use-autocomplete-keyboard"
 import { fetchTripSnapshot, readTripSnapshot } from "../../../lib/trip-client-cache";
 
 type Trip = { id: string; name: string; country: string; countryCode: string; city: string; startDate: string; endDate: string; people: number; theme: "blue" | "teal" | "sand" | "sakura" };
-type Activity = { titleSource?: TitleSource; sortOrder?: number; id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
+type Activity = { placeId?: string; titleSource?: TitleSource; sortOrder?: number; id: string; day: number; title: string; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string; time: string; done: boolean; bookingId?: string | null; bookingEvent?: "start" | "end" | null };
 type PlaceResult = { id: string; placeId?: string; provider?: "google" | "openstreetmap"; name: string; address: string; latitude?: number; longitude?: number; type: string; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
 type WeatherDay = { date: string; code: number };
 
@@ -67,6 +69,7 @@ function WeatherIcon({ code }: { code: number }) {
 
 export default function TripPage() {
   const paneActive = useTripPaneActive();
+  const userId = useTripUserId();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { canEditItinerary, canInvite } = useTripPermissions(id);
@@ -104,7 +107,6 @@ export default function TripPage() {
   const [placeSessionToken, setPlaceSessionToken] = useState(() => crypto.randomUUID());
   const autoScrolledTrip = useRef<string | null>(null);
   const itineraryDaysRef = useRef<HTMLDivElement | null>(null);
-  const photoLookups = useRef(new Set<string>());
 
   const countryIsoCode = useMemo(() => {
     if (!trip) return null;
@@ -128,7 +130,7 @@ export default function TripPage() {
     setPlaceSearchOpen(false); setPlaceSelecting(true); setActivityError("");
     try {
       if (place.provider === "google" && place.placeId) {
-        const response = await fetch('/api/places?placeId=' + encodeURIComponent(place.placeId) + '&sessionToken=' + encodeURIComponent(placeSessionToken), { signal: request.signal });
+        const response = await fetch('/api/places?placeId=' + encodeURIComponent(place.placeId) + '&sessionToken=' + encodeURIComponent(placeSessionToken) + '&detail=location', { signal: request.signal });
         if (!response.ok) throw new Error();
         const details = await response.json() as PlaceResult | null;
         if (!details?.name) throw new Error();
@@ -161,39 +163,6 @@ export default function TripPage() {
 
   useEffect(() => () => selectionRequests.current.cancel(), []);
   useEffect(() => { if (!paneActive) { selectionRequests.current.cancel(); setPlaceSelecting(false); } }, [paneActive]);
-
-  useEffect(() => {
-    if (!trip || !countryIsoCode || !paneActive || showEditor || activitySaving || completionSaving.size) return;
-    const activity = activities.find((item) => !item.photoUrl && !item.photoName && item.place && !photoLookups.current.has(item.id));
-    if (!activity || photoLookups.current.size >= 12) return;
-    const targetActivity = activity;
-    let cancelled = false;
-    let finished = false;
-    const controller = new AbortController();
-    photoLookups.current.add(targetActivity.id);
-    async function enrich() {
-      try {
-          const token = crypto.randomUUID();
-          const query = [targetActivity.place, targetActivity.placeAddress, trip?.country].filter(Boolean).join(", ");
-          const suggestionsResponse = await fetch(`/api/places?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryIsoCode || "")}&sessionToken=${encodeURIComponent(token)}`, { signal: controller.signal });
-          if (!suggestionsResponse.ok) return;
-          const suggestions = await suggestionsResponse.json() as PlaceResult[];
-          const match = suggestions.find((place) => place.provider === "google" && place.placeId);
-          if (!match?.placeId) return;
-          const detailsResponse = await fetch(`/api/places?placeId=${encodeURIComponent(match.placeId)}&sessionToken=${encodeURIComponent(token)}`, { signal: controller.signal });
-          if (!detailsResponse.ok) return;
-          const details = await detailsResponse.json() as PlaceResult;
-          if ((!details.photoUrl && !details.photoName) || cancelled) return;
-          updateActivities((current) => {
-            const next = current.map((item) => item.id === targetActivity.id && item.place === targetActivity.place && item.placeAddress === targetActivity.placeAddress ? { ...item, photoName: details.photoName, photoUrl: details.photoUrl, photoAttribution: details.photoAttribution, photoAttributionUri: details.photoAttributionUri } : item);
-            window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(next));
-            return next;
-          });
-      } catch { /* La card mantiene il layout senza immagine. */ }
-    }
-    void enrich().finally(() => { finished = true; });
-    return () => { cancelled = true; controller.abort(); if (!finished) photoLookups.current.delete(targetActivity.id); };
-  }, [activities, countryIsoCode, id, trip, paneActive, showEditor, activitySaving, completionSaving.size]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("mova-trips");
@@ -323,7 +292,7 @@ export default function TripPage() {
     if (savingActivity.current) return;
     selectionRequests.current.cancel(); setPlaceSelecting(false); setActivityError("");
     setEditingId(activity.id);
-    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, photoName: activity.photoName, photoUrl: activity.photoUrl, photoAttribution: activity.photoAttribution, photoAttributionUri: activity.photoAttributionUri, time: activity.time, titleSource: activity.titleSource });
+    setDraft({ day: activity.day, title: activity.title, place: activity.place, placeId: activity.placeId, placeAddress: activity.placeAddress, latitude: activity.latitude, longitude: activity.longitude, photoName: activity.photoName, photoUrl: activity.photoUrl, photoAttribution: activity.photoAttribution, photoAttributionUri: activity.photoAttributionUri, time: activity.time, titleSource: activity.titleSource });
     setEditorStep(2);
     setShowEditor(true);
   }
@@ -386,8 +355,8 @@ export default function TripPage() {
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
             <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
-              <div className={`timeline-card-content ${item.photoUrl || item.photoName ? "has-photo" : ""}`}>
-                {(item.photoUrl || item.photoName) && <figure className="activity-place-photo"><img src={item.photoUrl || `/api/places/photo?name=${encodeURIComponent(item.photoName!)}`} alt={item.place} loading="lazy" onError={(event) => { if (item.photoName && !event.currentTarget.src.includes("/api/places/photo")) event.currentTarget.src = `/api/places/photo?name=${encodeURIComponent(item.photoName)}`; }} />{item.photoAttribution && <figcaption>{item.photoAttributionUri ? <a href={item.photoAttributionUri} target="_blank" rel="noreferrer">{item.photoAttribution}</a> : item.photoAttribution}</figcaption>}</figure>}
+              <div className={`timeline-card-content ${item.place ? "has-photo" : ""}`}>
+                {item.place && <ItineraryPlacePhoto target={item} country={trip.country} countryCode={countryIsoCode || ""} userId={userId} active={paneActive} />}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
                     <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>

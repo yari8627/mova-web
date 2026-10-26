@@ -1,15 +1,15 @@
 import { sortActivities } from "./activity-order";
 
 export type TitleSource = "place" | "custom";
-export type ActivityDraftData = { title: string; titleSource?: TitleSource; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
-export type SelectedPlace = { name: string; address?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
+export type ActivityDraftData = { placeId?: string; title: string; titleSource?: TitleSource; place: string; placeAddress?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
+export type SelectedPlace = { placeId?: string; provider?: string; name: string; address?: string; latitude?: number; longitude?: number; photoName?: string; photoUrl?: string; photoAttribution?: string; photoAttributionUri?: string };
 
 export function applyActivityPlace<T extends ActivityDraftData>(draft: T, place: SelectedPlace): T {
-  return { ...draft, title: place.name, titleSource: "place", place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoUrl: place.photoUrl, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri };
+  return { ...draft, title: place.name, titleSource: "place", placeId: place.provider === "google" ? place.placeId : undefined, place: place.name, placeAddress: place.address, latitude: place.latitude, longitude: place.longitude, photoName: place.photoName, photoUrl: place.photoUrl, photoAttribution: place.photoAttribution, photoAttributionUri: place.photoAttributionUri };
 }
 
 export function editActivityPlace<T extends ActivityDraftData>(draft: T, place: string): T {
-  return { ...draft, place, title: draft.title, placeAddress: undefined, latitude: undefined, longitude: undefined, photoName: undefined, photoUrl: undefined, photoAttribution: undefined, photoAttributionUri: undefined };
+  return { ...draft, place, placeId: undefined, title: draft.title, placeAddress: undefined, latitude: undefined, longitude: undefined, photoName: undefined, photoUrl: undefined, photoAttribution: undefined, photoAttributionUri: undefined };
 }
 
 export function prepareActivityDraft<T extends ActivityDraftData>(draft: T): T {
@@ -21,7 +21,7 @@ export function prepareActivityDraft<T extends ActivityDraftData>(draft: T): T {
 // Legacy/other-device titles are unknown: never infer provenance from matching names.
 export function restoreActivityMetadata<T extends ActivityDraftData & { id: string }>(remote: T, cached?: T): T {
   if (!cached || cached.id !== remote.id || cached.place !== remote.place || (cached.placeAddress ?? null) !== (remote.placeAddress ?? null) || (cached.latitude ?? null) !== (remote.latitude ?? null) || (cached.longitude ?? null) !== (remote.longitude ?? null)) return remote;
-  return { ...remote, titleSource: cached.title === remote.title ? cached.titleSource : undefined, photoName: cached.photoName, photoUrl: cached.photoUrl, photoAttribution: cached.photoAttribution, photoAttributionUri: cached.photoAttributionUri };
+  return { ...remote, titleSource: cached.title === remote.title ? cached.titleSource : undefined, placeId: cached.placeId, photoName: cached.photoName, photoUrl: cached.photoUrl, photoAttribution: cached.photoAttribution, photoAttributionUri: cached.photoAttributionUri };
 }
 
 type RouteActivity = { id: string; day: number; sortOrder?: number; done: boolean; latitude?: number; longitude?: number; place: string; placeAddress?: string };
