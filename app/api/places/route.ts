@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "../../../lib/auth";
 import { GooglePlaceLimitError, googlePlaceRequest } from "../../../lib/google-place-requests";
+import { verifiedPlacePhotoDetail, type PlacePhotoTarget } from "../../../lib/itinerary-place-photos";
 
 type NominatimPlace = { place_id: number; display_name: string; name?: string; lat: string; lon: string; type?: string; category?: string };
 type GoogleSuggestion = { placePrediction?: { placeId?: string; text?: { text?: string }; structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } }; types?: string[] } };
@@ -51,7 +52,36 @@ export async function GET(request: Request) {
   const sessionToken = params.get("sessionToken")?.trim() || crypto.randomUUID();
   const placeId = params.get("placeId")?.trim();
   if (placeId) {
-    try { return NextResponse.json(await googlePlaceDetails(placeId, sessionToken, params.get("detail")), { status: process.env.GOOGLE_MAPS_API_KEY ? 200 : 503, headers: { "Cache-Control": "private, no-store" } }); }
+    let photoTarget: PlacePhotoTarget | undefined;
+    if (params.has("photoTarget")) {
+      try {
+        const value = JSON.parse(params.get("photoTarget") || "null");
+        if (!value || Array.isArray(value) || typeof value.place !== "string" || !value.place.trim()
+          || (value.placeAddress !== undefined && typeof value.placeAddress !== "string")
+          || (value.latitude !== undefined && !Number.isFinite(value.latitude))
+          || (value.longitude !== undefined && !Number.isFinite(value.longitude))
+          || (value.placeId !== undefined && value.placeId !== placeId)) throw Error("Invalid photo target");
+        photoTarget = { place: value.place, placeAddress: value.placeAddress, latitude: value.latitude, longitude: value.longitude, placeId: value.placeId };
+      } catch { return NextResponse.json({ error: "Luogo non valido" }, { status: 400, headers: { "Cache-Control": "private, no-store" } }); }
+    }
+    try {
+      const detail = await googlePlaceDetails(placeId, sessionToken, params.get("detail"));
+      const headers = { "Cache-Control": "private, no-store" };
+      // Only the itinerary opts in. Verify identity before resolving media;
+      // ambiguous candidates use the unchanged, separately verified path.
+      if (photoTarget && detail && verifiedPlacePhotoDetail(photoTarget, placeId, detail)
+        && /^places\/[^/]+\/photos\/[^/]+$/.test(detail.photoName || "")) {
+        if (request.signal.aborted) return NextResponse.json({ error: "Foto non disponibile" }, { status: 504, headers });
+        const response = await googlePlaceRequest(`https://places.googleapis.com/v1/${detail.photoName}/media?maxWidthPx=240&skipHttpRedirect=true`, {
+          headers: { "X-Goog-Api-Key": process.env.GOOGLE_MAPS_API_KEY! }, cache: "no-store", signal: request.signal,
+        });
+        if (!response.ok) return NextResponse.json({ error: "Foto non disponibile" }, { status: [400, 403, 404].includes(response.status) ? response.status : 502, headers });
+        const media = await response.json() as { photoUri?: string };
+        if (!media.photoUri) return NextResponse.json({ error: "Foto non disponibile" }, { status: 502, headers });
+        return NextResponse.json({ ...detail, photoResolved: true, photoUri: media.photoUri }, { headers });
+      }
+      return NextResponse.json(detail, { status: process.env.GOOGLE_MAPS_API_KEY ? 200 : 503, headers });
+    }
     catch (error) {
       if (error instanceof GooglePlaceLimitError) return NextResponse.json(null, { status: 429, headers: { "Retry-After": String(error.retryAfterSeconds), "Cache-Control": "private, no-store" } });
       return NextResponse.json(null, { status: 504 });

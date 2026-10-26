@@ -40,6 +40,13 @@ function sameCoordinates(target: PlacePhotoTarget, detail: { latitude?: number; 
     && typeof detail.latitude === 'number' && typeof detail.longitude === 'number'
     && Math.abs(target.latitude - detail.latitude) < 0.001 && Math.abs(target.longitude - detail.longitude) < 0.001;
 }
+// Shared by the client and the optional inline thumbnail response. The server
+// must pass the same identity check before spending a media-provider request.
+export function verifiedPlacePhotoDetail(target: PlacePhotoTarget, placeId: string, detail: { placeId?: string; name?: string; address?: string; latitude?: number; longitude?: number } | null) {
+  if (!detail || detail.placeId !== placeId || (target.placeId && target.placeId !== placeId)) return false;
+  return !!target.placeId || exactCandidate(target, detail)
+    || (sameCoordinates(target, detail) && photoText(target.place) === photoText(detail.name || ''));
+}
 export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, countryCode: string, refresh = false): Promise<PlacePhoto | null> {
   const key = placePhotoKey(target, country), cached = cachedPlacePhoto(target, country), epoch = generation;
   if (!refresh && cached !== undefined) return Promise.resolve(cached);
@@ -65,7 +72,7 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
       {
         let name = '';
         const explicitId = target.placeId || target.photoName?.match(/^places\/([^/]+)\/photos\/[^/]+$/)?.[1];
-        let details = { photoName: name, photoAttribution: target.photoAttribution, photoAttributionUri: target.photoAttributionUri };
+        let details = { photoName: name, photoAttribution: target.photoAttribution, photoAttributionUri: target.photoAttributionUri, photoUri: undefined as string | undefined, photoResolved: false };
         if (!name) {
           let placeId = explicitId;
           let verifiedDetail;
@@ -101,15 +108,15 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
               placeId = verifiedDetail.placeId;
             } else placeId = matches[0].placeId;
           }
-          const detail = verifiedDetail || await get('/api/places?' + new URLSearchParams({ placeId: placeId!, sessionToken: crypto.randomUUID(), ...(target.placeId ? { detail: 'photo' } : {}) }));
-          if (detail?.placeId !== placeId) return null;
-          if (!target.placeId && !exactCandidate(target, detail)) {
-            if (!sameCoordinates(target, detail) || photoText(target.place) !== photoText(detail.name || '')) return null;
-          }
+          const detail = verifiedDetail || await get('/api/places?' + new URLSearchParams({ placeId: placeId!, sessionToken: crypto.randomUUID(), ...(target.placeId ? { detail: 'photo' } : {}), photoTarget: JSON.stringify({ place: target.place, placeAddress: target.placeAddress, latitude: target.latitude, longitude: target.longitude, placeId: target.placeId }) }));
+          if (!verifiedPlacePhotoDetail(target, placeId!, detail)) return null;
           details = detail; name = detail.photoName || '';
         }
         if (!/^places\/[^/]+\/photos\/[^/]+$/.test(name)) return null;
-        const media = await get('/api/places/photo?' + new URLSearchParams({ name, format: 'json', width: '240' }));
+        // Older server responses and multi-candidate verification retain the
+        // existing media path. An inline result never triggers a second lookup.
+        const media = details.photoResolved ? { photoUri: details.photoUri }
+          : await get('/api/places/photo?' + new URLSearchParams({ name, format: 'json', width: '240' }));
         const url = safePlacePhoto(media?.photoUri);
         if (url) result = { url, attribution: details.photoAttribution, attributionUri: details.photoAttributionUri };
       }
