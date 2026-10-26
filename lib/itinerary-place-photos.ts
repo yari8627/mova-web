@@ -53,10 +53,11 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
     let result: PlacePhoto | null = null;
     try {
       if (!current()) return null;
-      const direct = !refresh && safePlacePhoto(target.photoUrl);
-      if (direct) result = { url: direct, attribution: target.photoAttribution, attributionUri: target.photoAttributionUri };
-      else {
-        let name = !refresh && target.placeId && target.photoName?.startsWith(`places/${target.placeId}/photos/`) ? target.photoName : '';
+      // Persisted photo names/URIs have no freshness guarantee. Both startup and
+      // manual recovery renew metadata; only the short-lived display cache above
+      // may bypass this path. A cached name is useful solely to recover place ID.
+      {
+        let name = '';
         const explicitId = target.placeId || target.photoName?.match(/^places\/([^/]+)\/photos\/[^/]+$/)?.[1];
         let details = { photoName: name, photoAttribution: target.photoAttribution, photoAttributionUri: target.photoAttributionUri };
         if (!name) {

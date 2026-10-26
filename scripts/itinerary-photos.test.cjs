@@ -4,19 +4,20 @@ const point={place:'Duomo di Milano',placeAddress:'Piazza del Duomo, Milano',pla
 const photo='https://lh3.googleusercontent.com/duomo.jpg';
 const globals={crypto:{randomUUID:()=> 'test-session'},Response,AbortSignal};
 const ok=value=>({ok:true,status:200,json:async()=>value});
+const pointReply=(value,uri=photo)=>{const url=new URL(value,'http://local');const id=url.searchParams.get('placeId');return ok(id?{placeId:id,photoName:`places/${id}/photos/current`,photoAttribution:'Author'}:{photoUri:uri});};
 const service=extra=>load('lib/itinerary-place-photos.ts',{...globals,...extra});
 const flush=()=>new Promise(r=>setImmediate(r));
-test('selected point requests only its 240px media and preserves attribution; day return is a cache hit',async()=>{
- const urls=[],api=service({fetch:async url=>{urls.push(url);return ok({photoUri:photo});}});api.setPlacePhotoAccount('alice');
+test('selected point renews metadata then requests 240px media and preserves attribution; day return is a cache hit',async()=>{
+ const urls=[],api=service({fetch:async url=>{urls.push(url);return pointReply(url);}});api.setPlacePhotoAccount('alice');
  const a=api.resolvePlacePhoto(point,'Italia','IT'),b=api.resolvePlacePhoto(point,'Italia','IT');assert.equal(a,b);assert.equal((await a).url,photo);assert.equal((await b).attribution,'Author');
- assert.equal((await api.resolvePlacePhoto(point,'Italia','IT')).url,photo);assert.equal(urls.length,1);assert.match(urls[0],/format=json/);assert.match(urls[0],/width=240/);
+ assert.equal((await api.resolvePlacePhoto(point,'Italia','IT')).url,photo);assert.equal(urls.length,2);assert.match(urls[0],/detail=photo/);assert.match(urls[1],/format=json/);assert.match(urls[1],/width=240/);
 });
 test('failed photo on one card never blocks another visible place',async()=>{
- const api=service({fetch:async url=>url.includes('bad')?{ok:false,status:404}:ok({photoUri:photo})});
+ const api=service({fetch:async url=>url.includes('bad')?{ok:false,status:404}:pointReply(url)});
  const bad=api.resolvePlacePhoto({...point,placeId:'bad',photoName:'places/bad/photos/x'},'Italia','IT');const good=api.resolvePlacePhoto(point,'Italia','IT');assert.equal(await bad,null);assert.equal((await good).url,photo);
 });
 test('two simultaneous visible place lookups at most, even when other cards enter rapidly',async()=>{
- let active=0,peak=0;const releases=[];const api=service({fetch:()=>new Promise(resolve=>{active++;peak=Math.max(peak,active);releases.push(()=>{active--;resolve(ok({photoUri:photo}));});})});
+ let active=0,peak=0;const releases=[];const api=service({fetch:url=>new Promise(resolve=>{active++;peak=Math.max(peak,active);releases.push(()=>{active--;resolve(pointReply(url));});})});
  let done=false;const pending=Promise.all(Array.from({length:6},(_,i)=>api.resolvePlacePhoto({...point,placeId:'p'+i,photoName:'places/p'+i+'/photos/x'},'Italia','IT'))).then(()=>done=true);
  while(!done){await flush();for(const finish of releases.splice(0))finish();}await pending;assert.equal(peak,2);
 });
@@ -36,7 +37,7 @@ test('legacy photo reference from a different location is rejected using verifie
  const api=service({fetch:async()=>ok({placeId:'duomo',name:'Another place',address:'Another city',photoName:point.photoName})});assert.equal(await api.resolvePlacePhoto({...point,placeId:undefined},'Italia','IT'),null);
 });
 for(const value of ['https://example.test/Flag_of_Italy.jpg','https://example.test/coat_of_arms.png','https://example.test/map.svg','javascript:alert(1)'])test('symbolic or unsafe source stays neutral: '+value,async()=>{
- const api=service({fetch:async()=>ok({photoUri:value})});assert.equal(await api.resolvePlacePhoto(point,'Italia','IT'),null);
+ const api=service({fetch:async url=>pointReply(url,value)});assert.equal(await api.resolvePlacePhoto(point,'Italia','IT'),null);
 });
 test('429 respects Retry-After across points and forced recovery without automatic retries',async()=>{
  let now=100000,calls=0;const api=service({Date:{now:()=>now,parse:Date.parse},fetch:async()=>{calls++;return{ok:false,status:429,headers:{get:()=> '120'}};}});
@@ -121,7 +122,7 @@ test('late account response cannot populate the next account display state',asyn
  let release;const api=service({fetch:()=>new Promise(r=>release=r)});api.setPlacePhotoAccount('alice');const pending=api.resolvePlacePhoto(point,'Italia','IT');api.setPlacePhotoAccount('bob');release(ok({photoUri:photo}));assert.equal(await pending,null);assert.equal(api.cachedPlacePhoto(point,'Italia'),undefined);
 });
 test('decode or download failure invalidates only that URI and allows controlled recovery',async()=>{
- const api=service({fetch:async()=>ok({photoUri:photo})});await api.resolvePlacePhoto(point,'Italia','IT');api.rejectPlacePhoto(point,'Italia','another');assert(api.cachedPlacePhoto(point,'Italia'));api.rejectPlacePhoto(point,'Italia',photo);assert.equal(api.cachedPlacePhoto(point,'Italia'),null);
+ const api=service({fetch:async url=>pointReply(url)});await api.resolvePlacePhoto(point,'Italia','IT');api.rejectPlacePhoto(point,'Italia','another');assert(api.cachedPlacePhoto(point,'Italia'));api.rejectPlacePhoto(point,'Italia',photo);assert.equal(api.cachedPlacePhoto(point,'Italia'),null);
 });
 function responseApi(){return{json:(body,options={})=>({body,status:options.status||200,headers:options.headers||{}}),redirect:(url,options={})=>({url,status:options.status||307,headers:options.headers||{}})}}
 test('authenticated photo API keeps default redirect and exposes bounded-size JSON with no-store',async()=>{
@@ -195,8 +196,8 @@ test('Retry-After disables manual recovery without consuming it or making automa
 });
 
 for(const [id,name,address]of [['duomo','Duomo di Milano','Piazza del Duomo, Milano'],['colosseo','Colosseo','Piazza del Colosseo, Roma'],['louvre','Museo del Louvre','Rue de Rivoli, Paris'],['mbs','Marina Bay Sands','Bayfront Avenue, Singapore'],['tromso-port','Porto di Tromsø','Tromsø, Norvegia']])test('specific point '+name+' uses its exact resource, never a city lookup',async()=>{
- const urls=[],expected='https://lh3.googleusercontent.com/'+id+'.jpg';const api=service({fetch:async url=>{urls.push(new URL(url,'http://local'));return ok({photoUri:expected});}});
- const value=await api.resolvePlacePhoto({placeId:id,place:name,placeAddress:address,photoName:'places/'+id+'/photos/exact'},'Test','');assert.equal(value.url,expected);assert.equal(urls.length,1);assert.equal(urls[0].searchParams.get('name'),'places/'+id+'/photos/exact');assert.equal(urls[0].pathname,'/api/places/photo');
+ const urls=[],expected='https://lh3.googleusercontent.com/'+id+'.jpg';const api=service({fetch:async url=>{urls.push(new URL(url,'http://local'));return pointReply(url,expected);}});
+ const value=await api.resolvePlacePhoto({placeId:id,place:name,placeAddress:address,photoName:'places/'+id+'/photos/exact'},'Test','');assert.equal(value.url,expected);assert.equal(urls.length,2);assert.equal(urls[0].searchParams.get('placeId'),id);assert.equal(urls[1].searchParams.get('name'),'places/'+id+'/photos/current');assert.equal(urls[1].pathname,'/api/places/photo');assert(!urls.some(url=>url.searchParams.has('q')));
 });
 test('checkbox edits and returning from another pane do not re-resolve an already decoded photo',async()=>{
  const h=component();h.render();h.enter();h.render();await flush();h.render();await h.img().props.onLoad({currentTarget:h.image()});await flush();h.render();assert.equal(h.state(),'ready');
