@@ -27,6 +27,13 @@ function exactCandidate(target: PlacePhotoTarget, candidate: { name?: string; ad
   return photoText(target.place) === photoText(candidate.name || '') && !!target.placeAddress?.trim()
     && photoText(target.placeAddress) === photoText(candidate.address || '');
 }
+function samePredictionName(target: PlacePhotoTarget, candidate: { name?: string; type?: string }) {
+  if (photoText(target.place) === photoText(candidate.name || '')) return true;
+  // Airport autocomplete may append an IATA code absent from canonical details.
+  // This only admits a candidate for the subsequent full identity check.
+  return /(?:^|_)airport$/.test(candidate.type || '')
+    && photoText(target.place) === photoText((candidate.name || '').replace(/\s*\([A-Z]{3}\)\s*$/, ''));
+}
 export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, countryCode: string, refresh = false): Promise<PlacePhoto | null> {
   const key = placePhotoKey(target, country), cached = cachedPlacePhoto(target, country), epoch = generation;
   if (!refresh && cached !== undefined) return Promise.resolve(cached);
@@ -62,7 +69,7 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
             // full-details identity check; never trust the suggestion alone.
             const hasCoordinates = Number.isFinite(target.latitude) && Number.isFinite(target.longitude);
             const matches = Array.isArray(candidates) ? candidates.filter(item => item.provider === 'google' && item.placeId
-              && (exactCandidate(target, item) || (hasCoordinates && photoText(target.place) === photoText(item.name || '')))) : [];
+              && (exactCandidate(target, item) || (hasCoordinates && samePredictionName(target, item)))) : [];
             if (matches.length !== 1) return null;
             placeId = matches[0].placeId;
           }

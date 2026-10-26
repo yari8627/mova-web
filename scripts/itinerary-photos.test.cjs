@@ -65,6 +65,30 @@ test('airport translated display name is irrelevant when the selected exact plac
  assert.equal(urls.length,2);assert(!urls.some(url=>url.includes('?q=')));
 });
 
+test('observed Oslo-Gardermoen prediction with (OSL) and short address reaches matching canonical details',async()=>{
+ // Public place metadata observed live through the authorized production API;
+ // photo resource/URI remain fixtures, no account or trip identifiers in this test.
+ const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard Munchs veg, 2061 Gardermoen, Norvegia',latitude:60.1978446,longitude:11.0963701};
+ const urls=[],api=service({fetch:async url=>{urls.push(url);
+   if(url.includes('?q='))return ok([{provider:'google',placeId:'airport-fixture',name:'Aeroporto di Oslo-Gardermoen (OSL)',address:'Edvard Munchs veg, Gardermoen, Norvegia',type:'airport'}]);
+   if(url.includes('?placeId='))return ok({placeId:'airport-fixture',name:airport.place,address:airport.placeAddress,latitude:airport.latitude,longitude:airport.longitude,type:'international_airport',photoName:'places/airport-fixture/photos/fresh'});
+   return ok({photoUri:'https://lh3.googleusercontent.com/airport-fixture.jpg'});
+ }});
+ assert.equal((await api.resolvePlacePhoto(airport,'Norvegia','NO'))?.url,'https://lh3.googleusercontent.com/airport-fixture.jpg');assert.equal(urls.length,3);
+});
+
+test('IATA display suffix is not relaxed for non-airports or places without coordinates',async()=>{
+ for(const [type,coords] of [['museum',{latitude:60.1978446,longitude:11.0963701}],['airport',{}]]){
+  let calls=0;const api=service({fetch:async()=>{calls++;return ok([{provider:'google',placeId:'airport-fixture',name:'Aeroporto di Oslo-Gardermoen (OSL)',address:'Gardermoen',type}]);}});
+  assert.equal(await api.resolvePlacePhoto({place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard Munchs veg, 2061 Gardermoen, Norvegia',...coords},'Norvegia','NO'),null);assert.equal(calls,1);
+ }
+});
+
+test('IATA airport candidate must still match canonical identity, never only a short suggestion',async()=>{
+ let calls=0;const api=service({fetch:async url=>{calls++;return url.includes('?q=')?ok([{provider:'google',placeId:'airport-fixture',name:'Aeroporto di Oslo-Gardermoen (OSL)',address:'Gardermoen',type:'airport'}]):ok({placeId:'airport-fixture',name:'Another airport',address:'Another address',latitude:59,longitude:10,photoName:'places/airport-fixture/photos/x'});}});
+ assert.equal(await api.resolvePlacePhoto({place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Edvard Munchs veg, 2061 Gardermoen, Norvegia',latitude:60.1978446,longitude:11.0963701},'Norvegia','NO'),null);assert.equal(calls,2);
+});
+
 test('same-name airport suggestion with short address must still pass canonical details and coordinates',async()=>{
  let calls=0;const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia',latitude:60.1939,longitude:11.1004};
  const api=service({fetch:async url=>{calls++;return url.includes('?q=')?ok([{provider:'google',placeId:'wrong-airport',name:airport.place,address:'Norvegia'}]):ok({placeId:'wrong-airport',name:airport.place,address:'Different airport',latitude:59,longitude:10,photoName:'places/wrong-airport/photos/x'});}});
