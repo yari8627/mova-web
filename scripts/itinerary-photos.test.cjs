@@ -96,10 +96,10 @@ test('same-name airport suggestion with short address must still pass canonical 
  assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,2);
 });
 
-test('multiple same-name airport suggestions remain ambiguous even with stored coordinates',async()=>{
+test('multiple same-name airport suggestions without verifiable details remain neutral',async()=>{
  let calls=0;const airport={place:'Aeroporto di Oslo-Gardermoen',placeAddress:'Gardermoen, Norvegia',latitude:60.1939,longitude:11.1004};
  const api=service({fetch:async()=>{calls++;return ok(['a','b'].map(placeId=>({provider:'google',placeId,name:airport.place,address:'Norvegia'})));}});
- assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,1);
+ assert.equal(await api.resolvePlacePhoto(airport,'Norvegia','NO'),null);assert.equal(calls,3);
 });
 
 test('airport with no provider candidates stays neutral and reuses the failed cache until manual retry',async()=>{

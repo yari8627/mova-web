@@ -34,6 +34,11 @@ function samePredictionName(target: PlacePhotoTarget, candidate: { name?: string
   return /(?:^|_)airport$/.test(candidate.type || '')
     && photoText(target.place) === photoText((candidate.name || '').replace(/\s*\([A-Z]{3}\)\s*$/, ''));
 }
+function sameCoordinates(target: PlacePhotoTarget, detail: { latitude?: number; longitude?: number }) {
+  return typeof target.latitude === 'number' && typeof target.longitude === 'number'
+    && typeof detail.latitude === 'number' && typeof detail.longitude === 'number'
+    && Math.abs(target.latitude - detail.latitude) < 0.001 && Math.abs(target.longitude - detail.longitude) < 0.001;
+}
 export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, countryCode: string, refresh = false): Promise<PlacePhoto | null> {
   const key = placePhotoKey(target, country), cached = cachedPlacePhoto(target, country), epoch = generation;
   if (!refresh && cached !== undefined) return Promise.resolve(cached);
@@ -62,6 +67,7 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
         let details = { photoName: name, photoAttribution: target.photoAttribution, photoAttributionUri: target.photoAttributionUri };
         if (!name) {
           let placeId = explicitId;
+          let verifiedDetail;
           if (!placeId) {
             if (!target.placeAddress?.trim()) return null;
             const candidates = await get('/api/places?' + new URLSearchParams({ q: [target.place, target.placeAddress, country].filter(Boolean).join(', '), countryCode }));
@@ -69,18 +75,27 @@ export function resolvePlacePhoto(target: PlacePhotoTarget, country: string, cou
             // coordinates, allow one same-name candidate through to the existing
             // full-details identity check; never trust the suggestion alone.
             const hasCoordinates = Number.isFinite(target.latitude) && Number.isFinite(target.longitude);
-            const matches = Array.isArray(candidates) ? candidates.filter(item => item.provider === 'google' && item.placeId
+            let matches = Array.isArray(candidates) ? candidates.filter(item => item.provider === 'google' && item.placeId
               && (exactCandidate(target, item) || (hasCoordinates && samePredictionName(target, item)))) : [];
-            if (matches.length !== 1) return null;
-            placeId = matches[0].placeId;
+            matches = matches.filter((item, index) => matches.findIndex(other => other.placeId === item.placeId) === index);
+            // A short locality name can also name nearby businesses. Verify a
+            // bounded set against stored coordinates, never choose the first hit.
+            if (!matches.length || matches.length > 3 || (matches.length > 1 && !hasCoordinates)) return null;
+            if (matches.length > 1) {
+              const verified = [];
+              for (const match of matches) {
+                const detail = await get('/api/places?' + new URLSearchParams({ placeId: match.placeId, sessionToken: crypto.randomUUID() }));
+                if (detail?.placeId === match.placeId && photoText(target.place) === photoText(detail.name || '') && sameCoordinates(target, detail)) verified.push(detail);
+              }
+              if (verified.length !== 1) return null;
+              verifiedDetail = verified[0];
+              placeId = verifiedDetail.placeId;
+            } else placeId = matches[0].placeId;
           }
-          const detail = await get('/api/places?' + new URLSearchParams({ placeId: placeId!, sessionToken: crypto.randomUUID(), ...(target.placeId ? { detail: 'photo' } : {}) }));
+          const detail = verifiedDetail || await get('/api/places?' + new URLSearchParams({ placeId: placeId!, sessionToken: crypto.randomUUID(), ...(target.placeId ? { detail: 'photo' } : {}) }));
           if (detail?.placeId !== placeId) return null;
           if (!target.placeId && !exactCandidate(target, detail)) {
-            const sameCoordinates = typeof target.latitude === 'number' && typeof target.longitude === 'number'
-              && typeof detail.latitude === 'number' && typeof detail.longitude === 'number'
-              && Math.abs(target.latitude - detail.latitude) < 0.001 && Math.abs(target.longitude - detail.longitude) < 0.001;
-            if (!sameCoordinates || photoText(target.place) !== photoText(detail.name || '')) return null;
+            if (!sameCoordinates(target, detail) || photoText(target.place) !== photoText(detail.name || '')) return null;
           }
           details = detail; name = detail.photoName || '';
         }
