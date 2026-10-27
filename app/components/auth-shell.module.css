@@ -1,0 +1,78 @@
+/* Local to authentication. No changes to the startup splash or global tokens. */
+@font-face {
+  font-family: 'Nami Google Sans';
+  src: url('/brand/google-sans-medium.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+/* Let the auth form fit narrow viewports even with a desktop scrollbar. */
+:global(body):has(.shell) { min-width: 0; }
+.shell:global(.auth-shell) {
+  --blue: #102b40;
+  --blue-hover: #1e4055;
+  --navy: #102538;
+  --background: #f8f5ef;
+  --surface: #fffcf7;
+  --border: #e8e0d4;
+  --blue-soft: #eee7d9;
+  --text-secondary: #6b6b69;
+  min-height: 100svh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  background: var(--background);
+  color: var(--navy);
+}
+.masthead { position: relative; flex-shrink: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; place-items: center; width: min(440px, 100%); min-height: 54px; }
+.back { position: absolute; left: 0; top: 5px; display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; border: 1px solid var(--border); border-radius: 50%; color: var(--navy); background: var(--surface); cursor: pointer; }
+.back:hover { background: var(--blue-soft); }
+.shell :global(.auth-card) { width: min(440px, 100%); margin: 0; padding: 32px; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); box-shadow: 0 8px 28px rgba(54,41,24,.055); }
+.shell :global(.auth-card h1) { margin: 0 0 10px; font: 400 34px/1.12 Georgia, 'Times New Roman', serif; letter-spacing: -.5px; color: var(--navy); text-align: center; overflow-wrap: anywhere; }
+.shell :global(.auth-card > p) { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+.shell :global(.auth-card form) { margin-top: 24px; gap: 18px; }
+.shell :global(.auth-card label) { color: var(--navy); font-size: 13px; font-weight: 600; gap: 8px; }
+.shell :global(.auth-card label > span) { min-height: 52px; padding: 0 8px 0 14px; border: 1px solid #d8d0c3; border-radius: 12px; background: #fffdf9; color: var(--text-secondary); }
+.shell :global(.auth-card label > span > svg) { flex-shrink: 0; }
+.shell :global(.auth-card label > span:focus-within) { border-color: var(--navy); outline: 2px solid var(--navy); outline-offset: 2px; }
+.shell :global(.auth-card input) { font-size: 16px; line-height: 1.4; padding-block: 12px; outline: 0; border-radius: 0; }
+.shell :global(.auth-card label button) { flex: 0 0 44px; min-height: 44px; border-radius: 8px; }
+.shell :global(.auth-submit) { min-height: 48px; padding: 12px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: none; }
+.shell :global(.primary-button) { background: var(--blue); color: #fff; }
+.shell :global(.primary-button:hover) { background: var(--blue-hover); box-shadow: none; }
+.shell :global(.secondary-button) { background: var(--blue-soft); color: var(--navy); }
+.shell :global(.secondary-button:hover) { background: #e7dcc8; }
+.shell :global(.auth-submit:disabled) { opacity: .65; cursor: wait; }
+/* Official light Google button: unchanged brand asset, colors and typeface. */
+.shell :global(.google-auth-button) { min-height: 48px; margin-top: 24px; padding: 12px; gap: 10px; border: 1px solid #747775; border-radius: 999px; color: #1f1f1f; background: #fff; font: 500 14px/20px 'Nami Google Sans', Arial, sans-serif; box-shadow: none; }
+.shell :global(.google-auth-button:hover) { background: #fff; border-color: #747775; box-shadow: 0 0 0 1px #747775; }
+.shell :global(.google-mark) { display: block; width: 20px; height: 20px; flex: 0 0 20px; object-fit: contain; }
+.shell :global(.auth-divider) { margin: 20px 0 -4px; color: var(--text-secondary); font-size: 12px; }
+.shell :global(.auth-error) { color: #8b342c; background: #faeeea; border: 1px solid #e9cbc4; line-height: 1.5; overflow-wrap: anywhere; }
+.shell :global(.security-result) { margin-top: 18px; padding: 14px; border: 1px solid #dbe1d3; background: #edf0e7; color: var(--navy); line-height: 1.5; overflow-wrap: anywhere; }
+.shell :global(.security-result button), .shell :global(.security-preview-link) { min-height: 44px; background: var(--surface); color: var(--navy); }
+.shell :global(.forgot-password-link) { min-height: 44px; margin-block: -8px; font-size: 13px; font-weight: 500; color: var(--navy); }
+.shell :global(.auth-switch) { margin-top: 20px; gap: 0 6px; align-items: center; line-height: 1.5; }
+.shell :global(.auth-switch button) { min-height: 44px; font-weight: 600; color: var(--navy); text-decoration: underline; text-decoration-color: #b8a17b; text-underline-offset: 4px; }
+.shell :global(.auth-profile) { text-align: center; }
+.shell :global(.auth-profile > p) { color: var(--text-secondary); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.shell :global(.auth-profile-avatar) { background: var(--navy); }
+.shell :global(.auth-profile .auth-submit) { margin-top: 18px; }
+.shell :global(.verify-icon) { display: block; margin: 0 auto 20px; color: #74836b; }
+.shell :global(button:focus-visible), .shell :global(a:focus-visible) { outline: 2px solid var(--navy); outline-offset: 3px; }
+.shell :global(button), .shell :global(a) { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 560px) {
+  .shell:global(.auth-shell) { justify-content: flex-start; gap: 24px; padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .shell :global(.auth-card) { padding: 28px 22px; }
+  .shell :global(.auth-card h1) { font-size: 30px; }
+}
+@media (max-height: 600px) {
+  .shell:global(.auth-shell) { justify-content: flex-start; gap: 16px; padding-top: max(16px, env(safe-area-inset-top)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(button), .shell :global(a) { transition: none; }
+}
