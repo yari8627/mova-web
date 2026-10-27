@@ -9,6 +9,7 @@ import { sortActivities, numberActivities, moveActivity } from "../../../lib/act
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
 import { CalendarDays, Check, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Sun, ExternalLink, GripVertical, MapPin, MapPinned, Pencil, Plus, Trash2, Users, X } from "lucide-react";
@@ -204,21 +205,39 @@ export default function TripPage() {
     const end = new Date(`${trip.endDate}T12:00:00`);
     if (today < start || today > end) return;
     const currentDay = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
-    setActiveDay(currentDay);
     autoScrolledTrip.current = trip.id;
     const timer = window.setTimeout(() => document.getElementById(`itinerary-day-${currentDay}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }), 250);
     return () => window.clearTimeout(timer);
   }, [trip, paneActive]);
 
   useEffect(() => {
-    if (!paneActive || !trip) return;
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (visible) setActiveDay(Number(visible.target.id.replace("itinerary-day-", "")));
-    }, { root: itineraryDaysRef.current, threshold: [.55, .75] });
-    const elements = document.querySelectorAll<HTMLElement>(".itinerary-day");
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
+    const container = itineraryDaysRef.current;
+    if (!paneActive || !trip || !container) return;
+    const elements = Array.from(container.querySelectorAll<HTMLElement>(".itinerary-day"));
+    // Horizontal visibility is independent of activity count/section height.
+    // Tap, swipe and interrupted smooth scrolls all use the same actual position.
+    let visibleDay: number | undefined;
+    const updateVisibleDay = (synchronous: boolean) => {
+      if (!container.clientWidth || !elements.length) return;
+      const left = container.getBoundingClientRect().left;
+      const visible = elements.reduce((nearest, element) =>
+        Math.abs(element.getBoundingClientRect().left - left) < Math.abs(nearest.getBoundingClientRect().left - left) ? element : nearest);
+      const day = Number(visible.id.replace("itinerary-day-", ""));
+      if (day === visibleDay) return;
+      visibleDay = day;
+      const select = () => setActiveDay(day);
+      // Native scroll events must update the highlight before the next paint.
+      if (synchronous) flushSync(select);
+      else select();
+    };
+    const onScroll = () => updateVisibleDay(true);
+    updateVisibleDay(false);
+    container.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [trip, activities.length, paneActive]);
 
   function toggleActivity(activityId: string): Promise<boolean> {
@@ -325,7 +344,6 @@ export default function TripPage() {
 
 
   function scrollToDay(day: number) {
-    setActiveDay(day);
     document.getElementById(`itinerary-day-${day}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
   }
 
@@ -347,7 +365,7 @@ export default function TripPage() {
       <section className="itinerary-panel">
         <div className="panel-heading"><div><p className="section-kicker">PROGRAMMA</p><h2 className="trip-section-title">Itinerario</h2></div>{canEditItinerary && <button className="primary-button" onClick={() => openNew()}><Plus size={18} /> Aggiungi attività</button>}</div>
         <p className="itinerary-range">{days.length} {days.length === 1 ? "giorno" : "giorni"}, dal {formatDate(trip.startDate)} al {formatDate(trip.endDate)}</p>
-        <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
+        <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} aria-pressed={activeDay === day} aria-controls={`itinerary-day-${day}`} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
         <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activitiesByDay.get(day) || []; return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canEditItinerary && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
