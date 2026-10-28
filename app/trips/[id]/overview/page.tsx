@@ -64,32 +64,6 @@ type Participant = { id: string; status: "confirmed" | "pending" };
 type TripDates = { startDate: string; endDate: string };
 type PackingItem = { id: string; packed: boolean };
 
-const starterActivities: Activity[] = [
-  {
-    id: "arrival",
-    day: 1,
-    title: "Arrivo e primo orientamento",
-    place: "Centro città",
-    time: "15:30",
-    done: true,
-  },
-  {
-    id: "districts",
-    day: 2,
-    title: "Quartieri iconici e cucina locale",
-    place: "Mercato centrale",
-    time: "09:00",
-    done: false,
-  },
-  {
-    id: "excursion",
-    day: 3,
-    title: "Escursione fuori città",
-    place: "Punto di incontro",
-    time: "08:15",
-    done: false,
-  },
-];
 const starterBookings: Booking[] = [
   { id: "outbound", status: "confirmed" },
   { id: "hotel", status: "confirmed" },
@@ -134,6 +108,7 @@ export default function OverviewPage() {
   const userId = useTripUserId();
   const { canInvite } = useTripPermissions(id);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [activitiesTripId, setActivitiesTripId] = useState<string | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -147,10 +122,18 @@ export default function OverviewPage() {
   const [returnCheckInCompleted, setReturnCheckInCompleted] = useState(false);
   const [savingCheckIn, setSavingCheckIn] = useState(false);
   useEffect(() => {
+    let cancelled = false, activityChanged = false;
+    const onItineraryUpdated = (event: Event) => {
+      if ((event as CustomEvent<{ tripId: string }>).detail?.tripId !== id) return;
+      activityChanged = true;
+      setActivities(readSaved<Activity[]>(`mova-itinerary-${id}`, []));
+      setActivitiesTripId(id);
+    };
+    window.addEventListener("mova-itinerary-updated", onItineraryUpdated);
     async function load() {
-      const activityItems = readSaved(
+      const activityItems = readSaved<Activity[]>(
         `mova-itinerary-${id}`,
-        starterActivities,
+        [],
       );
       const bookingItems = readSaved(`mova-bookings-${id}`, starterBookings);
       const documentItems = readSaved(`mova-documents-${id}`, starterDocuments);
@@ -163,6 +146,7 @@ export default function OverviewPage() {
       const budgetValue = savedBudget ? Number(savedBudget) : null;
       const snapshot = readTripSnapshot(id);
       setActivities(snapshot?.activities ?? activityItems);
+      setActivitiesTripId(snapshot || window.localStorage.getItem(`mova-itinerary-${id}`) !== null ? id : null);
       setBookings(snapshot?.bookings ?? bookingItems);
       setDocuments(snapshot?.documents ?? documentItems);
       setExpenses(snapshot?.expenses ?? expenseItems);
@@ -170,18 +154,18 @@ export default function OverviewPage() {
       setBudget(snapshot ? snapshot.budget : budgetValue);
       try {
         const remote = await fetchTripSnapshot(id);
-        if (remote) {
+        if (remote && !cancelled) {
           const group = tripGroup(remote);
-          setActivities(remote.activities);
+          if (!activityChanged) {
+            setActivities(remote.activities);
+            setActivitiesTripId(id);
+            window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(remote.activities));
+          }
           setBookings(remote.bookings);
           setDocuments(remote.documents);
           setExpenses(remote.expenses);
           setParticipants(group);
           setBudget(remote.budget);
-          window.localStorage.setItem(
-            `mova-itinerary-${id}`,
-            JSON.stringify(remote.activities),
-          );
           window.localStorage.setItem(
             `mova-bookings-${id}`,
             JSON.stringify(remote.bookings),
@@ -212,19 +196,22 @@ export default function OverviewPage() {
       }
     }
     void load();
+    return () => { cancelled = true; window.removeEventListener("mova-itinerary-updated", onItineraryUpdated); };
   }, [id]);
   useEffect(() => {
+    let cancelled = false;
     const cached = readTripSnapshot(id);
-    if (cached) setTripDates({ startDate: cached.startDate.slice(0, 10), endDate: cached.endDate.slice(0, 10) });
+    setTripDates(cached ? { startDate: cached.startDate.slice(0, 10), endDate: cached.endDate.slice(0, 10) } : null);
     fetchTripSnapshot(id)
       .then((trip) => {
-        if (trip)
+        if (trip && !cancelled)
           setTripDates({
             startDate: trip.startDate.slice(0, 10),
             endDate: trip.endDate.slice(0, 10),
           });
       })
       .catch(() => undefined);
+    return () => { cancelled = true; };
   }, [id]);
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +306,15 @@ export default function OverviewPage() {
       activities: sortActivities(activities).filter((item) => item.day === day),
     };
   }, [activities, tripDates]);
+
+  const programState = useMemo(() => {
+    if (activitiesTripId !== id || !today) return "loading";
+    // Before departure the relevant program starts on day one; after the trip
+    // today.activities is empty, rather than an assertion that the trip is done.
+    const dayActivities = today.phase === "before" ? activities.filter(item => item.day === 1) : today.activities;
+    if (!dayActivities.length) return "empty";
+    return dayActivities.every(item => item.done) ? "completed" : "pending";
+  }, [activitiesTripId, id, today, activities]);
 
   const showReturnCheckIn = useMemo(() => {
     if (!tripDates) return false;
@@ -513,7 +509,9 @@ export default function OverviewPage() {
           </button>
         </header>
         {today?.phase === "active" && (
-          today.activities.length ? (
+          programState === "loading" ? (
+            <div className="today-empty" role="status"><CalendarDays size={25} /><div><strong>Caricamento…</strong></div></div>
+          ) : today.activities.length ? (
             <div className="today-activities">
               {today.activities.slice(0, 3).map((activity) => {
                 const linkedDocuments = documents.filter(
@@ -562,13 +560,13 @@ export default function OverviewPage() {
             <div className="today-empty">
               <CalendarDays size={25} />
               <div>
-                <strong>Nessuna Attività Prevista Oggi</strong>
+                <strong>Nessuna attività in programma</strong>
                 <p>Puoi aggiungerla dall’Itinerario.</p>
               </div>
             </div>
           )
         )}
-        {!(nextActivity && today?.phase === "active" && today.activities.slice(0, 3).some((activity) => activity.id === nextActivity.id)) && <button
+        {!(programState === "pending" && nextActivity && today?.phase === "active" && today.activities.slice(0, 3).some((activity) => activity.id === nextActivity.id)) && <button
           className={`overview-card overview-next ${styles.nextActivity}`}
           onClick={() => router.push(`/trips/${id}`)}
         >
@@ -577,7 +575,7 @@ export default function OverviewPage() {
           </span>
           <div>
             <small>PROSSIMA ATTIVITÀ</small>
-            {nextActivity ? (
+            {programState === "pending" && nextActivity ? (
               <>
                 <strong>{nextActivity.title}</strong>
                 <p>
@@ -585,12 +583,19 @@ export default function OverviewPage() {
                   {nextActivity.time ? `${nextActivity.time} · ` : ""}{nextActivity.place}
                 </p>
               </>
-            ) : (
+            ) : programState === "loading" ? (
+              <strong role="status">Caricamento…</strong>
+            ) : programState === "completed" ? (
               <>
                 <strong>Programma completato</strong>
                 <p>
                   <CheckCircle2 size={15} /> Non ci sono attività da svolgere
                 </p>
+              </>
+            ) : (
+              <>
+                <strong>Nessuna attività in programma</strong>
+                <p><CalendarDays size={15} /> Puoi aggiungerla dall’Itinerario.</p>
               </>
             )}
           </div>
