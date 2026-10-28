@@ -96,19 +96,23 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-function daysUntil(value: string) {
-  const today = new Date();
-  const target = new Date(`${value}T12:00:00`);
-  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86400000));
+function daysUntil(value: string, today: string) {
+  // Compare calendar dates, not elapsed hours (which vary across DST).
+  const day = (key: string) => { const [year, month, date] = key.split("-").map(Number); return Date.UTC(year, month - 1, date) / 86400000; };
+  return Math.max(0, day(value) - day(today));
 }
 
-function localDateKey() {
-  const now = new Date();
+function localDateKey(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function closestCurrentTrip(items: Trip[]) {
-  const today = localDateKey();
+function tripCountdown(trip: Trip, today: string) {
+  if (trip.endDate < today) return { state: "completed" as const, days: 0, label: "Viaggio completato" };
+  const days = daysUntil(trip.startDate, today);
+  return { state: days === 0 ? "today" as const : "future" as const, days, label: days === 0 ? (trip.startDate === today ? "Partenza oggi" : "Viaggio in corso") : `Partenza tra ${days} ${days === 1 ? "giorno" : "giorni"}` };
+}
+
+function closestCurrentTrip(items: Trip[], today: string) {
   const current = items.filter((trip) => trip.endDate >= today);
   return [...current].sort((a, b) => {
     const aActive = a.startDate <= today && a.endDate >= today;
@@ -126,6 +130,21 @@ function suggestedTripName(draft: TripDraft) {
 
 export default function Page() {
   const router = useRouter();
+  const [today, setToday] = useState(() => localDateKey());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const updateDate = () => {
+      clearTimeout(timer);
+      const now = new Date();
+      setToday(localDateKey(now));
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(updateDate, midnight.getTime() - now.getTime());
+    };
+    updateDate();
+    window.addEventListener("focus", updateDate);
+    document.addEventListener("visibilitychange", updateDate);
+    return () => { clearTimeout(timer); window.removeEventListener("focus", updateDate); document.removeEventListener("visibilitychange", updateDate); };
+  }, []);
   const completedCarousel = useRef<HTMLDivElement>(null);
   const completedCarouselController = useRef<ReturnType<typeof createHomeCarousel> | null>(null);
   const [completedBounds, setCompletedBounds] = useState<CarouselBounds>({ previous: false, next: false });
@@ -208,9 +227,10 @@ export default function Page() {
   async function shareApp() { const url = `${window.location.origin}/?install=1`; const data = { title: "NAMI — Travel together", text: "Organizza e condividi i tuoi viaggi con NAMI. Apri il link e aggiungila alla schermata Home.", url }; try { if (navigator.share) { await navigator.share(data); setShareFeedback("NAMI condivisa"); } else { await navigator.clipboard.writeText(url); setShareFeedback("Link copiato"); } window.setTimeout(() => setShareFeedback(""), 2200); } catch (error) { if ((error as DOMException).name !== "AbortError") setShareFeedback("Non è stato possibile condividere"); } }
 
 
-  const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
-  const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
-  const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
+  const inProgramTrips = useMemo(() => [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)), [trips, today]);
+  const completedTrips = useMemo(() => [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)), [trips, today]);
+  const selectedTrip = useMemo(() => closestCurrentTrip(trips, today) ?? completedTrips[0], [trips, completedTrips, today]);
+  const countdown = selectedTrip ? tripCountdown(selectedTrip, today) : null;
   const completedCarouselKey = JSON.stringify(completedTrips.map(trip => trip.id));
   useEffect(() => {
     if (!currentUser || !completedCarousel.current) return;
@@ -387,8 +407,8 @@ export default function Page() {
                     Apri viaggio <ChevronRight size={18} />
                   </button>
                 </div>
-                <div className="countdown" aria-label={daysUntil(selectedTrip.startDate) === 0 ? "Partenza oggi" : `Partenza tra ${daysUntil(selectedTrip.startDate)} ${daysUntil(selectedTrip.startDate) === 1 ? "giorno" : "giorni"}`}>
-                  {daysUntil(selectedTrip.startDate) === 0 ? <strong className="countdown-today">Oggi</strong> : <><span>Tra</span><strong>{daysUntil(selectedTrip.startDate)}</strong><span>{daysUntil(selectedTrip.startDate) === 1 ? "giorno" : "giorni"}</span></>}
+                <div className="countdown" role="img" aria-label={countdown?.label}>
+                  {countdown?.state === "completed" ? <strong><Check size={27} aria-hidden="true" /></strong> : countdown?.state === "today" ? <strong className="countdown-today">Oggi</strong> : <><span>Tra</span><strong>{countdown?.days}</strong><span>{countdown?.days === 1 ? "giorno" : "giorni"}</span></>}
                 </div>
               </article>
             ) : null}
