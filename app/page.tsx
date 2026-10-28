@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { readPageCache, writePageCache, preloadOverview } from "../lib/page-cache";
 import { useAutocompleteKeyboard } from "../lib/use-autocomplete-keyboard";
 import { HomeTripPhoto } from "./components/home-trip-photo";
+import { createHomeCarousel, type CarouselBounds } from "../lib/home-carousel";
 import {
   Bell,
   CalendarDays,
@@ -126,12 +127,10 @@ function suggestedTripName(draft: TripDraft) {
 export default function Page() {
   const router = useRouter();
   const completedCarousel = useRef<HTMLDivElement>(null);
+  const completedCarouselController = useRef<ReturnType<typeof createHomeCarousel> | null>(null);
+  const [completedBounds, setCompletedBounds] = useState<CarouselBounds>({ previous: false, next: false });
   function scrollCompleted(direction: -1 | 1) {
-    const carousel = completedCarousel.current;
-    if (!carousel) return;
-    const card = carousel.querySelector<HTMLElement>(".trip-card");
-    const distance = card ? card.getBoundingClientRect().width + parseFloat(getComputedStyle(carousel).columnGap || "0") : carousel.clientWidth;
-    carousel.scrollBy({ left: direction * distance, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    completedCarouselController.current?.step(direction);
   }
   const [trips, setTrips] = useState<Trip[]>([]);
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
@@ -212,6 +211,13 @@ export default function Page() {
   const inProgramTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate >= today)].sort((a, b) => a.startDate.localeCompare(b.startDate)); }, [trips]);
   const completedTrips = useMemo(() => { const today = localDateKey(); return [...trips.filter((trip) => trip.endDate < today)].sort((a, b) => b.endDate.localeCompare(a.endDate)); }, [trips]);
   const selectedTrip = useMemo(() => closestCurrentTrip(trips) ?? completedTrips[0], [trips, completedTrips]);
+  const completedCarouselKey = JSON.stringify(completedTrips.map(trip => trip.id));
+  useEffect(() => {
+    if (!currentUser || !completedCarousel.current) return;
+    const controller = createHomeCarousel(completedCarousel.current, setCompletedBounds);
+    completedCarouselController.current = controller;
+    return () => { controller.destroy(); completedCarouselController.current = null; };
+  }, [completedCarouselKey, currentUser?.id]);
   useEffect(() => {
     if (authReady && currentUser && selectedTrip) void preloadOverview(currentUser.id, selectedTrip.id);
   }, [authReady, currentUser?.id, selectedTrip?.id]);
@@ -425,14 +431,14 @@ export default function Page() {
                 <h3 id="completed-trips-title">Completati</h3>
               </div>
               {completedTrips.length > 1 && <div className={styles.carouselControls}>
-                <button type="button" aria-label="Scorri i viaggi completati verso sinistra" aria-controls="completed-trips-carousel" onClick={() => scrollCompleted(-1)}><ChevronRight size={18} className={styles.previousArrow} /></button>
-                <button type="button" aria-label="Scorri i viaggi completati verso destra" aria-controls="completed-trips-carousel" onClick={() => scrollCompleted(1)}><ChevronRight size={18} /></button>
+                <button type="button" aria-label="Scorri i viaggi completati verso sinistra" aria-controls="completed-trips-carousel" disabled={!completedBounds.previous} onClick={() => scrollCompleted(-1)}><ChevronRight size={18} className={styles.previousArrow} /></button>
+                <button type="button" aria-label="Scorri i viaggi completati verso destra" aria-controls="completed-trips-carousel" disabled={!completedBounds.next} onClick={() => scrollCompleted(1)}><ChevronRight size={18} /></button>
               </div>}
             </div>
             <div id="completed-trips-carousel" ref={completedCarousel} className={`trip-grid completed-trip-grid ${styles.completedCarousel}`} role="region" aria-labelledby="completed-trips-title" tabIndex={completedTrips.length ? 0 : undefined} onKeyDown={(event) => {
               if (event.target !== event.currentTarget) return;
               if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); scrollCompleted(event.key === "ArrowLeft" ? -1 : 1); }
-              else if (event.key === "Home" || event.key === "End") { event.preventDefault(); event.currentTarget.scrollTo({ left: event.key === "Home" ? 0 : event.currentTarget.scrollWidth, behavior: "instant" }); }
+              else if (event.key === "Home" || event.key === "End") { event.preventDefault(); completedCarouselController.current?.edge(event.key === "Home" ? "start" : "end"); }
             }}>
               {!completedTrips.length && <div className="home-empty completed-empty"><Check size={28} /><div><strong>Nessun Viaggio Completato</strong><p>I viaggi conclusi verranno raccolti automaticamente qui.</p></div></div>}
               {completedTrips.map((trip) => (

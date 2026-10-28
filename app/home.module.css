@@ -1,4 +1,5 @@
 /* NAMI-UI-001: all overrides belong to the Home, including its sibling navigation. */
+:global(body):has(.home) { min-width: 0; }
 .home {
   --blue: #102b40;
   --blue-hover: #1e4055;
@@ -176,7 +177,7 @@
   align-content: start;
   align-self: stretch;
   scroll-snap-align: start;
-  scroll-margin-inline: 3px;
+  scroll-margin-inline: 0;
   min-height: 0;
 }
 .home .completedCarousel > :global(.trip-card):focus-visible { outline-offset: -3px; }
@@ -193,7 +194,8 @@
 .home .completedHeading > div:first-child { min-width: 0; }
 .home .completedHeading > .carouselControls { flex: 0 0 auto; margin-left: auto; }
 .carouselControls > button { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #e0d4bf; border-radius: 50%; color: #102538; background: #fffcf7; cursor: pointer; }
-.carouselControls > button:hover { background: #eee4d2; }
+.carouselControls > button:hover:not(:disabled) { background: #eee4d2; }
+.carouselControls > button:disabled { opacity: .45; cursor: default; }
 .previousArrow { transform: rotate(180deg); }
 .home :global(.page-grid) { gap: 14px; }
 .home :global(.secondary-column) { grid-template-columns: minmax(0, 1fr); gap: 10px; }
