@@ -18,14 +18,21 @@ const loaders = [
 const pages = loaders.map(loader => dynamic(loader));
 export function TripSwipeNavigation({ tripId, children }: { tripId: string; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null), track = useRef<HTMLDivElement>(null);
+  const enteredTrip = useRef<string | null>(null);
   const pathname = usePathname();
   const [clickedPage, setClickedPage] = useState<number | null>(null);
   const routes = tripTabs.map(tab => `/trips/${tripId}${tab.path ? `/${tab.path}` : ""}`);
   const index = routes.indexOf(pathname);
   useLayoutEffect(() => {
+    // Dynamic panes replace the routed page, so its Next scroll handler is absent.
+    // Reset only on trip entry, before paint; internal tabs retain their scroll.
+    if (enteredTrip.current !== tripId) {
+      enteredTrip.current = tripId;
+      if (index === 0) window.scrollTo({ top: 0, behavior: "instant" });
+    }
     setClickedPage(null);
     if (track.current) { track.current.removeAttribute("data-swiping"); track.current.style.setProperty("--swipe-x", "0px"); track.current.style.setProperty("--swipe-duration", "0ms"); }
-  }, [pathname]);
+  }, [tripId, pathname]);
   useEffect(() => {
     const element = root.current, slider = track.current;
     if (!element || !slider || index < 0) return;
