@@ -19,17 +19,22 @@ const pages = loaders.map(loader => dynamic(loader));
 export function TripSwipeNavigation({ tripId, children }: { tripId: string; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null), track = useRef<HTMLDivElement>(null);
   const enteredTrip = useRef<string | null>(null);
+  const previousSection = useRef<string | null>(null);
+  const resetDestination = useRef<string | null>(null);
   const pathname = usePathname();
   const [clickedPage, setClickedPage] = useState<number | null>(null);
   const routes = tripTabs.map(tab => `/trips/${tripId}${tab.path ? `/${tab.path}` : ""}`);
   const index = routes.indexOf(pathname);
   useLayoutEffect(() => {
     // Dynamic panes replace the routed page, so its Next scroll handler is absent.
-    // Reset only on trip entry, before paint; internal tabs retain their scroll.
-    if (enteredTrip.current !== tripId) {
-      enteredTrip.current = tripId;
-      if (index === 0) window.scrollTo({ top: 0, behavior: "instant" });
-    }
+    // Entry keeps BUG-012's rule; a committed section change has its own reset.
+    // Preparing/animating a tab or loading its data does not change pathname.
+    const enteringTrip = enteredTrip.current !== tripId;
+    const changingSection = !enteringTrip && index >= 0 && previousSection.current !== null && previousSection.current !== pathname;
+    if ((enteringTrip && index === 0) || (changingSection && resetDestination.current !== pathname)) window.scrollTo({ top: 0, behavior: "instant" });
+    resetDestination.current = null;
+    enteredTrip.current = tripId;
+    previousSection.current = index >= 0 ? pathname : null;
     setClickedPage(null);
     if (track.current) { track.current.removeAttribute("data-swiping"); track.current.style.setProperty("--swipe-x", "0px"); track.current.style.setProperty("--swipe-duration", "0ms"); }
   }, [tripId, pathname]);
@@ -45,6 +50,12 @@ export function TripSwipeNavigation({ tripId, children }: { tripId: string; chil
     const settle = (destination: number | null) => {
       gesture = null; settling = true;
       cancelAnimationFrame(frame); frame = 0;
+      // Start an accepted transition at the top, before its incoming pane paints.
+      // Cancelled swipes keep their scroll; the route commit will not reset twice.
+      if (destination !== null) {
+        window.scrollTo({ top: 0, behavior: "instant" });
+        resetDestination.current = routes[destination];
+      }
       const duration = reduced ? 0 : 280;
       slider.style.setProperty("--swipe-duration", `${duration}ms`);
       offset = destination === null ? 0 : (destination > index ? -element.clientWidth : element.clientWidth);
