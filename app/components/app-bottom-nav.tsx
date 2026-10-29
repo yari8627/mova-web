@@ -2,6 +2,7 @@
 
 import { CircleUserRound, Earth, Plane, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import styles from "./app-bottom-nav.module.css";
 
 const items = [
   { label: "I Miei Viaggi", icon: Plane, path: "/" },
@@ -17,7 +18,7 @@ export function AppBottomNav() {
   const router = useRouter();
   if (publicRoutes.some((path) => pathname.startsWith(path))) return null;
   const activePath = pathname === "/progress" ? "/progress" : pathname === "/about" ? "/about" : pathname.startsWith("/settings") ? "/settings/profile" : "/";
-  return <nav className="mobile-bottom-nav global-bottom-nav" aria-label="Navigazione principale">
-    {items.map(({ label, icon: Icon, path }) => <button key={path} className={activePath === path ? "active" : undefined} onClick={() => router.push(path)} aria-current={activePath === path ? "page" : undefined}><Icon size={20} /><span>{label}</span></button>)}
+  return <nav className={`mobile-bottom-nav global-bottom-nav ${styles.nav}`} aria-label="Navigazione principale">
+    {items.map(({ label, icon: Icon, path }) => <button type="button" key={path} className={activePath === path ? "active" : undefined} onClick={() => router.push(path)} aria-current={activePath === path ? "page" : undefined}><Icon size={22} strokeWidth={1.75} aria-hidden="true" focusable="false" /><span>{label}</span></button>)}
   </nav>;
 }

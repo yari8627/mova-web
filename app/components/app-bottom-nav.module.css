@@ -1,0 +1,55 @@
+/* Specific to the shared bar: also overrides the Home's legacy nav treatment. */
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) {
+  --nav-ink: #102538;
+  --nav-surface: #fffcf7;
+  --nav-champagne: #c5a369;
+  left: max(12px, env(safe-area-inset-left), calc((100vw - 680px) / 2));
+  right: max(12px, env(safe-area-inset-right), calc((100vw - 680px) / 2));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  height: 66px;
+  min-height: 66px;
+  padding: 5px 6px;
+  border: 1px solid #e8e0d4;
+  border-radius: 19px;
+  background: var(--nav-surface);
+  box-shadow: 0 3px 16px rgba(54, 41, 24, .055);
+  backdrop-filter: none;
+}
+
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 3px 1px 7px;
+  gap: 4px;
+  border-radius: 11px;
+  color: #56616a;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+  transition: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button svg { color: var(--nav-ink); }
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button span { overflow: visible; text-overflow: clip; }
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button[aria-current="page"] { color: var(--nav-ink); font-weight: 600; }
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button[aria-current="page"]::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  left: calc(50% - 10px);
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--nav-champagne);
+}
+.nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button:focus-visible { outline: 2px solid var(--nav-ink); outline-offset: -2px; }
+@media (hover: hover) {
+  .nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button:hover { background: #eee7d9; }
+}
+@media (max-width: 350px) {
+  .nav:global(.global-bottom-nav):global(.mobile-bottom-nav) button { font-size: 10px; }
+}
