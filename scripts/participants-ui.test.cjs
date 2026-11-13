@@ -1,51 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), SSR = require('react-dom/server');
-const compile = source => ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-const people = [
-  { id: 'owner-alice', name: 'Alice', email: 'alice@example.test', role: 'owner', status: 'confirmed' },
-  { id: 'bob', name: 'Bob', email: 'bob@example.test', role: 'co-organizer', status: 'confirmed' },
-  { id: 'carol', name: 'Carol', email: 'carol@example.test', role: 'participant', status: 'pending' }
-];
-function harness({ role = 'owner', members = people, syncOK = true, inviteOK = true, deferred = false, source, lagMs = 0 } = {}) {
-  const state = [members, undefined, null, false, false, '', ''], calls = [], storage = new Map();
-  let cursor = 0, refCursor = 0, release;
-  const refs = [];
-  const context = { exports: {}, console, AbortController, setTimeout, clearTimeout, crypto: require('node:crypto'), CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } } };
-  const localStorage = { setItem: (k,v) => storage.set(k,v), getItem: k => storage.get(k) || null };
-  context.localStorage = localStorage;
-  context.window = { localStorage, location: { origin: 'https://nami.example.test' }, dispatchEvent: e => calls.push({ event: e.type }), setTimeout() {} };
-  context.navigator = { clipboard: { writeText: async value => calls.push({ copied: value }) } };
-  context.fetch = async (url, options) => {
-    calls.push({ url, options });
-    if (deferred) await new Promise(resolve => { release = resolve; });
-    if (lagMs) await new Promise(resolve => setTimeout(resolve, lagMs));
-    const body = JSON.parse(options.body);
-    return { ok: inviteOK, status: inviteOK ? 201 : 400, json: async () => inviteOK ? { userId: 'alice', participant: { id: 'invited', name: 'Invitato', email: body.email, role: body.role, status: 'pending' }, code: 'NAMI-TEST', link: '/invite/NAMI-TEST' } : { error: 'Invito non valido' } };
-  };
-  context.require = name => {
-    if (name === 'react') return { useEffect() {}, useRef: initial => { const i = refCursor++; return refs[i] || (refs[i] = { current: initial }); }, useState: initial => { const i = cursor++; if (state[i] === undefined) state[i] = initial; return [state[i], value => state[i] = value]; } };
-    if (name.endsWith('/invite-submission')) { const helper = { ...context, exports: {} }; vm.runInNewContext(compile(fs.readFileSync('lib/invite-submission.ts', 'utf8')), helper); return helper.exports; }
-    if (name.endsWith('/progress-cache-contract')) return { PROGRESS_SCOPE_COOKIE: 'nami_progress_scope' };
-    if (name === 'next/navigation') return { useParams: () => ({ id: 'trip' }), useRouter: () => ({ push() {} }) };
-    if (name.endsWith('/use-trip-permissions')) return { useTripPermissions: () => ({ canInvite: role === 'owner' || role === 'co-organizer', canAssignRoles: role === 'owner' }) };
-    if (name.endsWith('/trip-session')) return { useTripUserId: () => 'alice' };
-    if (name.endsWith('/trip-client-cache')) return { removeTripSnapshot() {}, fetchTripSnapshot: async () => null };
-    if (name.endsWith('/page-cache')) return { readPageCache: () => null, writePageCache: (...args) => calls.push({ cache: args }) };
-    if (name.endsWith('/trip-sync')) return { syncTripResource: async (...args) => { calls.push({ sync: args }); return syncOK; } };
-    if (name.endsWith('/trip-header')) return { TripHeader: () => null };
-    if (name.endsWith('/trip-cover')) return { TripCover: () => null };
-    if (name.endsWith('/trip-tabs')) return { TripTabs: () => null };
-    if (name.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => key }) };
-    return require(name);
-  };
-  vm.runInNewContext(compile(source || fs.readFileSync('app/trips/[id]/participants/page.tsx', 'utf8')), context);
-  const render = () => { cursor = 0; refCursor = 0; return context.exports.default(); };
-  return { state, calls, render, release: () => release(), html: () => SSR.renderToStaticMarkup(render()) };
-}
-const nodes = n => !n || typeof n !== 'object' ? [] : [n, ...[n.props?.children].flat(Infinity).flatMap(nodes)];
-const find = (h, predicate) => nodes(h.render()).find(predicate);
-const flush = () => new Promise(resolve => setImmediate(resolve));
+const { harness, people, nodes, find, flush } = require('./participants-fixture.cjs');
+
 test('group count includes the same records while distinguishing confirmed and pending members', () => {
   const h = harness(), html = h.html();
   assert(html.includes('3 persone nel gruppo')); assert(html.includes('Confermati 2')); assert(html.includes('In attesa 1'));
@@ -58,13 +14,37 @@ test('only authorized roles see invite and member management controls', () => {
   for (const role of ['owner', 'co-organizer', 'participant', null]) {
     const h = harness({ role });
     const actions = nodes(h.render()).filter(n => n.props?.onClick?.name === 'openNew');
-    assert.equal(actions.length, role === 'owner' || role === 'co-organizer' ? 2 : 0);
+    assert.equal(actions.length, role === 'owner' || role === 'co-organizer' ? 1 : 0);
     assert.equal(h.html().includes('aria-label="Rimuovi Bob"'), role === 'owner');
     if (actions.length) {
       actions[0].props.onClick();
       const options = nodes(h.render()).filter(n => n.type === 'option').map(n => n.props.value);
       assert.deepEqual(options, role === 'owner' ? ['participant', 'co-organizer'] : ['participant']);
     }
+  }
+});
+
+test('UX-019 has one upper invite action in empty, confirmed and pending groups without a duplicate panel', () => {
+  for (const members of [[], people.slice(0, 2), people]) {
+    const h = harness({ members });
+    const actions = nodes(h.render()).filter(n => n.props?.onClick?.name === 'openNew');
+    assert.equal(actions.length, 1);
+    assert(!h.html().includes('Crea invito'));
+    assert(!h.html().includes('invite-panel'));
+    actions[0].props.onClick();
+    assert.equal(h.state[3], true);
+    assert.equal(h.state[1].status, 'pending');
+    assert(h.html().includes('Nuovo invito'));
+    assert.equal(h.calls.filter(c => c.url).length, 0);
+  }
+});
+
+test('UX-019 preserves the post-success copy panel for authorized users only', () => {
+  for (const role of ['owner', 'co-organizer', 'participant', null]) {
+    const h = harness({ role });
+    h.state[5] = 'NAMI-TEST'; h.state[6] = 'https://nami.example.test/invite/NAMI-TEST';
+    assert.equal(h.html().includes('Copia link invito'), role === 'owner' || role === 'co-organizer');
+    assert(!h.html().includes('Crea invito'));
   }
 });
 test('existing invite flow preserves required email, pending state, creation endpoint and link copy', async () => {
