@@ -79,7 +79,7 @@ test('failed persist retains existing activities, reports error and releases the
 });
 test('failed form save keeps draft and editor open; valid blank title is filled only in the save payload',async()=>{
  const draft={title:'',place:'Museo',day:1,time:''};let payload,closed=false;
- const context={draft,editingId:null,activities:[],savingActivity:{current:false},placeSelecting:false,prepareActivityDraft:helper.prepareActivityDraft,persist:async items=>{payload=items;return false;},setShowEditor:()=>closed=true,setActivityError(){},Date};
+ const context={draft,editingId:null,activities:[],savingActivity:{current:false},placeSelecting:false,prepareActivityDraft:helper.prepareActivityDraft,insertActivityByTime:order.insertActivityByTime,persist:async items=>{payload=items;return false;},setShowEditor:()=>closed=true,setActivityError(){},Date};
  vm.createContext(context);vm.runInContext(pageFunction('saveActivity'),context);await context.saveActivity();assert.equal(closed,false);assert.equal(context.draft,draft);assert.equal(draft.title,'');assert.equal(payload[0].title,'Museo');
 });
 test('Google details preserve photo references and attribution without blocking on photo resolution; auth is required',async()=>{

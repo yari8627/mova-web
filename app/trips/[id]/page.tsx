@@ -5,7 +5,7 @@ import { useTripUserId } from "../../components/trip-session";
 import { TripHeader } from "../../components/trip-header";
 import { applyActivityPlace, editActivityPlace, prepareActivityDraft, restoreActivityMetadata, activityRoute, latestActivityRequest, type TitleSource } from "../../../lib/itinerary-activity";
 import styles from "./itinerary.module.css";
-import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
+import { sortActivities, numberActivities, moveActivity, insertActivityByTime } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -324,11 +324,14 @@ export default function TripPage() {
 
   async function saveActivity() {
     if (savingActivity.current || placeSelecting) return;
-    let prepared: typeof draft;
-    try { prepared = prepareActivityDraft(draft); } catch (error) { setActivityError((error as Error).message); return; }
-    const next = editingId
-      ? activities.map((item) => item.id === editingId ? { ...item, ...prepared } : item)
-      : [...activities, { id: `${Date.now()}`, ...prepared, done: false }];
+    let next: Activity[];
+    try {
+      const prepared = prepareActivityDraft(draft);
+      const previous = activities.find(item => item.id === editingId);
+      if (editingId && !previous) throw new Error("Attività non più disponibile. Ricarica l’itinerario.");
+      const activity: Activity = previous ? { ...previous, ...prepared } : { id: `${Date.now()}`, ...prepared, done: false };
+      next = insertActivityByTime(activities, activity);
+    } catch (error) { setActivityError((error as Error).message); return; }
     if (await persist(next)) setShowEditor(false);
   }
 

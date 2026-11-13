@@ -143,7 +143,7 @@ test('unauthenticated or invalid photo request cannot contact Google',async()=>{
 test('activity save awaits persistence only, not the slow photo job',async()=>{
  let releasePhoto,releaseSave,closed=false;const photos=service({fetch:()=>new Promise(r=>releasePhoto=r)});const pendingPhoto=photos.resolvePlacePhoto(point,'Italia','IT');
  const page=fs.readFileSync('app/trips/[id]/page.tsx','utf8');const start=page.indexOf('  async function saveActivity()');const end=page.indexOf('\n  function dropActivity',start);const fn=ts.transpileModule(page.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
- const ctx={savingActivity:{current:false},placeSelecting:false,draft:{...point,title:point.place,day:1,time:''},prepareActivityDraft:x=>x,editingId:null,activities:[],Date,setActivityError(){},persist:()=>new Promise(r=>releaseSave=r),setShowEditor:()=>closed=true};vm.createContext(ctx);vm.runInContext(fn,ctx);const save=ctx.saveActivity();assert.equal(closed,false);releaseSave(true);await save;assert.equal(closed,true);releasePhoto(ok({photoUri:photo}));await pendingPhoto;
+ const ctx={savingActivity:{current:false},placeSelecting:false,draft:{...point,title:point.place,day:1,time:''},prepareActivityDraft:x=>x,insertActivityByTime:load('lib/activity-order.ts').insertActivityByTime,editingId:null,activities:[],Date,setActivityError(){},persist:()=>new Promise(r=>releaseSave=r),setShowEditor:()=>closed=true};vm.createContext(ctx);vm.runInContext(fn,ctx);const save=ctx.saveActivity();assert.equal(closed,false);releaseSave(true);await save;assert.equal(closed,true);releasePhoto(ok({photoUri:photo}));await pendingPhoto;
 });
 
 test('Google upstream gate never exceeds three concurrent requests',async()=>{
