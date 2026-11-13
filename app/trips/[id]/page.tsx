@@ -8,7 +8,7 @@ import styles from "./itinerary.module.css";
 import { sortActivities, numberActivities, moveActivity } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { Country } from "country-state-city";
@@ -92,6 +92,7 @@ export default function TripPage() {
     setActivities(next);
   }, []);
   function applyIncomingActivities(incoming: Activity[]) {
+    if (savingActivity.current) return;
     updateActivities(incoming.map(item => pendingCompletions.current.has(item.id) ? { ...item, done: pendingCompletions.current.get(item.id)!.done } : item));
   }
   const [showEditor, setShowEditor] = useState(false);
@@ -271,22 +272,27 @@ export default function TripPage() {
     return job.promise;
   }
 
-  async function persist(next: Activity[]) {
+  async function persist(next: Activity[], optimistic = false) {
     if (!canEditItinerary || savingActivity.current) return false;
     savingActivity.current = true;
     setActivitySaving(true);
     setActivityError("");
+    let previous = activitiesRef.current;
+    let previewed = false;
     try {
       // Whole-list writes must not overwrite a pending completion or its rollback.
       await Promise.all([...pendingCompletions.current.values()].map(job => job.promise));
+      previous = activitiesRef.current;
       const current = new Map(activitiesRef.current.map(item => [item.id, item]));
       const ordered = numberActivities(next.map(item => current.has(item.id) ? { ...item, done: current.get(item.id)!.done } : item));
+      if (optimistic) { updateActivities(ordered); previewed = true; }
       if (!await syncTripResource(id, "activities", ordered, trip || undefined)) throw new Error();
       updateActivities(ordered);
       try { window.localStorage.setItem('mova-itinerary-' + id, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
       window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
       return true;
     } catch {
+      if (previewed) updateActivities(previous);
       setActivityError("Modifica non salvata. Controlla la connessione e riprova.");
       return false;
     } finally {
@@ -328,9 +334,25 @@ export default function TripPage() {
 
   function dropActivity(day: number, beforeId?: string) {
     if (!draggedId) return;
-    void persist(moveActivity(activities, draggedId, day, beforeId));
+    if (activitiesRef.current.find(item => item.id === draggedId)?.day !== day) {
+      setActivityError("Per riordinare, rilascia l’attività nella stessa giornata.");
+      setDraggedId(null);
+      setDropTarget(null);
+      return;
+    }
+    void persist(moveActivity(activitiesRef.current, draggedId, day, beforeId), true);
     setDraggedId(null);
     setDropTarget(null);
+  }
+
+  function dragOverActivity(event: DragEvent<HTMLElement>, items: Activity[], index: number, drop = false) {
+    if (!draggedId || !canEditItinerary || savingActivity.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const beforeId = event.clientY < bounds.top + bounds.height / 2 ? items[index].id : items[index + 1]?.id;
+    if (drop) dropActivity(items[index].day, beforeId);
+    else setDropTarget(beforeId ? `before-${beforeId}` : `end-${items[index].day}`);
   }
 
   const days = useMemo(() => trip ? tripDays(trip.startDate, trip.endDate) : [], [trip?.startDate, trip?.endDate]);
@@ -368,9 +390,9 @@ export default function TripPage() {
         <nav className="itinerary-day-nav" aria-label="Giorni del viaggio">{days.map(({ day, date }) => { const weather = weatherDays.find((item) => item.date === date.toISOString().slice(0, 10)); return <button key={day} className={activeDay === day ? "active" : undefined} aria-pressed={activeDay === day} aria-controls={`itinerary-day-${day}`} onClick={() => scrollToDay(day)}><small>{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}</small><strong>{date.getDate()}</strong>{weather && <WeatherIcon code={weather.code} />}</button>; })}</nav>
         <div className="itinerary-days" ref={itineraryDaysRef}>{days.map(({ day, date }) => { const dayActivities = activitiesByDay.get(day) || []; return <section className="itinerary-day" id={`itinerary-day-${day}`} key={day}>
           <header className="itinerary-day-heading"><div><strong>Giorno {day}</strong><span>{formatDay(date)}</span>{dayActivities[0]?.place && <small><MapPin size={13} /> {dayActivities[0].place}</small>}</div>{canEditItinerary && <button onClick={() => openNew(day)}><Plus size={16} /> Aggiungi</button>}</header>
-          {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item) => { return <div key={item.id} className={styles.timelineEntry}>
+          {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item, index) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
-          <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
+          <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragOver={(event) => dragOverActivity(event, dayActivities, index)} onDrop={(event) => dragOverActivity(event, dayActivities, index, true)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
             <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.place ? "has-photo" : ""}`}>
