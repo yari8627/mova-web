@@ -1,4 +1,11 @@
 /* Participants only; reuse the approved trip chrome without changing shared CSS. */
+.contactField { display: grid; gap: 6px; min-width: 0; }
+.contactField > label { margin: 0; }
+.contactOptions { margin: 0; padding: 4px; list-style: none; max-height: 164px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.contactOptions > li { display: grid; gap: 2px; min-height: 44px; padding: 8px; border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; color: var(--navy); }
+.contactOptions > li[aria-selected="true"] { background: #eee7d9; }
+.contactOptions strong { font-size: 13px; font-weight: 600; }
+.contactOptions span, .contactHint { font-size: 12px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; }
 .inviteSubmit { min-inline-size: 168px; min-block-size: 44px; }
 @media (min-width: 761px) { .inviteSubmit { inline-size: 184px; } }
 .inviteFeedback { min-height: 1.45em; margin: 6px 0; color: var(--navy); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
