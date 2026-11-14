@@ -17,6 +17,17 @@ function load(file, globals = {}, dependencies = {}) {
 const photo = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/3/32/Aerial-Sal-Reis-Cape-Verde-2012.JPG/1920px-Aerial-Sal-Reis-Cape-Verde-2012.JPG';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test('Rome selection policy bypasses the old CDN response without losing shared Home and cover caching',async()=>{
+  const calls=[];
+  const banner='https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Roma-Gonfalone.svg/1280px-Roma-Gonfalone.svg.png';
+  const romePhoto='https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7e/Trevi_Fountain_Rome_Italy.jpg/1280px-Trevi_Fountain_Rome_Italy.jpg';
+  const api=load('lib/home-trip-images.ts',{fetch:async url=>{calls.push(new URL(url,'https://local'));return{ok:true,json:async()=>({image:calls.at(-1).searchParams.get('photoPolicy')==='2'?romePhoto:banner})};}});
+  const home=api.resolveHomePhoto('Italia','Roma'),cover=api.resolveHomePhoto('Italia','Roma');
+  assert.equal(home,cover);assert.equal(await home,romePhoto);assert.equal(await cover,romePhoto);
+  assert.equal(calls.length,1);assert.equal(calls[0].searchParams.get('photoPolicy'),'2');
+  assert.equal(await api.resolveHomePhoto('Italia','Roma'),romePhoto);assert.equal(calls.length,1);
+});
+
 test('duplicate city lookups share one request; success is reused on Home return without persistent storage', async () => {
   const calls = [];
   const api = load('lib/home-trip-images.ts', { fetch: (url, options) => new Promise(resolve => calls.push({ url, options, resolve })) });

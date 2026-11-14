@@ -5,6 +5,34 @@ const image=name=>`https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/${e
 const wiki=(city,country,name=city)=>({title:city,extract:`${city} is a city in ${country}.`,coordinates:[{lat:1,lon:1}],pageimage:`${name}.jpg`,thumbnail:{source:image(name)}});
 const response=pages=>({ok:true,json:async()=>({query:{pages:Object.fromEntries(pages.map((p,i)=>[i+1,p]))}})});
 const photoModule=()=>load('lib/home-photo-provider.ts');
+const romeBanner='https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/Roma-Gonfalone.svg/1280px-Roma-Gonfalone.svg.png?utm_source=it.wikipedia.org';
+test('Rome rejects the observed fast Italian gonfalone and keeps the concurrent verified city photograph',async()=>{
+  const calls=[],api=photoModule();
+  const result=await api.resolveSpecificHomePhoto('Italia','Roma',async url=>{
+    calls.push(url);
+    if(url.includes('it.wikipedia'))return response([{...wiki('Roma','Italia'),pageimage:'Roma-Gonfalone.svg',thumbnail:{source:romeBanner}}]);
+    if(url.includes('en.wikipedia')){
+      await new Promise(resolve=>setImmediate(resolve));
+      return {ok:true,json:async()=>({query:{redirects:[{from:'Roma (city)',to:'Rome'}],pages:{1:wiki('Rome','Italy','Trevi_Fountain_Rome_Italy')}}})};
+    }
+    return response([]);
+  });
+  assert.equal(result.image,image('Trevi_Fountain_Rome_Italy'));assert.equal(result.source,'Wikipedia EN');assert.equal(calls.length,2);
+});
+for(const name of ['Roma Gonfalone','Gonfaloni di Roma','Rome gonfalon','Rome gonfalons'])test(`heraldic banner metadata is excluded: ${name}`,()=>{
+  assert.equal(pure.symbolicPhoto(name),true);
+});
+test('rasterized SVG symbols cannot masquerade as photographs through a PNG extension',()=>{
+  for(const url of [romeBanner,'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/123.svg/1280px-123.svg.png'])assert.equal(pure.safeHomePhotoUrl(url),'');
+  assert.equal(pure.safeHomePhotoUrl(image('Rome_city_panorama')),image('Rome_city_panorama'));
+});
+test('Rome uses a verified same-city Commons photograph when both article thumbnails are symbols',async()=>{
+  const result=await photoModule().resolveSpecificHomePhoto('Italia','Roma',async url=>{
+    if(!url.includes('commons.wikimedia'))return response([{...wiki('Roma','Italia'),pageimage:'Roma-Gonfalone.svg',thumbnail:{source:romeBanner}}]);
+    const item=(name,description)=>({title:'File:'+name,imageinfo:[{mime:'image/jpeg',thumburl:image(name),extmetadata:{ImageDescription:{value:description}}}]});
+    return response([item('12345','Gonfalone di Roma Italia'),item('Roma_panorama','Roma, Italia: city panorama')]);
+  });assert.equal(result.image,image('Roma_panorama'));
+});
 for(const [country,city] of [['Norvegia','Tromsø'],['Italia','Milano'],['Italia','Napoli'],['USA','New York']])test(`explicit locality ${city} wins over ${country} and national imagery`,async()=>{
   const calls=[],api=photoModule();const result=await api.resolveSpecificHomePhoto(country,city,async url=>{calls.push(new URL(url));return response([wiki(city,country)]);});
   assert.equal(result.image,image(city));assert(calls.every(url=>url.searchParams.get('titles').split('|')[0]===city));assert(calls.every(url=>url.searchParams.get('pithumbsize')==='1280'));

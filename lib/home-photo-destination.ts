@@ -10,7 +10,7 @@ export function primaryHomeDestination(country: string, city: string) {
   if (!locality || photoText(locality) === photoText(nation)) return null;
   return { locality, country: nation };
 }
-const symbolic = /\b(flags?|bandier[ae]|drapeau|flagge|emblems?|stemma|stemmi|coat of arms|coats of arms|maps?|mapp[ae]|cartina|locator|icons?|logos?|seals?|banners?|patriotic|symbols?|simbol[oi]|diagrams?|satellite|portraits?|paintings?|illustrations?)\b/i;
+const symbolic = /\b(flags?|bandier[ae]|drapeau|flagge|emblems?|stemma|stemmi|gonfalon(?:e|i|s)?|coat of arms|coats of arms|maps?|mapp[ae]|cartina|locator|icons?|logos?|seals?|banners?|patriotic|symbols?|simbol[oi]|diagrams?|satellite|portraits?|paintings?|illustrations?)\b/i;
 export function symbolicPhoto(...values: (string | undefined)[]) {
   return values.some(value => {
     try { return symbolic.test(photoText(decodeURIComponent(value || ''))); } catch { return true; }
@@ -20,6 +20,9 @@ export function safeHomePhotoUrl(value: unknown) {
   if (typeof value !== 'string' || symbolicPhoto(value)) return '';
   try {
     const url = new URL(value);
+    // A Wikimedia SVG thumbnail ends in .svg.png, but is still a vector
+    // illustration (for example Roma-Gonfalone), not a city photograph.
+    if (/\.svg(?:\/|\.)/i.test(decodeURIComponent(url.pathname))) return '';
     return url.protocol === 'https:' && ['upload.wikimedia.org', 'thumb.wikimedia.org'].includes(url.hostname)
       && /\.(?:jpe?g|png|webp)(?:$|\?)/i.test(url.pathname) ? url.href : '';
   } catch { return ''; }

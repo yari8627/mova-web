@@ -24,7 +24,9 @@ export function resolveHomePhoto(country: string, city: string, refresh = false,
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const params = new URLSearchParams({ city: destination.locality, country: destination.country, scope: "home-v2" });
+      // Separate corrected photo selection from CDN responses cached under
+      // the previous policy; retain the same shared cache and API contract.
+      const params = new URLSearchParams({ city: destination.locality, country: destination.country, scope: "home-v2", photoPolicy: "2" });
       if (localFallback) params.set("fallback", "local");
       const response = await fetch(`/api/city-image?${params}`, { signal: controller.signal });
       if (response.status === 429 || response.status === 503) {
