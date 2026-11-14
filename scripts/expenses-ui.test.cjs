@@ -101,3 +101,43 @@ test('settlement form retains sender, recipient and validation against self paym
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.requests.length, 1);
 });
+
+test('NAMI-BUG-001: optional, zero, decimal and long budgets retain existing financial presentation', () => {
+  const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
+  for (const [budget, spent] of [[null,25.5],[0,0],[1250.5,0],[1250.5,250.25],[500,500],[500,1250.5],[9999.99,1250.5],[99999.99,1250.5],[999999.99,1250.5],[100,999999.99],[5,0]]) {
+    const h = harness({ budget, expenses: spent ? [{ ...fixture[0], amount: spent }] : [] });
+    const summary = find(h, n => n.props?.['aria-label'] === 'Riepilogo economico');
+    const html = SSR.renderToStaticMarkup(summary);
+    const input = nodes(summary).find(n => n.props?.['aria-label'] === 'Budget totale opzionale');
+    assert.equal(input.props.value, budget ?? '');
+    assert.equal(input.props.type, 'number');
+    assert(html.includes(currency.format(spent)));
+    if (budget === null) {
+      assert(html.includes('Budget non impostato'));
+      assert(!html.includes('class="positive"'));
+      assert(!html.includes('class="negative"'));
+    } else {
+      assert(html.includes(currency.format(budget - spent)));
+      assert.equal(html.includes('Budget superato'), budget < spent);
+      assert(!html.includes('Budget non impostato'));
+    }
+  }
+});
+
+test('NAMI-BUG-001: aligned value rows and narrow-screen layout are scoped to Expenses', () => {
+  const css = fs.readFileSync('app/trips/[id]/expenses/expenses.module.css', 'utf8');
+  const strong = css.match(/\.expenses \.budgetDetails strong\s*\{([^}]+)\}/)[1];
+  const label = css.match(/\.expenses \.budgetDetails label\s*\{([^}]+)\}/)[1];
+  assert.match(strong, /min-height:\s*44px/);
+  assert.match(strong, /align-items:\s*center/);
+  assert.match(label, /margin-top:\s*0/);
+  assert.match(css, /@media \(max-width: 360px\)\s*\{\s*\.budgetDetails\s*\{\s*grid-template-columns:\s*minmax\(0,1fr\)/);
+});
+
+test('NAMI-BUG-001: form focus is visible navy, without gold outline or legacy glow', () => {
+  const css = fs.readFileSync('app/trips/[id]/expenses/expenses.module.css', 'utf8');
+  assert.match(css, /\.expenses :global\(\.expense-modal input:focus\)[\s\S]*?outline:\s*2px solid var\(--navy\)/);
+  assert.match(css, /\.expenses :global\(\.expense-modal input:focus\)[\s\S]*?box-shadow:\s*none/);
+  assert(!/\.expenses :global\(input:focus-visible\)[^{]*\{[^}]*#c5a369/.test(css));
+  assert.match(css, /label:focus-within\s*\{\s*border-color:\s*#e1e7eb/);
+});
