@@ -11,6 +11,11 @@ Worktree dedicato; nessun contenuto del branch Web Push è stato importato o mod
 MVP: collegamento Gmail distinto dal login NAMI, ricerca manuale paginata,
 parser strutturato JSON-LD e fallback testuale IT/EN, anteprima modificabile,
 associazione a un viaggio esistente, conferma esplicita e deduplicazione persistente.
+L'anteprima ammette soltanto messaggi con un riferimento esplicito: PNR, codice/
+numero di prenotazione o conferma, numero di biglietto, oppure un identificativo
+valido nella prenotazione strutturata. Date, prezzi, telefoni e numeri di volo
+non bastano. Anche una conferma autentica viene esclusa se il riferimento è
+presente soltanto in un allegato PDF, che questa versione non legge.
 Voli, hotel, treni/bus/traghetti, noleggio auto e attività sono rappresentati con
 le categorie Booking già presenti. Numero volo, intestatario/ospiti e dettagli
 aggiuntivi vengono riportati nelle note quando riconoscibili. Non vengono inventati
@@ -97,7 +102,7 @@ node node_modules/typescript/bin/tsc --noEmit
 node node_modules/next/dist/bin/next build
 ```
 
-59/59 test PASS: 34 Gmail più 25 regressioni Prenotazioni/auth/profilo.
+62/62 test PASS: 37 Gmail più 25 regressioni Prenotazioni/auth/profilo.
 I test usano email sintetiche, Google simulato e un adapter transazionale in memoria;
 non attestano l'esecuzione della proposta su PostgreSQL reale né il comportamento
 di due connessioni PostgreSQL. La build non applica SQL e non richiede Gmail.

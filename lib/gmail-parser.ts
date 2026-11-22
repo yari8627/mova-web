@@ -45,6 +45,19 @@ function dateValue(raw: string, warnings: string[]) {
   return "";
 }
 function readLine(text: string, names: string) { return text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || ""; }
+function validReference(value: string) {
+  const reference = value.trim();
+  return /^[a-z0-9][a-z0-9./-]{3,63}$/i.test(reference)
+    && !/^(?:https?|www|example|esempio|unknown|pending|nessuno|nessuna|undefined|null|click|clicca|prenotazione|booking|conferma|confirmation|ticket|biglietto)$/i.test(reference)
+    && !/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(reference);
+}
+function bookingReference(text: string) {
+  const labels = "PNR|Booking (?:reference|code|number|ID)|Reservation (?:number|code|ID)|Confirmation (?:number|code)|(?:E-?ticket|Ticket) (?:number|no\\.?|code)|(?:Codice|Numero|N[°º.]?) (?:di )?(?:prenotazione|conferma|biglietto)|Codice PNR";
+  // A labelled identifier is evidence; dates, flight numbers and generic numbers are not.
+  const pattern = new RegExp(`\\b(?:${labels})(?:[ \\t]*[:：#=][ \\t\\r\\n]*|[ \\t]*\\r?\\n[ \\t]*|[ \\t]+)([a-z0-9][a-z0-9./-]{3,63})(?=[ \\t]*(?:\\r?\\n|$)|[ \\t]*[;,])`, "gi");
+  for (const match of text.matchAll(pattern)) if (validReference(match[1])) return match[1];
+  return "";
+}
 function structured(html: string[], warnings: string[]): Candidate[] {
   const found: Candidate[] = [];
   for (const doc of html) for (const match of doc.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
@@ -62,7 +75,8 @@ function structured(html: string[], warnings: string[]): Candidate[] {
         const address = (x: unknown): string => typeof x === "string" ? x : x && typeof x === "object" ? ["streetAddress", "addressLocality", "addressCountry"].map(k => name((x as Record<string, unknown>)[k])).filter(Boolean).join(", ") : "";
         d.type = kinds[type]; d.title = name(r.name) || name(v.name);
         d.provider = name(r.airline) || name(r.provider) || name(v.provider) || (d.type === "hotel" ? name(r.name) : "");
-        d.reference = name(v.reservationNumber) || name(v.reservationId);
+        d.reference = [name(v.reservationNumber), name(v.reservationId), name(v.ticketNumber)].find(validReference) || "";
+        if (!d.reference) return;
         d.originAirport = name(r.departureAirport); d.destinationAirport = name(r.arrivalAirport);
         const route = [name(r.departureStation) || name(r.departureBusStop) || name(v.pickupLocation) || d.originAirport, name(r.arrivalStation) || name(r.arrivalBusStop) || name(v.dropoffLocation) || d.destinationAirport].filter(Boolean).join(" → ");
         d.location = address(r.address) || name(r.location) || route;
@@ -86,15 +100,16 @@ function structured(html: string[], warnings: string[]): Candidate[] {
 export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const subject = header(message.payload, "Subject"), bodies = messageBodies(message), text = `${subject}\n${bodies.text}`;
   const event = /cancellat|cancelled|canceled|annullat|refund|rimborso/i.test(text) ? "cancellation" : /modific|reschedul|updated booking|booking change|schedule change/i.test(text) ? "change" : "confirmation";
-  // Offers alone are never booking evidence. Require explicit confirmation/reference markers.
-  if (!/conferma|confermat|confirmation|confirmed|reservation|prenotazione|booking reference|itinerary|e-ticket|biglietto|cancellat|cancelled|annullat|reschedul/i.test(text)) return [];
+  // Only messages carrying an explicit booking/ticket identifier reach the preview.
   const known = structured(bodies.html, []);
   if (known.length) return known.map(c => ({ ...c, event: event === "confirmation" ? c.event : event }));
+  const reference = bookingReference(text);
+  if (!reference) return [];
   const d = blank(), warnings = ["Formato non strutturato: verifica tutti i dati."];
   const matchType = /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
   if (!matchType) return [];
   d.type = matchType; d.title = readLine(bodies.text, "Hotel|Struttura|Activity|Attività|Nome|Name|Titolo") || subject.slice(0, 200);
-  d.reference = readLine(bodies.text, "PNR|Booking reference|Booking code|Codice prenotazione|Confirmation number|Codice conferma|Reservation number");
+  d.reference = reference;
   d.provider = readLine(bodies.text, "Airline|Compagnia|Operator|Operatore|Provider|Struttura|Hotel");
   d.location = readLine(bodies.text, "Location|Luogo|Address|Indirizzo|Destination|Destinazione");
   d.originAirport = readLine(bodies.text, "From|Da|Departure airport|Aeroporto partenza");
