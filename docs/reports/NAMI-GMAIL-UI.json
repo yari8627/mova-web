@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-22",
+  "mode": "actual React GmailBookings component; synthetic local APIs only",
+  "productionBase": "ec05ec5c163bc4a045564fa8cf1198c7518a0327",
+  "realGmailMessagesRead": 0,
+  "productionWrites": 0,
+  "checks": {
+    "explicitOpenAndSearch": true,
+    "noSaveOnPreview": true,
+    "cancelLeavesZeroConfirmations": true,
+    "editThenChooseTripThenConfirm": true,
+    "oneExplicitConfirmation": true,
+    "portalEscapesTransformedContainer": true,
+    "mobileInputFont16px": true,
+    "noHorizontalOverflow320": true,
+    "noHorizontalOverflow390": true,
+    "noHorizontalOverflow1440": true,
+    "desktopTwoColumns": true
+  },
+  "notVerified": ["real Google OAuth", "real Gmail", "PostgreSQL migration/concurrency", "physical iPhone Safari"]
+}

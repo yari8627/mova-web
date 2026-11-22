@@ -1,6 +1,7 @@
 "use client";
 
 import { TripHeader } from "../../../components/trip-header";
+import { GmailBookings } from "../../../components/gmail-bookings";
 import styles from "./bookings.module.css";
 import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
@@ -455,6 +456,11 @@ export default function BookingsPage() {
         <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
         </div>
+          {canManage && <GmailBookings tripId={id} onImported={async () => {
+            removeTripSnapshot(id);
+            const remote = await fetchTripSnapshot(id);
+            if (remote) { setBookings(remote.bookings); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); }
+          }} />}
           {canManage && (
             <button
               className="primary-button booking-add-button"
