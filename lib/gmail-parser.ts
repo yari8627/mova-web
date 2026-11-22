@@ -1,4 +1,5 @@
-import { BookingDraft, Candidate, validInstant } from "./gmail-core";
+import { BookingDraft, Candidate } from "./gmail-core";
+import { emptyMailTime, mailInstant, parseMailRange, parseMailTime } from "./gmail-dates";
 
 export type GmailPart = { mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { data?: string; size?: number }; parts?: GmailPart[] };
 export type GmailMessage = { id: string; internalDate?: string; snippet?: string; payload?: GmailPart };
@@ -13,7 +14,7 @@ export function decodeHeader(value: string) {
 }
 export function header(part: GmailPart | undefined, name: string) { return decodeHeader(part?.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || ""); }
 export function htmlText(html: string) {
-  return clean(html.replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<(?:br|\/p|\/div|\/tr|\/li)\b[^>]*>/gi, "\n").replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|amp|lt|gt|quot|apos);|&#(?:x[0-9a-f]+|\d+);/gi, s => {
+  return clean(html.replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<(?:br|\/p|\/div|\/tr|\/td|\/th|\/li)\b[^>]*>/gi, "\n").replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|amp|lt|gt|quot|apos);|&#(?:x[0-9a-f]+|\d+);/gi, s => {
     const map: Record<string, string> = { "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
     if (map[s.toLowerCase()]) return map[s.toLowerCase()];
     const hex = s[2].toLowerCase() === "x", n = parseInt(s.slice(hex ? 3 : 2, -1), hex ? 16 : 10);
@@ -35,16 +36,65 @@ export function messageBodies(message: GmailMessage) {
     p.parts?.forEach(part => walk(part, depth + 1));
   }
   if (message.payload) walk(message.payload, 0);
-  return { text: plain.length ? plain.join("\n") : html.map(htmlText).join("\n"), html };
+  return { text: [...new Set([...plain, ...html.map(htmlText)])].join("\n"), html };
 }
 const blank = (): BookingDraft => ({ title: "", type: "activity", startDate: "", endDate: "", reference: "", provider: "", location: "", notes: "", originAirport: "", destinationAirport: "", status: "confirmed" });
-function dateValue(raw: string, warnings: string[]) {
-  const value = raw.trim();
-  if (validInstant(value)) return value;
-  if (value) warnings.push(`Data/ora senza fuso o ambigua: ${value.slice(0, 100)}`);
+function readLine(text: string, names: string) { return text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || ""; }
+function labelled(text: string, names: string) {
+  return text.match(new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || "";
+}
+function place(value: string) {
+  return /@|<|>|https?:|mime-version|content-type|(?:^|\s)(?:from|sent|subject|to|da|inviato|oggetto|a)\s*:/i.test(value) ? "" : value.trim();
+}
+function geographical(text: string, names: string) {
+  const pattern = new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)([^\\n]+)`, "gi");
+  for (const m of text.matchAll(pattern)) { const value = place(m[1].trim().slice(0,500)); if (value) return value; }
   return "";
 }
-function readLine(text: string, names: string) { return text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || ""; }
+function providerFor(message: GmailMessage, text: string) {
+  const sender = header(message.payload, "From"), auth = header(message.payload, "Authentication-Results");
+  const providers = [["Airbnb","airbnb.com"],["Booking.com","booking.com"],["easyJet","easyjet.com"],["Ryanair","ryanair.com"],["ITA Airways","ita-airways.com"],["Italo","italotreno.it"],["Trenitalia","trenitalia.it"],["Trenitalia","trenitalia.com"]];
+  for (const [name, domain] of providers) {
+    const escaped = domain.replace(/\./g,"\\.");
+    const senderDomain = new RegExp(`@(?:[a-z0-9-]+\\.)*${escaped}(?:>|\\s|$)`,"i").test(sender);
+    const authenticated = /mx\.google\.com/i.test(auth) && /(?:dkim|spf|dmarc)=pass/i.test(auth) && new RegExp(`(?:header\\.d|smtp\\.mailfrom|header\\.from)=[^;\\s]*${escaped}(?:[;\\s]|$)`,"i").test(auth);
+    // Forwarded original headers/links identify a supplier only alongside its brand in the body.
+    if ((senderDomain && authenticated) || (text.toLowerCase().includes(name.toLowerCase()) && new RegExp(`(?:@|https?:\\/\\/(?:[a-z0-9-]+\\.)*)${escaped}(?:[>/\\s]|$)`,"i").test(text))) return name;
+  }
+  return "";
+}
+function messageEvent(subject: string, body: string): Candidate["event"] {
+  const eventLines = [subject.replace(/^(?:(?:fwd?|re|i|r):\s*)+/i,""), ...body.split(/\r?\n/).filter(line => !/cancellazione gratuita|free cancellation|cancellation polic|politic[ah] di cancell|termini|puoi|you can|gestisci|manage|how to|come (?:modific|annull)|rimborso (?:entro|fino)/i.test(line))].join("\n");
+  if (/(?:prenotazione|reservation|booking|volo|flight|treno|train|biglietto|ticket)(?:\s+(?:n[°.]?\s*)?[A-Z0-9-]{4,20})?\s+(?:(?:has been|was|is|è stata|è stato|è)\s+)?(?:cancellat[aoeiy]|cancelled|canceled|annullat[ao])\b|(?:cancellazione|annullamento)\s+(?:confermat[ao]|della (?:tua )?prenotazione)|(?:cancellation confirmed|booking cancellation confirmation)/i.test(eventLines)) return "cancellation";
+  if (/(?:prenotazione|reservation|booking|volo|flight|treno|train|orario|schedule)(?:\s+(?:n[°.]?\s*)?[A-Z0-9-]{4,20})?\s+(?:è stat[ao] modificat[ao]|has (?:been )?changed|has been updated|has been rescheduled|rescheduled|modificat[ao])\b|(?:modifica (?:confermata|alla tua prenotazione)|updated booking|flight booking change|schedule change)/i.test(eventLines)) return "change";
+  if (/conferm[ao]|confermat[ao]|confirmed|confirmation|ricevuta|receipt|e-ticket|biglietto emesso/i.test(subject + "\n" + body)) return "confirmation";
+  return "uncertain";
+}
+function finish(candidate: Candidate, supplier: string): Candidate {
+  const d = candidate.draft, w = candidate.warnings;
+  if (supplier) d.provider = supplier;
+  d.provider = place(d.provider);
+  d.location = place(d.location); d.originAirport = place(d.originAirport); d.destinationAirport = place(d.destinationAirport);
+  const route = [d.originAirport,d.destinationAirport].filter(Boolean).join(" → ");
+  const name = place(d.title.replace(/^(?:(?:fwd?|re):\s*)+/i,"").trim());
+  d.title = d.type === "flight" ? (route ? `Volo ${route}` : "Volo da completare")
+    : d.type === "train" ? (route ? `Treno ${route}` : "Trasporto da completare")
+    : d.type === "hotel" ? (name ? (supplier === "Airbnb" ? `${name}${d.location ? ` — ${d.location}` : ""}` : /^hotel\b/i.test(name) ? name : `Hotel ${name}`) : supplier === "Airbnb" ? "Soggiorno Airbnb da completare" : "Soggiorno da completare")
+    : d.type === "activity" ? (name ? `${name}${d.location ? ` — ${d.location}` : ""}` : "Attività da completare") : "Noleggio auto da completare";
+  d.title = d.title.slice(0,500);
+  const timing = candidate.timing || { start: parseMailTime(d.startDate), end: parseMailTime(d.endDate) };
+  candidate.timing = timing;
+  for (const [label,time] of [["Inizio",timing.start],["Fine",timing.end]] as const) {
+    if (!time.raw && label === "Fine") continue;
+    const missing = [!time.date && "data completa di anno", !time.time && "ora", !time.offset && "fuso"].filter(Boolean);
+    if (missing.length) w.push(`${label}: verifica ${missing.join(", ")}.${time.raw ? ` Testo originale: ${time.raw}` : ""}`);
+  }
+  d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
+  if (!d.location) w.push("Località da completare.");
+  if (candidate.event === "uncertain") { d.status = "pending"; w.push("Stato incerto: verifica il contenuto prima di confermare."); }
+  candidate.warnings = [...new Set(w)];
+  return candidate;
+}
 function validReference(value: string) {
   const reference = value.trim();
   return /^[a-z0-9][a-z0-9./-]{3,63}$/i.test(reference)
@@ -74,22 +124,20 @@ function structured(html: string[], warnings: string[]): Candidate[] {
         const name = (x: unknown): string => typeof x === "string" ? x.slice(0, 500) : x && typeof x === "object" ? String((x as Record<string, unknown>).name || (x as Record<string, unknown>).iataCode || "").slice(0, 500) : "";
         const address = (x: unknown): string => typeof x === "string" ? x : x && typeof x === "object" ? ["streetAddress", "addressLocality", "addressCountry"].map(k => name((x as Record<string, unknown>)[k])).filter(Boolean).join(", ") : "";
         d.type = kinds[type]; d.title = name(r.name) || name(v.name);
-        d.provider = name(r.airline) || name(r.provider) || name(v.provider) || (d.type === "hotel" ? name(r.name) : "");
+        d.provider = name(r.airline) || name(r.provider) || name(v.provider);
         d.reference = [name(v.reservationNumber), name(v.reservationId), name(v.ticketNumber)].find(validReference) || "";
         if (!d.reference) return;
         d.originAirport = name(r.departureAirport); d.destinationAirport = name(r.arrivalAirport);
         const route = [name(r.departureStation) || name(r.departureBusStop) || name(v.pickupLocation) || d.originAirport, name(r.arrivalStation) || name(r.arrivalBusStop) || name(v.dropoffLocation) || d.destinationAirport].filter(Boolean).join(" → ");
         d.location = address(r.address) || name(r.location) || route;
-        d.startDate = dateValue(String(v.checkinTime || v.pickupTime || r.departureTime || r.startDate || ""), w);
-        d.endDate = dateValue(String(v.checkoutTime || v.dropoffTime || r.arrivalTime || r.endDate || ""), w);
+        const timing = { start: parseMailTime(String(v.checkinTime || v.pickupTime || r.departureTime || r.startDate || "")), end: parseMailTime(String(v.checkoutTime || v.dropoffTime || r.arrivalTime || r.endDate || "")) };
+        d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
         const flightNumber = name(r.flightNumber); if (flightNumber) d.notes = `Numero volo: ${flightNumber}`;
         const guests = v.numAdults || v.numGuests; if (guests && /^\d+$/.test(String(guests))) d.notes += `${d.notes ? "\n" : ""}Ospiti: ${guests}`;
         const passenger = name(v.underName); if (passenger) d.notes += `${d.notes ? "\n" : ""}Intestatario: ${passenger}`;
         const status = String(v.reservationStatus || "");
         const event = /cancel/i.test(status) ? "cancellation" : "confirmation";
-        if (!d.title) { d.title = [d.provider, flightNumber, d.location].filter(Boolean).join(" · "); w.push("Titolo da verificare"); }
-        if (!d.startDate) w.push("Data e fuso orario richiesti");
-        found.push({ draft: d, warnings: w, event, flightNumber }); return;
+        found.push({ draft: d, timing, warnings: w, event, flightNumber }); return;
       }
       Object.values(v).forEach(x => visit(x, depth + 1));
     }
@@ -99,28 +147,35 @@ function structured(html: string[], warnings: string[]): Candidate[] {
 }
 export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const subject = header(message.payload, "Subject"), bodies = messageBodies(message), text = `${subject}\n${bodies.text}`;
-  const event = /cancellat|cancelled|canceled|annullat|refund|rimborso/i.test(text) ? "cancellation" : /modific|reschedul|updated booking|booking change|schedule change/i.test(text) ? "change" : "confirmation";
+  const event = messageEvent(subject, bodies.text), supplier = providerFor(message, bodies.text);
   // Only messages carrying an explicit booking/ticket identifier reach the preview.
   const known = structured(bodies.html, []);
-  if (known.length) return known.map(c => ({ ...c, event: event === "confirmation" ? c.event : event }));
+  if (known.length) return known.map(c => finish({ ...c, event: c.event === "cancellation" ? c.event : event === "uncertain" ? c.event : event }, supplier));
   const reference = bookingReference(text);
   if (!reference) return [];
-  const d = blank(), warnings = ["Formato non strutturato: verifica tutti i dati."];
-  const matchType = /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
+  const d = blank(), warnings = ["Controlla i dati estratti prima di confermare."];
+  const matchType = /Airbnb|Booking.com/.test(supplier) ? "hotel" : /Italo|Trenitalia/.test(supplier) ? "train" : /easyJet|Ryanair|ITA Airways/.test(supplier) ? "flight" : /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
   if (!matchType) return [];
-  d.type = matchType; d.title = readLine(bodies.text, "Hotel|Struttura|Activity|Attività|Nome|Name|Titolo") || subject.slice(0, 200);
+  d.type = matchType; d.title = labelled(bodies.text, "Hotel(?: name)?|Struttura|Nome (?:struttura|alloggio|attività|escursione)|Alloggio|Accommodation|Property(?: name)?|Apartment|Appartamento|Activity|Attività|Excursion|Escursione");
   d.reference = reference;
-  d.provider = readLine(bodies.text, "Airline|Compagnia|Operator|Operatore|Provider|Struttura|Hotel");
-  d.location = readLine(bodies.text, "Location|Luogo|Address|Indirizzo|Destination|Destinazione");
-  d.originAirport = readLine(bodies.text, "From|Da|Departure airport|Aeroporto partenza");
-  d.destinationAirport = readLine(bodies.text, "To|A|Arrival airport|Aeroporto arrivo");
+  d.provider = supplier || labelled(bodies.text, "Airline|Compagnia|Operator|Operatore|Provider");
+  d.location = geographical(bodies.text, "Location|Luogo|Address|Indirizzo|Destination|Destinazione|Località|City|Città");
+  d.originAirport = geographical(bodies.text, "From|Da|Departure airport|Aeroporto partenza|Stazione (?:di )?partenza|Departure station|Origin|Origine");
+  d.destinationAirport = geographical(bodies.text, "To|A|Arrival airport|Aeroporto arrivo|Stazione (?:di )?arrivo|Arrival station");
+  const route = labelled(bodies.text,"Route|Tratta|Percorso").split(/\s*(?:→|->|\bto\b)\s*/i);
+  if (route.length === 2) { d.originAirport ||= place(route[0]); d.destinationAirport ||= place(route[1]); }
   if (!d.location) d.location = [d.originAirport, d.destinationAirport].filter(Boolean).join(" → ");
-  d.startDate = dateValue(readLine(bodies.text, "Departure|Partenza|Start|Inizio|Check-in|Checkin|Date|Data|Pickup"), warnings);
-  d.endDate = dateValue(readLine(bodies.text, "Arrival|Arrivo|End|Fine|Check-out|Checkout|Dropoff"), warnings);
+  const rawStart = labelled(bodies.text, d.type === "hotel" ? "Check-in|Checkin|Arrivo|Arrival(?: date)?|Data (?:di )?arrivo|Start|Inizio" : "Departure(?: date(?: and time)?)?|Partenza|Start|Inizio|Data (?:di |della )?(?:partenza|attività|evento)|Activity date|Event date|Pickup"), rawEnd = labelled(bodies.text, d.type === "hotel" ? "Check-out|Checkout|Partenza|Departure(?: date)?|Data (?:di )?partenza|End|Fine" : "Arrival(?: date(?: and time)?)?|Arrivo|End|Fine|Dropoff");
+  const range = parseMailRange(labelled(bodies.text, "Soggiorno|Stay|Date (?:del soggiorno|of stay)|Dates") || subject);
+  const timing = { start: rawStart ? parseMailTime(rawStart) : range?.start || emptyMailTime(), end: rawEnd ? parseMailTime(rawEnd) : range?.end || emptyMailTime() };
+  const explicitOffset = labelled(bodies.text,"Time zone|Timezone|Fuso(?: orario)?");
+  for (const [which,labels] of [["start", d.type === "hotel" ? "Ora (?:di )?arrivo|Arrival time|Check-in time|Ora check-in" : "Ora (?:di )?partenza|Departure time|Start time|Ora (?:attività|evento)"],["end", d.type === "hotel" ? "Ora (?:di )?partenza|Departure time|Check-out time|Ora check-out" : "Ora (?:di )?arrivo|Arrival time|End time"]] as const) {
+    const extra = labelled(bodies.text,labels);
+    if (timing[which].raw && (extra || explicitOffset)) timing[which] = parseMailTime(`${timing[which].raw} ${extra} ${explicitOffset}`.trim());
+  }
+  d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
   const flightNumber = readLine(bodies.text, "Flight number|Numero volo|Flight|Volo");
   const extra = [flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
   d.notes = extra.join("\n");
-  if (!d.reference && !d.startDate) warnings.push("Informazioni insufficienti: completa prima di importare.");
-  if (event === "cancellation") warnings.push("Cancellazione: nessuna prenotazione sarà eliminata automaticamente.");
-  return [{ draft: d, warnings, event, flightNumber }];
+  return [finish({ draft: d, timing, warnings, event, flightNumber }, supplier)];
 }

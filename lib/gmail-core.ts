@@ -60,7 +60,7 @@ export type BookingDraft = {
   startDate: string; endDate: string; reference: string; provider: string; location: string;
   notes: string; originAirport: string; destinationAirport: string; status: "confirmed" | "pending";
 };
-export type Candidate = { draft: BookingDraft; warnings: string[]; event: "confirmation" | "change" | "cancellation"; flightNumber?: string };
+export type Candidate = { draft: BookingDraft; warnings: string[]; event: "confirmation" | "change" | "cancellation" | "uncertain"; flightNumber?: string; timing?: { start: import("./gmail-dates").MailTime; end: import("./gmail-dates").MailTime } };
 export function validInstant(s: string) {
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/.test(s) || !Number.isFinite(Date.parse(s))) return false;
   const day = new Date(`${s.slice(0, 10)}T00:00:00Z`);

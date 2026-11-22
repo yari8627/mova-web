@@ -6,6 +6,7 @@ import { currentUser } from "./auth";
 import { tripAccess } from "./trip-access";
 import { BookingDraft, Candidate, GmailCipher, GmailError, GMAIL_SCOPE, candidateKeys, gmailConfig, gmailHash, normalize, suggestTrip, validateDraft } from "./gmail-core";
 import { GmailMessage, header, parseGmailMessage } from "./gmail-parser";
+import { receivedRange } from "./gmail-dates";
 
 type User = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
 type Connection = { user_id: string; id: string; account_hash: string; ciphertext: string };
@@ -109,19 +110,22 @@ function bookingHash(b: BookingRow) { return gmailHash(JSON.stringify([b.id, b.t
 function bookingMatch(d: BookingDraft, b: BookingRow) {
   return d.type === b.type && ((d.reference && normalize(d.reference) === normalize(b.reference || "") && normalize(d.provider) === normalize(b.provider || "")) || (d.startDate && d.startDate.slice(0, 10) === b.startDate.toISOString().slice(0, 10) && normalize(d.title) === normalize(b.title)));
 }
-export async function searchGmail(user: User, input: { from: string; to: string; cursor?: string }) {
+export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string }) {
   const from = input.from, to = input.to;
   if (typeof from !== "string" || typeof to !== "string" || !/^\d{4}-\d\d-\d\d$/.test(from) || !/^\d{4}-\d\d-\d\d$/.test(to) || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || new Date(from).toISOString().slice(0, 10) !== from || new Date(to).toISOString().slice(0, 10) !== to || from > to || Date.parse(to) - Date.parse(from) > 366 * 86400000 * 5) throw new GmailError(400, "Periodo non valido (massimo cinque anni).");
+  const timeZone = input.timeZone;
+  let range: { start: number; end: number };
+  try { if (typeof timeZone !== "string" || timeZone.length > 100) throw Error(); range = receivedRange(from, to, timeZone); } catch { throw new GmailError(400, "Periodo o fuso di ricezione non valido."); }
   const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user), trips = await gmailTrips(user);
-  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; connectionId: string; expires: number }>(input.cursor, `cursor:${user.id}`) : null;
-  if (cursor && (cursor.from !== from || cursor.to !== to || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
-  const after = Math.floor(Date.parse(`${from}T00:00:00Z`) / 1000), before = Math.floor(Date.parse(`${to}T00:00:00Z`) / 1000) + 86400;
-  const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change"}`;
+  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number }>(input.cursor, `cursor:${user.id}`) : null;
+  if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
+  const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
+  const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change"}`;
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
   const list = await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
-  const candidates: { key: string; token: string; draft: BookingDraft; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string }[] }[] = [];
-  let oversized = 0;
+  const candidates: { key: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string }[] }[] = [];
+  let oversized = 0, examined = 0, outsideRange = 0;
   const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
     catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++; return null; } throw e; }
@@ -129,6 +133,9 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   for (const fetchedMessage of fetched) {
     if (!fetchedMessage) continue;
     const { item, message } = fetchedMessage;
+    const received = typeof message.internalDate === "string" && /^\d{1,16}$/.test(message.internalDate) ? Number(message.internalDate) : NaN;
+    if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++; continue; }
+    examined++;
     const parsed = parseGmailMessage(message);
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
@@ -136,12 +143,12 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       const duplicate = ledger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
       const matches = bookings.filter(b => bookingMatch(candidate.draft, b) || ledger.some(r => r.booking_id === b.id));
       const proof: Preview = { userId: user.id, connectionId: c.id, accountHash: c.account_hash, sourceKey, ...keys, expires: Date.now() + 1800000, candidate, matches: matches.map(b => ({ id: b.id, tripId: b.tripId, hash: bookingHash(b) })) };
-      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: header(message.payload, "Date").slice(0, 100) }, suggestedTripId: suggestTrip(candidate.draft, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId })) });
+      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip(candidate.draft, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId })) });
     }
   }
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { candidates, trips, examined: list.messages?.length || 0, oversized, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { candidates, trips, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {
@@ -151,7 +158,9 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
     if (!choice || typeof choice.token !== "string" || typeof choice.tripId !== "string" || !["create", "update"].includes(choice.action)) throw new GmailError(400, "Selezione non valida.");
     const proof = cipher.open<Preview>(choice.token, `preview:${user.id}`);
     if (proof.userId !== user.id || proof.expires < Date.now() || proof.candidate.event === "cancellation") throw new GmailError(409, "Anteprima scaduta o cancellazione: ripeti la ricerca e verifica manualmente.");
-    return { choice, proof, draft: validateDraft(choice.draft) };
+    const draft = validateDraft(choice.draft);
+    if (proof.candidate.timing?.end.raw && !draft.endDate) throw new GmailError(400, "Completa anche la data, l’ora e il fuso di fine presenti nell’email.");
+    return { choice, proof, draft };
   }).sort((a, b) => (a.proof.referenceKey || a.proof.fingerprint).localeCompare(b.proof.referenceKey || b.proof.fingerprint));
   const results: { key: string; status: string; error?: string }[] = [];
   for (const { choice, proof, draft } of prepared) {

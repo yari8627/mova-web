@@ -1,4 +1,4 @@
-# NAMI — Importazione Prenotazioni da Gmail, MVP locale
+# NAMI — Importazione Prenotazioni da Gmail
 
 ## Base e perimetro
 
@@ -97,12 +97,12 @@ Non sono stati letti o copiati Secret, file .env operativi o messaggi personali.
 ## Prove riproducibili
 
 ```powershell
-node --test scripts/gmail-bookings.test.cjs scripts/booking-datetime.test.cjs scripts/auth-ui.test.cjs scripts/profile-ui.test.cjs
+node --test scripts/gmail-bookings.test.cjs scripts/gmail-ui.test.cjs scripts/booking-datetime.test.cjs scripts/auth-ui.test.cjs scripts/profile-ui.test.cjs
 node node_modules/typescript/bin/tsc --noEmit
 node node_modules/next/dist/bin/next build
 ```
 
-62/62 test PASS: 37 Gmail più 25 regressioni Prenotazioni/auth/profilo.
+80/80 test PASS: 52 Gmail, 3 UI Gmail e 25 regressioni Prenotazioni/auth/profilo.
 I test usano email sintetiche, Google simulato e un adapter transazionale in memoria;
 non attestano l'esecuzione della proposta su PostgreSQL reale né il comportamento
 di due connessioni PostgreSQL. La build non applica SQL e non richiede Gmail.
@@ -119,11 +119,45 @@ conferma singola, riepilogo. Layout 320/390/1440 px senza overflow, campi 16 px,
 due colonne desktop e portal che esce dal contenitore trasformato della fixture.
 Non equivale a collaudo Safari iPhone fisico o Google OAuth reale.
 
-## Prerequisiti per un futuro rilascio
+## Correzioni estrazione e anteprima, 22 novembre 2026
 
-Mancano collaudo OAuth/Gmail con utenti di test, applicazione SQL su PostgreSQL
-isolato e prova di concorrenza reale, poi prova sulla PWA iPhone. Nessun rilascio
-Production è autorizzato o eseguito.
+Baseline Production `6ead26b`. Le correzioni seguenti sono preparate localmente;
+push e deploy richiedono l'autorizzazione del titolare. Nessuna modifica OAuth,
+schema, Secret o Web Push; nessuna importazione reale in questa verifica.
+
+- Il browser invia il proprio fuso IANA e giorni di ricezione, entrambi inclusi.
+  Il server costruisce i confini locali, anche nei cambi d'ora legale, usa epoch
+  nella query Gmail e filtra nuovamente ciascun messaggio tramite internalDate.
+  Senza fuso o data di ricezione verificabile non presume UTC né la data del
+  messaggio inoltrato. Il cursore cifrato è legato anche al fuso; cambiando periodo
+  vengono azzerati schede, conteggio e paginazione. Conteggi distinti per pagina
+  e complessivi delle email effettivamente esaminate nell'intervallo.
+- Il parser legge parti plain e HTML disponibili, JSON-LD e campi testuali
+  espliciti. Titolo per categoria e tratta/struttura; nessun oggetto email come
+  titolo di ripiego. Operatore distinto dalla struttura. Domini autenticati e
+  riferimenti del fornitore nel corpo/forward identificano i provider riconosciuti;
+  il solo nome nel mittente non basta. Località ripulite da email/intestazioni.
+- Date nominate IT/EN, date numeriche non ambigue e intervalli di soggiorno sono
+  conservati anche parzialmente. Nessun anno da timestamp dell'email, ora di
+  check-in convenzionale o fuso presunto. Le cifre di prenotazione restano richieste.
+  Il modello Booking esistente richiede un istante: date-only degli alloggi sono
+  visibili in anteprima, ma ora/fuso vanno confermati prima del salvataggio.
+  Una fine rilevata ma incompleta non può essere omessa silenziosamente.
+- Eventi di cancellazione/modifica richiedono una comunicazione esplicita, non
+  condizioni di cancellazione gratuita o comandi di gestione. Stato incerto
+  distinto, inizialmente pending; avvisi deduplicati. Le cancellazioni restano
+  non importabili e non eliminano dati esistenti.
+- Riepilogo compatto: tipo, titolo, operatore, date, località, codice e stato.
+  Viaggio e selezione restano visibili; modifica e origine email sono espandibili.
+  Controlli separati data/ora/fuso, input a 16 px. Verificati con dati sintetici
+  a 320 e 390 px, senza overflow, modifica dell'ora con conservazione della data,
+  associazione viaggio e conferma esplicita; nessun collaudo Safari fisico attestato.
+
+Il riconoscimento è deterministico e non garantisce tutti i layout dei provider:
+informazioni senza contesto affidabile restano da completare. PDF non analizzati.
+Il rilascio proposto è fix forward sullo stesso progetto, senza nuove migrazioni
+o configurazioni. Dopo autorizzazione: fast-forward del solo commit candidato,
+Ready/alias Production e prova manuale del filtro e dell'anteprima prima di importare.
 
 `gmail.readonly` è restricted. Testing con utenti autorizzati e distribuzione
 pubblica hanno requisiti diversi: verifica dell'app/scope e, ove applicabile per
