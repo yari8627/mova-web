@@ -21,7 +21,7 @@ test('draft validation rejects missing timezone, excessive content, reversed dat
 function harness(){
  const user={id:'alice',email:'alice@example.invalid',name:'Alice',emailVerified:true},jar=new Map([['mova_session',{value:'synthetic-session'}]]),cipher=new core.GmailCipher(env());
  let con={user_id:'alice',id:'11111111-1111-4111-8111-111111111111',account_hash:core.gmailHash('synthetic-sub'),ciphertext:''};con.ciphertext=cipher.seal({access:'synthetic-access',refresh:'synthetic-refresh',expires:Date.now()+3600000,email:user.email},`connection:${user.id}:${con.id}`);
- let ledger=[],bookings=[],pending=[],tail=Promise.resolve(),fetcher=async()=>{throw Error('unexpected network')},calls=[];
+ let ledger=[],bookings=[],activities=[],pending=[],tail=Promise.resolve(),fetcher=async()=>{throw Error('unexpected network')},calls=[];
  const trips=[{id:'trip',ownerId:'alice',participants:[],name:'Londra',city:'Londra',country:'UK',startDate:new Date('2027-01-01'),endDate:new Date('2027-01-05')}];
  const db={
   async $queryRawUnsafe(sql,...args){calls.push({sql,args});if(sql.startsWith('SELECT user_id'))return con&&con.user_id===args[0]?[con]:[];
@@ -35,13 +35,14 @@ function harness(){
    if(sql.startsWith('INSERT INTO nami_gmail.connection'))con={user_id:a[0],id:a[1],account_hash:a[2],ciphertext:a[3]};
    if(sql.startsWith('UPDATE nami_gmail.connection'))con.ciphertext=a[0];
    if(sql.startsWith('INSERT INTO nami_gmail.import_record')){if(ledger.some(r=>r.user_id===a[1]&&r.account_hash===a[2]&&(r.source_key===a[3]||r.fingerprint===a[4])))throw Error('unique constraint');ledger.push({id:a[0],user_id:a[1],account_hash:a[2],source_key:a[3],fingerprint:a[4],reference_key:a[5],booking_id:a[6]});}return 1;},
-  trip:{async findMany(){return trips;},async findUnique({where}){return trips.find(t=>t.id===where.id)||null;}},
+  activity:{async findFirst(){return activities.at(-1)||null;},async deleteMany({where}){activities=activities.filter(a=>!(a.tripId===where.tripId && a.bookingId===where.bookingId && !where.id.notIn.includes(a.id)));},async upsert({where,update,create}){const a=activities.find(a=>a.id===where.id);if(a)Object.assign(a,update);else activities.push(create);}},
+  trip:{async findUniqueOrThrow({where}){const t=trips.find(t=>t.id===where.id);if(!t)throw Error();return t;},async findMany(){return trips;},async findUnique({where}){return trips.find(t=>t.id===where.id)||null;}},
   booking:{async findMany({where}){return bookings.filter(b=>typeof where.tripId==='string'?b.tripId===where.tripId:where.tripId.in.includes(b.tripId));},async findUnique({where}){return bookings.find(b=>b.id===where.id)||null;},async create({data}){bookings.push(data);return data;},async update({where,data}){const b=bookings.find(b=>b.id===where.id);Object.assign(b,data);return b;}},
-  async $transaction(fn){const previous=tail;let release;tail=new Promise(r=>release=r);await previous;const snapshot=structuredClone({con,ledger,bookings,pending});try{return await fn(db);}catch(e){({con,ledger,bookings,pending}=snapshot);throw e;}finally{release();}}
+  async $transaction(fn){const previous=tail;let release;tail=new Promise(r=>release=r);await previous;const snapshot=structuredClone({con,ledger,bookings,pending,activities});try{return await fn(db);}catch(e){({con,ledger,bookings,pending,activities}=snapshot);throw e;}finally{release();}}
  };
- const server=load('lib/gmail-server.ts',{'./gmail-core':core,'./gmail-parser':parser,'./gmail-dates':dates,'./prisma':{prisma:db},'./auth':{currentUser:async()=>user},'./trip-access':{tripAccess:async(id,u)=>{const t=trips.find(t=>t.id===id);return t&&t.ownerId===u.id?{allowed:true,role:'owner',trip:t}:{allowed:false};}},'next/headers':{cookies:async()=>({get:k=>jar.get(k),set:(k,v)=>jar.set(k,{value:v}),delete:k=>jar.delete(k)})}},{fetch:(...args)=>fetcher(...args)});
+ const server=load('lib/gmail-server.ts',{'./booking-itinerary':load('lib/booking-itinerary.ts',{}),'./gmail-core':core,'./gmail-parser':parser,'./gmail-dates':dates,'./prisma':{prisma:db},'./auth':{currentUser:async()=>user},'./trip-access':{tripAccess:async(id,u)=>{const t=trips.find(t=>t.id===id);return t&&t.ownerId===u.id?{allowed:true,role:'owner',trip:t}:{allowed:false};}},'next/headers':{cookies:async()=>({get:k=>jar.get(k),set:(k,v)=>jar.set(k,{value:v}),delete:k=>jar.delete(k)})}},{fetch:(...args)=>fetcher(...args)});
  function choice({key='one',event='confirmation',expires=Date.now()+600000,owner='alice',connectionId=con?.id,candidate={draft:draft(),warnings:[],event},matches=[]}={}){const proof={userId:owner,connectionId,accountHash:con.account_hash,sourceKey:core.gmailHash(key),...core.candidateKeys(candidate),expires,candidate,matches};return {token:cipher.seal(proof,`preview:${owner}`),draft:candidate.draft,tripId:'trip',action:'create'};}
- return {server,user,db,cipher,jar,calls,choice,setFetch:f=>fetcher=f,get bookings(){return bookings;},get ledger(){return ledger;},get con(){return con;},get pending(){return pending;},trips};
+ return {server,user,db,cipher,jar,calls,choice,setFetch:f=>fetcher=f,get activities(){return activities;},get bookings(){return bookings;},get ledger(){return ledger;},get con(){return con;},get pending(){return pending;},trips};
 }
 test('OAuth consent is separate, PKCE+session bound, short lived and persists no plaintext verifier',async()=>{const h=harness(),r=await h.server.connectGmail(h.user,'trip'),u=new URL(r.url);assert(u.searchParams.get('scope').includes(core.GMAIL_SCOPE));assert.equal(u.searchParams.get('code_challenge_method'),'S256');assert.equal(u.searchParams.get('redirect_uri'),'http://localhost:3000/api/gmail/callback');assert.equal(h.pending.length,1);assert(!h.pending[0].ciphertext.includes('verifier'));assert(h.pending[0].expires_at-Date.now()<=600000);assert.equal(h.bookings.length,0);});
 test('OAuth callback rejects foreign state/session and state cannot be replayed after denial',async()=>{const h=harness(),url=new URL((await h.server.connectGmail(h.user,'trip')).url),state=url.searchParams.get('state');await assert.rejects(()=>h.server.callbackGmail(h.user,new Request(`http://localhost:3000/api/gmail/callback?state=bad&code=x`)));h.jar.set('nami_gmail_state',{value:state});const result=await h.server.callbackGmail(h.user,new Request(`http://localhost:3000/api/gmail/callback?state=${state}&error=access_denied`));assert(result.endsWith('gmail=denied'));h.jar.set('nami_gmail_state',{value:state});await assert.rejects(()=>h.server.callbackGmail(h.user,new Request(`http://localhost:3000/api/gmail/callback?state=${state}&code=x`)));});
@@ -145,3 +146,33 @@ test('confirmed Airbnb imports retain after/before semantics in notes and remain
  await h.server.importGmail(h.user,{confirm:true,choices:[choice]});assert.equal(h.bookings.length,1);const notes=h.bookings[0].notes;assert(notes.includes('dopo le 16:00'));assert(notes.includes('entro le 11:00'));assert(notes.includes('non appuntamenti'));assert(dates.airbnbStayNoteLabel(notes,'start').includes('dopo le'));assert(dates.airbnbStayNoteLabel(notes,'end').includes('entro le'));
  const again=await h.server.importGmail(h.user,{confirm:true,choices:[choice]});assert.equal(again.results[0].status,'saltata: già presente');assert.equal(h.bookings.length,1);
 });
+
+
+test('confirmed Gmail imports project stable itinerary events atomically and replay creates no duplicates',async()=>{
+ const h=harness();assert.equal(h.activities.length,0);const c=h.choice();await h.server.importGmail(h.user,{confirm:true,choices:[c]});assert.equal(h.activities.length,2);assert.equal(h.activities[0].bookingId,h.bookings[0].id);await h.server.importGmail(h.user,{confirm:true,choices:[c]});assert.equal(h.activities.length,2);
+});
+test('regional suggestions use dates and explicit country/airport aliases, ties remain unselected',()=>{
+ const t={id:'norway',name:'Norvegia',city:'Tromsø',country:'Norvegia',startDate:'2027-01-01',endDate:'2027-01-20'};
+ const d={...draft(),location:'Balsfjord kommune, Norway',destinationAirport:''};assert.equal(core.suggestTrip(d,[t]),t.id);assert.equal(core.suggestTrip(d,[t,{...t,id:'other'}]),null);assert.equal(core.suggestTrip({...d,startDate:'2028-01-02T10:00Z'},[t]),null);assert.equal(core.suggestTrip({...d,location:'Unknown',destinationAirport:'TOS'},[t]),t.id);
+});
+for(const [supplier,domain,body,expected] of [
+ ['Booking.com','booking.com','Nome hotel\nAlbergo Sintetico\nIndirizzo\nVia Esempio 1, Roma, Italia\nCheck-in\ngio 14 gennaio 2027\ndalle 15:00\nCheck-out\nsab 16 gennaio 2027\n11:00\nOspiti\n2 adulti',{title:'Hotel Albergo Sintetico',location:'Via Esempio 1, Roma, Italia',start:'2027-01-14T15:00+01:00',notes:'Ospiti: 2 adulti'}],
+ ['easyJet','easyjet.com','From: FCO\nTo: LGW\nDeparture\n14 January 2027\n09:30\nArrival\n14 January 2027\n11:10\nFlight number: U21234\nPassengers: 2',{title:'Volo FCO → LGW',location:'FCO → LGW',start:'2027-01-14T09:30+01:00',notes:'Numero volo: U21234'}],
+ ['Italo','italotreno.it','Stazione partenza: Roma Termini\nStazione arrivo: Milano Centrale\nPartenza\n14 gennaio 2027\n09:30\nArrivo\n14 gennaio 2027\n12:40\nNumero treno: 9999\nClasse: Prima\nPosto: 12A',{title:'Treno Roma Termini → Milano Centrale',location:'Roma Termini → Milano Centrale',start:'2027-01-14T09:30+01:00',notes:'Posto: 12A'}],
+])test(`${supplier} extracts forwarded HTML table blocks without using mail/payment dates`,()=>{
+ const html='<p>From: '+supplier+' &lt;booking@'+domain+'&gt;</p><p>'+supplier+'</p><p>PNR: SYNTH2027</p>'+body.split('\n').map(v=>'<tr><td>'+v+'</td></tr>').join('')+'<p>Payment deadline: 2030-02-01T10:00Z</p>';
+ const c=parser.parseGmailMessage(message(html,{html:true,subject:'Fwd: Booking confirmation'}))[0];assert.equal(c.draft.provider,supplier);assert.equal(c.draft.title,expected.title);assert.equal(c.draft.location,expected.location);assert.equal(c.draft.startDate,expected.start);assert(c.draft.notes.includes(expected.notes));assert(c.draft.endDate.startsWith('2027-01-'));assert.equal(c.event,'confirmation');
+});
+
+test('itinerary failure rolls back the booking and import ledger together',async()=>{
+ const h=harness();h.db.activity.upsert=async()=>{throw Error('synthetic failure')};const r=await h.server.importGmail(h.user,{confirm:true,choices:[h.choice()]});assert.equal(r.results[0].status,'non importata');assert.equal(h.bookings.length,0);assert.equal(h.activities.length,0);assert.equal(h.ledger.length,0);
+});
+test('shared itinerary projection preserves offsets and stay limits on later manual booking sync',async()=>{
+ const h=harness(),c=parser.parseGmailMessage(syntheticStayMessage())[0];await h.server.importGmail(h.user,{confirm:true,choices:[h.choice({candidate:c})]});const b=h.bookings[0];assert.equal(h.activities[0].time,'dopo le 16:00');const sync=load('lib/booking-itinerary.ts',{});await sync.syncBookingActivities(h.db,'trip',[{...b,startDate:b.startDate.toISOString(),endDate:b.endDate.toISOString()}]);assert.equal(h.activities.length,2);assert.equal(h.activities[0].time,'dopo le 16:00');assert.equal(h.activities[1].time,'entro le 11:00');
+ b.startDate=new Date('2027-01-15T17:30Z');await sync.syncBookingActivities(h.db,'trip',[{...b,startDate:b.startDate.toISOString(),endDate:b.endDate.toISOString()}]);assert.equal(h.activities.length,2);assert.equal(h.activities[0].time,'dopo le 17:30');
+});
+test('provider parser leaves missing years and unknown airport zones incomplete',()=>{
+ const m=message('easyJet <booking@easyjet.com>\nBooking confirmation\nPNR: SYN2027\nFrom: XXX\nTo: YYY\nDeparture\n14 January 2027\n09:30\nArrival\n14 January\n11:00');const c=parser.parseGmailMessage(m)[0];assert.equal(c.timing.start.date,'2027-01-14');assert.equal(c.timing.start.offset,'');assert.equal(c.draft.startDate,'');assert.equal(c.timing.end.date,'');assert.equal(c.draft.endDate,'');
+});
+
+test('trip name alone can match an explicit regional alias, including a year suffix',()=>{const t={id:'north',name:'Norvegia 2027',city:'',country:'',startDate:'2027-01-01',endDate:'2027-01-20'};assert.equal(core.suggestTrip({...draft(),location:'Balsfjord kommune',destinationAirport:''},[t]),'north');});

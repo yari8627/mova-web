@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Mail, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { BookingDraft, Candidate } from "../../lib/gmail-core";
 import { inLodgingZone, mailInstant, splitMailInstant, stayTimeText, type MailTime } from "../../lib/gmail-dates";
 import { removeTripSnapshot } from "../../lib/trip-client-cache";
@@ -19,11 +19,11 @@ const kindNames = { flight: "Volo", hotel: "Alloggio", train: "Treno / bus / tra
 const eventNames = { confirmation: "Conferma", change: "Modifica comunicata", cancellation: "Cancellazione confermata", uncertain: "Stato incerto" };
 function timeSummary(t?: MailTime, instant = "") { const v = t || splitMailInstant(instant); return !v.date && v.raw ? `${v.raw} (da verificare)` : stayTimeText(v) || "Da completare"; }
 function warningsFor(row: Row) { return [...new Set(row.warnings)].filter(w=>!(w.startsWith("Inizio: verifica") && row.draft.startDate) && !(w.startsWith("Fine: verifica") && row.draft.endDate) && !(w === "Località da completare." && row.draft.location)); }
-export function GmailBookings({ tripId, onImported }: { tripId: string; onImported: () => Promise<void> }) {
+export function GmailBookings({ tripId, onImported }: { tripId: string; onImported: (result?: { count: number; tripIds: string[] }) => Promise<void> }) {
   const [open, setOpen] = useState(false), [connected, setConnected] = useState(false), [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [rows, setRows] = useState<Row[]>([]), [trips, setTrips] = useState<Trip[]>([]), [cursor, setCursor] = useState<string | null>(null);
-  const [from, setFrom] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 12); return dateString(d); });
+  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 2); return dateString(d); });
   const [to, setTo] = useState(() => dateString(new Date()));
   const [timeZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [examined, setExamined] = useState(0);
@@ -64,6 +64,7 @@ export function GmailBookings({ tripId, onImported }: { tripId: string; onImport
   async function search(next = false) {
     await run(async () => {
       const data = await api("search", "POST", { from, to, timeZone, ...(next && cursor ? { cursor } : {}) });
+      data.candidates = data.candidates.map((r: Row)=>({...r,tripId:r.suggestedTripId || undefined}));
       setRows(previous => next ? [...previous, ...data.candidates.filter((r: Row) => !previous.some(p => p.key === r.key))] : data.candidates);
       setTrips(data.trips); setCursor(data.nextCursor); setSearched(true);
       const total = (next ? examined : 0) + data.examined; setExamined(total);
@@ -103,13 +104,18 @@ export function GmailBookings({ tripId, onImported }: { tripId: string; onImport
       const updated = data.results.filter((r: { status: string }) => r.status === "aggiornata").length;
       const failed = data.results.filter((r: { status: string }) => r.status === "non importata");
       const skipped = rows.length - selected.length + data.results.filter((r: { status: string }) => r.status === "saltata: già presente").length;
-      setNotice(`Importate: ${imported} · Aggiornate: ${updated} · Saltate/escluse: ${skipped} · Non importate: ${failed.length}.${failed.length ? ` ${failed.map((r: { error?: string }) => r.error).filter(Boolean).join(" ")}` : ""}`);
-      await onImported();
+      setNotice(`${[...new Set(selected.map(r=>trips.find(t=>t.id===r.tripId)?.name).filter(Boolean))].join(", ")} · Importate: ${imported} · Aggiornate: ${updated} · Saltate/escluse: ${skipped} · Non importate: ${failed.length}.${failed.length ? ` ${failed.map((r: { error?: string }) => r.error).filter(Boolean).join(" ")}` : ""}`);
+      if (!failed.length && imported + updated > 0) {
+        const tripIds = [...new Set(selected.filter(r=>data.results.some((v:{key:string;status:string})=>v.key===r.key && ["importata","aggiornata"].includes(v.status))).map(r=>r.tripId!))];
+        await onImported({count:imported+updated,tripIds});
+        setOpen(false); setRows([]);
+      } else if (imported + updated > 0) await onImported();
     });
   }
   const selection = rows.filter(r => r.selected).length;
   return <>
-    <button ref={opener} type="button" className={`secondary-button ${styles.trigger}`} onClick={() => void begin()}><Mail size={18} aria-hidden="true" />Importa da Gmail</button>
+    <button ref={opener} type="button" className={`primary-button booking-add-button ${styles.trigger}`} onClick={() => void begin()}><img src="/brands/gmail.svg" width={20} height={20} alt="" aria-hidden="true" />Importa da Gmail</button>
+    {!open && notice && <p role="status" className={styles.notice}>{notice}</p>}
     {open && createPortal(<div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="gmail-title" className={styles.panel}>
       <div className={styles.inner}>
         <header className={styles.header}><div><p className="section-kicker">PRENOTAZIONI</p><h2 id="gmail-title">Importa da Gmail</h2><p>Cerca le conferme, verifica i dati e scegli cosa importare. NAMI salva soltanto dopo la tua conferma.</p></div><button type="button" className="icon-button" aria-label="Chiudi importazione Gmail" disabled={busy} onClick={() => { setRows([]); setOpen(false); }}><X /></button></header>
@@ -136,7 +142,7 @@ export function GmailBookings({ tripId, onImported }: { tripId: string; onImport
           </dl>
           {row.event !== "confirmation" && row.event !== "uncertain" && <p className={styles.warning}>{row.event === "cancellation" ? "Cancellazione confermata: questa email non è importabile. Verifica la prenotazione esistente." : "Modifica comunicata: scegli la prenotazione da aggiornare."}</p>}
           {warningsFor(row).length > 0 && <ul className={styles.warning}>{warningsFor(row).map(w=><li key={w}>{w}</li>)}</ul>}
-          <label className={styles.field}>Viaggio{row.suggestedTripId && !row.tripId && <small>Suggerito: {trips.find(t => t.id === row.suggestedTripId)?.name}; conferma la scelta.</small>}<select value={row.tripId || ""} onChange={e => edit(row.key, { tripId: e.target.value, bookingId: "" })}><option value="">Scegli un viaggio</option>{trips.map(t => <option key={t.id} value={t.id}>{t.name} · {t.city}</option>)}</select></label>
+          <label className={styles.field}>Viaggio{row.suggestedTripId && row.tripId === row.suggestedTripId && <small>Suggerito: {trips.find(t => t.id === row.suggestedTripId)?.name}; puoi modificarlo.</small>}<select value={row.tripId || ""} onChange={e => edit(row.key, { tripId: e.target.value, bookingId: "" })}><option value="">Scegli un viaggio</option>{trips.map(t => <option key={t.id} value={t.id}>{t.name} · {t.city}</option>)}</select></label>
           {row.matches.length > 0 && <label className={styles.field}>Possibile aggiornamento<select value={row.bookingId || ""} onChange={e => edit(row.key, { bookingId: e.target.value, tripId: row.matches.find(m => m.id === e.target.value)?.tripId || row.tripId })}><option value="">Scegli la prenotazione da aggiornare</option>{row.matches.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}</select><small>Confermando, sostituirai i dati della prenotazione selezionata.</small></label>}
           <details className={styles.details}><summary>Verifica e modifica</summary>
           <div className={styles.grid}>

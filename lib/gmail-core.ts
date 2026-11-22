@@ -83,9 +83,25 @@ export function candidateKeys(c: Candidate) {
   const fingerprint = gmailHash([referenceKey, d.type, normalize(d.title), normalize(d.provider), d.startDate, d.endDate, normalize(d.location)].join("|"));
   return { referenceKey, fingerprint };
 }
-export function suggestTrip(draft: BookingDraft, trips: { id: string; city: string; country: string; startDate: string; endDate: string }[]) {
+const geographicAliases = [
+  ["norvegia","norway","norge","tromso","balsfjord","tos"],
+  ["londra","london","lhr","lgw","stn","ltn"],
+  ["roma","rome","fco","cia"], ["milano","milan","mxp","lin","bgy"],
+  ["parigi","paris","cdg","ory"],
+];
+export function suggestTrip(draft: BookingDraft, trips: { id: string; name?: string; city: string; country: string; startDate: string; endDate: string }[]) {
   if (!draft.startDate) return null;
-  const day = draft.startDate.slice(0, 10), place = normalize(`${draft.location} ${draft.destinationAirport}`);
-  const matches = trips.filter(t => t.startDate.slice(0, 10) <= day && t.endDate.slice(0, 10) >= day && normalize(t.city).length > 2 && place.includes(normalize(t.city)));
-  return matches.length === 1 ? matches[0].id : null;
+  const start=draft.startDate.slice(0,10), end=(draft.endDate || draft.startDate).slice(0,10);
+  if (end < start) return null;
+  const words=`${draft.location} ${draft.destinationAirport}`.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/);
+  const place=normalize(`${draft.location} ${draft.destinationAirport}`);
+  const aliases=geographicAliases.filter(group=>group.some(word=>words.includes(word)));
+  const scored=trips.filter(t=>t.startDate.slice(0,10)<=start && t.endDate.slice(0,10)>=end).map(t=>{
+    const city=normalize(t.city),country=normalize(t.country),name=normalize(t.name || "");
+    const direct=city.length>2 && place.includes(city), nameMatch=name.length>3 && place.includes(name);
+    const nameWords=(t.name || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/);
+    const regional=aliases.some(group=>group.some(word=>city===word || nameWords.includes(word) || country===word));
+    return {id:t.id,score:direct?4:nameMatch?3:regional?2:country.length>3 && place.includes(country)?2:0};
+  }).filter(t=>t.score>=2).sort((a,b)=>b.score-a.score);
+  return scored.length && (scored.length===1 || scored[0].score>scored[1].score) ? scored[0].id : null;
 }

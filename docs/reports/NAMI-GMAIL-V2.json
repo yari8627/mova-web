@@ -1,0 +1,45 @@
+{
+  "scope": "P0/P1 candidate; P2 deferred",
+  "date": "2026-11-23",
+  "automated": {
+    "uniqueTestsPassed": 98,
+    "gmailParserAndServer": 66,
+    "gmailUI": 7,
+    "bookingDatetimeAuthProfile": 25,
+    "failures": 0,
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "browser": {
+    "mode": "actual GmailBookings component; synthetic local APIs only",
+    "widths": [
+      {
+        "width": 320,
+        "horizontalOverflow": 0
+      },
+      {
+        "width": 375,
+        "horizontalOverflow": 0
+      },
+      {
+        "width": 390,
+        "horizontalOverflow": 0
+      },
+      {
+        "width": 1440,
+        "horizontalOverflow": 0
+      }
+    ],
+    "confirmedImportReturnsAndShowsCount": true,
+    "noProductionWrites": true
+  },
+  "remaining": [
+    "textual PDF extraction and merge conflict handling",
+    "complete before/after changes and cancellation workflow"
+  ],
+  "production": {
+    "newMigrations": false,
+    "newSecrets": false,
+    "deploymentExecuted": false
+  }
+}

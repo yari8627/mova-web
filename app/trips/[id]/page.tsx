@@ -1,4 +1,5 @@
 "use client";
+import { TravelCategoryIcon, travelCategoryFromText } from "../../components/travel-category-icon";
 
 import { ItineraryPlacePhoto } from "../../components/itinerary-place-photo";
 import { useTripUserId } from "../../components/trip-session";
@@ -399,7 +400,7 @@ export default function TripPage() {
             <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.place ? "has-photo" : ""}`}>
-                {item.place && <ItineraryPlacePhoto target={item} country={trip.country} countryCode={countryIsoCode || ""} userId={userId} active={paneActive} />}
+                {item.bookingId && !item.placeId && !item.photoName && !item.photoUrl ? <figure className="activity-place-photo" aria-label="Prenotazione"><TravelCategoryIcon category={travelCategoryFromText(item.title, item.place)} size={32} /></figure> : item.place && <ItineraryPlacePhoto target={item} country={trip.country} countryCode={countryIsoCode || ""} userId={userId} active={paneActive} />}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
                     <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>

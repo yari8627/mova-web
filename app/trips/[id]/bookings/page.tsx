@@ -234,7 +234,8 @@ export default function BookingsPage() {
   const paneActive = useTripPaneActive();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const highlightedBookingId = useSearchParams().get("booking");
+  const searchParams = useSearchParams();
+  const highlightedBookingId = searchParams.get("booking");
   const { canManage } = useTripPermissions(id);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [showEditor, setShowEditor] = useState(false);
@@ -457,10 +458,11 @@ export default function BookingsPage() {
         <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
         </div>
-          {canManage && <GmailBookings tripId={id} onImported={async () => {
+          {canManage && <GmailBookings tripId={id} onImported={async (result) => {
             removeTripSnapshot(id);
             const remote = await fetchTripSnapshot(id);
             if (remote) { setBookings(remote.bookings); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); }
+            if (result?.tripIds.length === 1 && result.tripIds[0] !== id) router.push(`/trips/${encodeURIComponent(result.tripIds[0])}/bookings?gmailSaved=${result.count}`);
           }} />}
           {canManage && (
             <button
@@ -472,6 +474,7 @@ export default function BookingsPage() {
           )}
       </div>
       <section className="bookings-panel">
+        {Number(searchParams.get("gmailSaved")) > 0 && <p role="status">Prenotazioni salvate: {Number(searchParams.get("gmailSaved"))}.</p>}
         <div className="booking-overview">
           <div className="booking-kpi-total">
             <strong>{bookings.length}</strong>
@@ -529,7 +532,8 @@ export default function BookingsPage() {
                     </small>
                   )}
                   </div>
-                  {item.notes && <p className="booking-notes">{item.notes}</p>}
+                  {item.notes?.match(/^(?:Ospiti|Passeggeri):[^\n]+/im)?.[0] && <p className="booking-notes">{item.notes.match(/^(?:Ospiti|Passeggeri):[^\n]+/im)![0]}</p>}
+                  {item.notes && <details><summary>Dettagli e note</summary><p className="booking-notes">{item.notes.split("\n").filter(line=>!/(?:Orari origine Gmail|Limiti orari origine Gmail)/.test(line)).join("\n")}</p></details>}
 
                 </div>
                 {(canManage || Boolean(attachmentCounts[item.id])) && (

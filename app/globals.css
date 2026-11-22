@@ -1563,3 +1563,9 @@ body:has(.auth-loading) > .global-bottom-nav { display: none; }
 }
 
 .detail-grid.itinerary-only-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* Booking actions share the same primary button and wrap without horizontal scrolling. */
+.expenses-title:has(.booking-add-button) { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.expenses-title:has(.booking-add-button) > div:first-child { flex:1 1 260px; min-width:0; }
+.expenses-title .booking-add-button { min-height:48px; max-width:100%; min-width:0; }
+.activity-place-photo:has(> svg) { display:grid; place-items:center; background:var(--blue-soft); color:var(--blue); min-height:100px; border-radius:14px; }

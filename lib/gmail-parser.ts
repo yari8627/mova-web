@@ -97,6 +97,41 @@ function applyAirbnb(candidate: Candidate, details: ReturnType<typeof airbnbDeta
   d.notes = [d.notes, details.locality && `Località: ${details.locality}`, details.guests && `Ospiti: ${details.guests}`, airbnbTimingNotes(candidate.timing.start,candidate.timing.end)].filter(Boolean).join("\n");
   return candidate;
 }
+/** Read adjacent table cells/lines only inside explicitly labelled journey sections. */
+function providerDetails(candidate: Candidate, body: string, supplier: string, html = "") {
+  if (!["Booking.com","easyJet","Italo"].includes(supplier)) return candidate;
+  const lines=body.split(/\r?\n/).map(v=>v.replace(/\s+/g," ").trim()).filter(Boolean);
+  const sections=/^(?:check[ -]?in|check[ -]?out|arrivo|partenza|departure|arrival|data (?:di )?(?:partenza|arrivo)|hotel(?: name)?|nome hotel|struttura|indirizzo|address|ospiti|guests|passeggeri|passengers|numero volo|flight number|numero treno|train number|treno|classe|class|posto|seat|carrozza|coach|da|a|from|to|stazione (?:di )?(?:partenza|arrivo)|codice.*|booking.*|confirmation.*|numero.*|prezzo|price|totale|total|pagamento|payment|cancellazione gratuita|free cancellation)\s*[:：]?$/i;
+  function block(label: RegExp,max=5) {
+    const i=lines.findIndex(v=>label.test(v.replace(/[:：]$/, ""))); if(i<0)return "";
+    const out:string[]=[];
+    for(let n=i+1;n<lines.length && out.length<max;n++){if(sections.test(lines[n]) || /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ \-]{0,60}[:：]/.test(lines[n]) || /^(?:https?:|da:|from:|inviato:|sent:|oggetto:|subject:)/i.test(lines[n]))break;out.push(lines[n]);}
+    return out.join(" ").slice(0,500);
+  }
+  const d=candidate.draft;
+  if(supplier==="Booking.com") {
+    const headings=[...html.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(m=>htmlText(m[2]).replace(/\s+/g," ").trim());
+    d.title ||= headings.find(v=>v.length>2 && !/booking\.com|conferm|confirmation|prenotazione|reservation|grazie|thank|check[ -]?(?:in|out)/i.test(v)) || "";
+    d.title ||= block(/^(?:hotel(?: name)?|nome hotel|struttura|property(?: name)?)$/i,1);
+    d.location=block(/^(?:indirizzo|address)$/i,3) || d.location;
+  }
+  const locale=/\b(?:partenza|arrivo|ospiti|prenotazione|indirizzo|treno)\b/i.test(body)?"it":undefined;
+  const start=block(supplier==="Booking.com"?/^check[ -]?in$/i:/^(?:partenza|departure|data (?:di )?partenza)$/i);
+  const end=block(supplier==="Booking.com"?/^check[ -]?out$/i:/^(?:arrivo|arrival|data (?:di )?arrivo)$/i);
+  const timing=candidate.timing!;
+  if((!timing.start.date || !timing.start.time) && start && parseMailTime(start,locale).date)timing.start=parseMailTime(start,locale);
+  if((!timing.end.date || !timing.end.time) && end && parseMailTime(end,locale).date)timing.end=parseMailTime(end,locale);
+  const countryZone=/\b(?:Norway|Norvegia|Norge)\b/i.test(d.location)?"Europe/Oslo":/\b(?:Italy|Italia)\b/i.test(d.location)?"Europe/Rome":/\b(?:France|Francia)\b/i.test(d.location)?"Europe/Paris":"";
+  const stationZone=(station:string)=>/^(?:Roma|Milano|Napoli|Firenze|Bologna|Torino|Venezia|Salerno|Reggio Emilia|Brescia|Verona|Padova|Bari|Foggia|Ferrara|Rovigo|Udine|Trieste)\b/i.test(station)?"Europe/Rome":"";
+  const airportZones:Record<string,string>={FCO:"Europe/Rome",CIA:"Europe/Rome",MXP:"Europe/Rome",LIN:"Europe/Rome",BGY:"Europe/Rome",NAP:"Europe/Rome",VCE:"Europe/Rome",LGW:"Europe/London",LHR:"Europe/London",LTN:"Europe/London",STN:"Europe/London",CDG:"Europe/Paris",ORY:"Europe/Paris",TOS:"Europe/Oslo",OSL:"Europe/Oslo"};
+  const airportZone=(v:string)=>airportZones[v.match(/\b[A-Z]{3}\b/)?.[0] || ""] || "";
+  const zones=supplier==="Booking.com"?[countryZone,countryZone]:supplier==="Italo"?[stationZone(d.originAirport),stationZone(d.destinationAirport)]:[airportZone(d.originAirport),airportZone(d.destinationAirport)];
+  if(!timing.start.offset && zones[0])timing.start=inLodgingZone(timing.start,zones[0]);
+  if(!timing.end.offset && zones[1])timing.end=inLodgingZone(timing.end,zones[1]);
+  const extras=[["Ospiti","Guests|Ospiti"],["Passeggeri","Passengers|Passeggeri"],["Numero treno","Train number|Numero treno|Treno"],["Classe","Class|Classe|Ambiente"],["Posto","Seat|Posto"],["Carrozza","Coach|Carrozza"]];
+  for(const [label,names] of extras){const value=labelled(body,names);if(value && !d.notes.includes(`${label}: ${value}`))d.notes=[d.notes,`${label}: ${value}`].filter(Boolean).join("\n");}
+  return candidate;
+}
 function messageEvent(subject: string, body: string): Candidate["event"] {
   const eventLines = [subject.replace(/^(?:(?:fwd?|re|i|r):\s*)+/i,""), ...body.split(/\r?\n/).filter(line => !/cancellazione gratuita|free cancellation|cancellation polic|politic[ah] di cancell|termini|puoi|you can|gestisci|manage|how to|come (?:modific|annull)|rimborso (?:entro|fino)/i.test(line))].join("\n");
   if (/(?:prenotazione|reservation|booking|volo|flight|treno|train|biglietto|ticket)(?:\s+(?:n[°.]?\s*)?[A-Z0-9-]{4,20})?\s+(?:(?:has been|was|is|è stata|è stato|è)\s+)?(?:cancellat[aoeiy]|cancelled|canceled|annullat[ao])\b|(?:cancellazione|annullamento)\s+(?:confermat[ao]|della (?:tua )?prenotazione)|(?:cancellation confirmed|booking cancellation confirmation)/i.test(eventLines)) return "cancellation";
@@ -165,7 +200,7 @@ function structured(html: string[], warnings: string[]): Candidate[] {
         d.provider = name(r.airline) || name(r.provider) || name(v.provider);
         d.reference = [name(v.reservationNumber), name(v.reservationId), name(v.ticketNumber)].find(validReference) || "";
         if (!d.reference) return;
-        d.originAirport = name(r.departureAirport); d.destinationAirport = name(r.arrivalAirport);
+        d.originAirport = name(r.departureAirport) || name(r.departureStation); d.destinationAirport = name(r.arrivalAirport) || name(r.arrivalStation);
         const route = [name(r.departureStation) || name(r.departureBusStop) || name(v.pickupLocation) || d.originAirport, name(r.arrivalStation) || name(r.arrivalBusStop) || name(v.dropoffLocation) || d.destinationAirport].filter(Boolean).join(" → ");
         d.location = address(r.address) || name(r.location) || route;
         const timing = { start: parseMailTime(String(v.checkinTime || v.pickupTime || r.departureTime || r.startDate || "")), end: parseMailTime(String(v.checkoutTime || v.dropoffTime || r.arrivalTime || r.endDate || "")) };
@@ -189,13 +224,13 @@ export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const airbnb = supplier === "Airbnb" ? airbnbDetails(bodies) : null;
   // Only messages carrying an explicit booking/ticket identifier reach the preview.
   const known = structured(bodies.html, []);
-  if (known.length) return known.map(c => { const candidate = { ...c, event: c.event === "cancellation" ? c.event : event === "uncertain" ? c.event : event }; return finish(airbnb?applyAirbnb(candidate,airbnb):candidate,supplier,airbnb?.hasImages); });
+  if (known.length) return known.map(c => { const candidate = { ...c, event: c.event === "cancellation" ? c.event : event === "uncertain" ? c.event : event }; return finish(airbnb?applyAirbnb(candidate,airbnb):providerDetails(candidate,bodies.text,supplier,bodies.html.join("\n")),supplier,airbnb?.hasImages); });
   const reference = bookingReference(text);
   if (!reference) return [];
   const d = blank(), warnings = ["Controlla i dati estratti prima di confermare."];
   const matchType = /Airbnb|Booking.com/.test(supplier) ? "hotel" : /Italo|Trenitalia/.test(supplier) ? "train" : /easyJet|Ryanair|ITA Airways/.test(supplier) ? "flight" : /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
   if (!matchType) return [];
-  d.type = matchType; d.title = labelled(bodies.text, "Hotel(?: name)?|Struttura|Nome (?:struttura|alloggio|attività|escursione)|Alloggio|Accommodation|Property(?: name)?|Apartment|Appartamento|Activity|Attività|Excursion|Escursione");
+  d.type = matchType; d.title = labelled(bodies.text, "Hotel(?: name)?|Nome hotel|Struttura|Nome (?:struttura|alloggio|attività|escursione)|Alloggio|Accommodation|Property(?: name)?|Apartment|Appartamento|Activity|Attività|Excursion|Escursione");
   d.reference = reference;
   d.provider = supplier || labelled(bodies.text, "Airline|Compagnia|Operator|Operatore|Provider");
   d.location = geographical(bodies.text, "Location|Luogo|Address|Indirizzo|Destination|Destinazione|Località|City|Città");
@@ -217,5 +252,5 @@ export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const extra = [flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
   d.notes = extra.join("\n");
   const candidate = { draft: d, timing, warnings, event, flightNumber };
-  return [finish(airbnb?applyAirbnb(candidate,airbnb):candidate, supplier,airbnb?.hasImages)];
+  return [finish(airbnb?applyAirbnb(candidate,airbnb):providerDetails(candidate,bodies.text,supplier,bodies.html.join("\n")), supplier,airbnb?.hasImages)];
 }

@@ -18,7 +18,7 @@ export function travelCategoryFromText(type: string, text = ""): TravelCategory 
   const value = `${type} ${text}`.toLocaleLowerCase("it");
   if (/ristor|pranzo|cena|colazione|food|bar|caff[eè]/.test(value)) return "food";
   if (/volo|flight|aereo|airport/.test(value)) return "flight";
-  if (/hotel|alloggio|ostello|resort|apartment|soggiorno/.test(value)) return "hotel";
+  if (/hotel|alloggio|ostello|resort|apartment|soggiorno|check-in|check-out/.test(value)) return "hotel";
   if (/treno|train|rail/.test(value)) return "train";
   if (/traghetto|ferry|nave/.test(value)) return "ferry";
   if (/bus|pullman|coach/.test(value)) return "bus";

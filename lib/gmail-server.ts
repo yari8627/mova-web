@@ -1,3 +1,4 @@
+import { syncBookingActivities } from "./booking-itinerary";
 import { randomBytes, randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { Prisma } from "@prisma/client";
@@ -143,7 +144,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       const duplicate = ledger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
       const matches = bookings.filter(b => bookingMatch(candidate.draft, b) || ledger.some(r => r.booking_id === b.id));
       const proof: Preview = { userId: user.id, connectionId: c.id, accountHash: c.account_hash, sourceKey, ...keys, expires: Date.now() + 1800000, candidate, matches: matches.map(b => ({ id: b.id, tripId: b.tripId, hash: bookingHash(b) })) };
-      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip(candidate.draft, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId })) });
+      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId })) });
     }
   }
   // Disconnect/reconnect during a search invalidates the entire response.
@@ -200,6 +201,7 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
         if (!current || bookingHash(current) !== match.hash) throw new GmailError(409, "Prenotazione modificata nel frattempo. Ripeti la ricerca.");
         id = match.id; await tx.booking.update({ where: { id }, data });
       } else { await tx.booking.create({ data: { id, tripId: choice.tripId, ...data } }); }
+      await syncBookingActivities(tx, choice.tripId, [{ id, ...draft, notes: data.notes }]);
       await tx.$executeRawUnsafe('INSERT INTO nami_gmail.import_record(id,user_id,account_hash,source_key,fingerprint,reference_key,booking_id) VALUES($1::uuid,$2,$3,$4,$5,$6,$7)', randomUUID(), user.id, c.account_hash, proof.sourceKey, proof.fingerprint, proof.referenceKey, id);
       return choice.action === "update" ? "aggiornata" : "importata";
     }, { timeout: 10000 });
