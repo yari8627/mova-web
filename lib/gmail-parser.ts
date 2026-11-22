@@ -1,5 +1,5 @@
 import { BookingDraft, Candidate } from "./gmail-core";
-import { emptyMailTime, mailInstant, parseMailRange, parseMailTime } from "./gmail-dates";
+import { airbnbTimingNotes, emptyMailTime, inLodgingZone, mailInstant, parseMailRange, parseMailTime } from "./gmail-dates";
 
 export type GmailPart = { mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { data?: string; size?: number }; parts?: GmailPart[] };
 export type GmailMessage = { id: string; internalDate?: string; snippet?: string; payload?: GmailPart };
@@ -14,7 +14,7 @@ export function decodeHeader(value: string) {
 }
 export function header(part: GmailPart | undefined, name: string) { return decodeHeader(part?.headers?.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || ""); }
 export function htmlText(html: string) {
-  return clean(html.replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<(?:br|\/p|\/div|\/tr|\/td|\/th|\/li)\b[^>]*>/gi, "\n").replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|amp|lt|gt|quot|apos);|&#(?:x[0-9a-f]+|\d+);/gi, s => {
+  return clean(html.replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<(?:br|\/?(?:p|div|tr|td|th|li|h[1-6]|section|article))\b[^>]*>/gi, "\n").replace(/<[^>]*>/g, " ").replace(/&(?:nbsp|amp|lt|gt|quot|apos);|&#(?:x[0-9a-f]+|\d+);/gi, s => {
     const map: Record<string, string> = { "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
     if (map[s.toLowerCase()]) return map[s.toLowerCase()];
     const hex = s[2].toLowerCase() === "x", n = parseInt(s.slice(hex ? 3 : 2, -1), hex ? 16 : 10);
@@ -25,7 +25,7 @@ export function messageBodies(message: GmailMessage) {
   const plain: string[] = [], html: string[] = [];
   let visited = 0, bytes = 0;
   function walk(p: GmailPart, depth: number) {
-    if (depth > 15 || ++visited > 100 || p.filename) return;
+    if (depth > 15 || ++visited > 100 || (p.filename && !(p.mimeType === "message/rfc822" && p.parts?.length))) return;
     if (p.body?.data && ["text/plain", "text/html"].includes(p.mimeType || "")) {
       const data = Buffer.from(p.body.data, "base64url"); bytes += data.length;
       if (bytes > 1000000) return;
@@ -41,13 +41,13 @@ export function messageBodies(message: GmailMessage) {
 const blank = (): BookingDraft => ({ title: "", type: "activity", startDate: "", endDate: "", reference: "", provider: "", location: "", notes: "", originAirport: "", destinationAirport: "", status: "confirmed" });
 function readLine(text: string, names: string) { return text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || ""; }
 function labelled(text: string, names: string) {
-  return text.match(new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || "";
+  return text.match(new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)(?:\\r?\\n[ \\t]*)*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || "";
 }
 function place(value: string) {
   return /@|<|>|https?:|mime-version|content-type|(?:^|\s)(?:from|sent|subject|to|da|inviato|oggetto|a)\s*:/i.test(value) ? "" : value.trim();
 }
 function geographical(text: string, names: string) {
-  const pattern = new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)([^\\n]+)`, "gi");
+  const pattern = new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)(?:\\r?\\n[ \\t]*)*([^\\n]+)`, "gi");
   for (const m of text.matchAll(pattern)) { const value = place(m[1].trim().slice(0,500)); if (value) return value; }
   return "";
 }
@@ -63,6 +63,40 @@ function providerFor(message: GmailMessage, text: string) {
   }
   return "";
 }
+function airbnbDetails(bodies: ReturnType<typeof messageBodies>) {
+  // Prefer the HTML stay card to the shorter forward/plain-text summary.
+  const html = bodies.html.join("\n"), body = html ? htmlText(html) : bodies.text;
+  const lines = body.split(/\r?\n/).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
+  const sections = /^(?:check[ -]?in|check[ -]?out|indirizzo|address|ospiti|guests|codice (?:di )?conferma|confirmation code|dettagli (?:della )?prenotazione|reservation details|importo|amount|assistenza|help|regole della casa|house rules|indicazioni stradali|get directions)\s*[:：]?$/i;
+  function block(label: RegExp, max: number) {
+    const i = lines.findIndex(line=>label.test(line)); if (i<0) return "";
+    const out: string[] = [];
+    for(let n=i+1;n<lines.length && out.length<max;n++) { if (sections.test(lines[n]) || /indicazioni|directions|^(?:come arrivare|come raggiungere|getting there|how to get)/i.test(lines[n]) || /^https?:|^<https?:|^invita altri ospiti|^invite guests/i.test(lines[n])) break; out.push(lines[n]); }
+    return out.join(" ").slice(0,500);
+  }
+  const headings = [...html.matchAll(/<(h[1-6])\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(m=>({tag:m[1].toLowerCase(),text:htmlText(m[2]).replace(/\s+/g," ").trim(),index:m.index!}));
+  const checkinAt = html.search(/check[ -]?in/i);
+  const property = headings.filter(h=>h.tag === "h2" && (checkinAt<0 || h.index<checkinAt) && !/check[ -]?(?:in|out)|airbnb|prenotazione|reservation|indirizzo|address|ospiti|guests/i.test(h.text)).at(-1);
+  const hero = headings.filter(h=>h.tag === "h1" && (!property || h.index<property.index)).at(-1);
+  const locality = place(hero?.text.match(/\b(?:a|in|per)\s+([^.!?]+)[.!?]?$/i)?.[1] || "");
+  const address = place(block(/^(?:indirizzo|address)\s*[:：]?$/i,4));
+  const guestText = block(/^(?:ospiti|guests)\s*[:：]?$/i,2), guests = guestText.match(/\b\d+\s+(?:adulti?|adults?)(?:\s*(?:,|e|and)\s*\d+\s+(?:bambin[oi]|children|infants?))?/i)?.[0] || "";
+  const locale = /^(?:indirizzo|ospiti)\s*[:：]?$/im.test(body) ? "it" : undefined;
+  const start = parseMailTime(block(/^check[ -]?in\s*[:：]?$/i,6),locale), end = parseMailTime(block(/^check[ -]?out\s*[:：]?$/i,6),locale);
+  // The country is explicit in the lodging address; do not use the traveller's device zone.
+  const zone = /\b(?:Norway|Norvegia|Norge)\b/i.test(address) ? "Europe/Oslo" : "";
+  return { name:place(property?.text || ""), locality, address, guests, hasImages:/<img\b/i.test(html), start:zone?inLodgingZone(start,zone):start, end:zone?inLodgingZone(end,zone):end };
+}
+function applyAirbnb(candidate: Candidate, details: ReturnType<typeof airbnbDetails>) {
+  const d = candidate.draft;
+  if (details.name) d.title = details.name;
+  if (details.address || details.locality) d.location = details.address || details.locality;
+  candidate.timing ||= {start:parseMailTime(d.startDate),end:parseMailTime(d.endDate)};
+  if (details.start.date) candidate.timing.start = details.start;
+  if (details.end.date) candidate.timing.end = details.end;
+  d.notes = [d.notes, details.locality && `Località: ${details.locality}`, details.guests && `Ospiti: ${details.guests}`, airbnbTimingNotes(candidate.timing.start,candidate.timing.end)].filter(Boolean).join("\n");
+  return candidate;
+}
 function messageEvent(subject: string, body: string): Candidate["event"] {
   const eventLines = [subject.replace(/^(?:(?:fwd?|re|i|r):\s*)+/i,""), ...body.split(/\r?\n/).filter(line => !/cancellazione gratuita|free cancellation|cancellation polic|politic[ah] di cancell|termini|puoi|you can|gestisci|manage|how to|come (?:modific|annull)|rimborso (?:entro|fino)/i.test(line))].join("\n");
   if (/(?:prenotazione|reservation|booking|volo|flight|treno|train|biglietto|ticket)(?:\s+(?:n[°.]?\s*)?[A-Z0-9-]{4,20})?\s+(?:(?:has been|was|is|è stata|è stato|è)\s+)?(?:cancellat[aoeiy]|cancelled|canceled|annullat[ao])\b|(?:cancellazione|annullamento)\s+(?:confermat[ao]|della (?:tua )?prenotazione)|(?:cancellation confirmed|booking cancellation confirmation)/i.test(eventLines)) return "cancellation";
@@ -70,7 +104,7 @@ function messageEvent(subject: string, body: string): Candidate["event"] {
   if (/conferm[ao]|confermat[ao]|confirmed|confirmation|ricevuta|receipt|e-ticket|biglietto emesso/i.test(subject + "\n" + body)) return "confirmation";
   return "uncertain";
 }
-function finish(candidate: Candidate, supplier: string): Candidate {
+function finish(candidate: Candidate, supplier: string, hasImages = false): Candidate {
   const d = candidate.draft, w = candidate.warnings;
   if (supplier) d.provider = supplier;
   d.provider = place(d.provider);
@@ -79,7 +113,7 @@ function finish(candidate: Candidate, supplier: string): Candidate {
   const name = place(d.title.replace(/^(?:(?:fwd?|re):\s*)+/i,"").trim());
   d.title = d.type === "flight" ? (route ? `Volo ${route}` : "Volo da completare")
     : d.type === "train" ? (route ? `Treno ${route}` : "Trasporto da completare")
-    : d.type === "hotel" ? (name ? (supplier === "Airbnb" ? `${name}${d.location ? ` — ${d.location}` : ""}` : /^hotel\b/i.test(name) ? name : `Hotel ${name}`) : supplier === "Airbnb" ? "Soggiorno Airbnb da completare" : "Soggiorno da completare")
+    : d.type === "hotel" ? (name ? (supplier === "Airbnb" ? name : /^hotel\b/i.test(name) ? name : `Hotel ${name}`) : supplier === "Airbnb" ? "Soggiorno Airbnb da completare" : "Soggiorno da completare")
     : d.type === "activity" ? (name ? `${name}${d.location ? ` — ${d.location}` : ""}` : "Attività da completare") : "Noleggio auto da completare";
   d.title = d.title.slice(0,500);
   const timing = candidate.timing || { start: parseMailTime(d.startDate), end: parseMailTime(d.endDate) };
@@ -90,7 +124,11 @@ function finish(candidate: Candidate, supplier: string): Candidate {
     if (missing.length) w.push(`${label}: verifica ${missing.join(", ")}.${time.raw ? ` Testo originale: ${time.raw}` : ""}`);
   }
   d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
+  if (supplier === "Airbnb" && name && d.location && d.reference && d.startDate && d.endDate) {
+    const generic = w.indexOf("Controlla i dati estratti prima di confermare."); if (generic>=0) w.splice(generic,1);
+  }
   if (!d.location) w.push("Località da completare.");
+  if (supplier === "Airbnb" && hasImages && (!d.startDate || !d.endDate || !d.location || !name)) w.push("Alcune informazioni non sono state trovate nel testo. Eventuali dati presenti soltanto nelle immagini non vengono letti.");
   if (candidate.event === "uncertain") { d.status = "pending"; w.push("Stato incerto: verifica il contenuto prima di confermare."); }
   candidate.warnings = [...new Set(w)];
   return candidate;
@@ -104,7 +142,7 @@ function validReference(value: string) {
 function bookingReference(text: string) {
   const labels = "PNR|Booking (?:reference|code|number|ID)|Reservation (?:number|code|ID)|Confirmation (?:number|code)|(?:E-?ticket|Ticket) (?:number|no\\.?|code)|(?:Codice|Numero|N[°º.]?) (?:di )?(?:prenotazione|conferma|biglietto)|Codice PNR";
   // A labelled identifier is evidence; dates, flight numbers and generic numbers are not.
-  const pattern = new RegExp(`\\b(?:${labels})(?:[ \\t]*[:：#=][ \\t\\r\\n]*|[ \\t]*\\r?\\n[ \\t]*|[ \\t]+)([a-z0-9][a-z0-9./-]{3,63})(?=[ \\t]*(?:\\r?\\n|$)|[ \\t]*[;,])`, "gi");
+  const pattern = new RegExp(`\\b(?:${labels})(?:[ \\t]*[:：#=][ \\t\\r\\n]*|(?:[ \\t]*\\r?\\n[ \\t]*)+|[ \\t]+)([a-z0-9][a-z0-9./-]{3,63})(?=[ \\t]*(?:\\r?\\n|$)|[ \\t]*[;,])`, "gi");
   for (const match of text.matchAll(pattern)) if (validReference(match[1])) return match[1];
   return "";
 }
@@ -148,9 +186,10 @@ function structured(html: string[], warnings: string[]): Candidate[] {
 export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const subject = header(message.payload, "Subject"), bodies = messageBodies(message), text = `${subject}\n${bodies.text}`;
   const event = messageEvent(subject, bodies.text), supplier = providerFor(message, bodies.text);
+  const airbnb = supplier === "Airbnb" ? airbnbDetails(bodies) : null;
   // Only messages carrying an explicit booking/ticket identifier reach the preview.
   const known = structured(bodies.html, []);
-  if (known.length) return known.map(c => finish({ ...c, event: c.event === "cancellation" ? c.event : event === "uncertain" ? c.event : event }, supplier));
+  if (known.length) return known.map(c => { const candidate = { ...c, event: c.event === "cancellation" ? c.event : event === "uncertain" ? c.event : event }; return finish(airbnb?applyAirbnb(candidate,airbnb):candidate,supplier,airbnb?.hasImages); });
   const reference = bookingReference(text);
   if (!reference) return [];
   const d = blank(), warnings = ["Controlla i dati estratti prima di confermare."];
@@ -177,5 +216,6 @@ export function parseGmailMessage(message: GmailMessage): Candidate[] {
   const flightNumber = readLine(bodies.text, "Flight number|Numero volo|Flight|Volo");
   const extra = [flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
   d.notes = extra.join("\n");
-  return [finish({ draft: d, timing, warnings, event, flightNumber }, supplier)];
+  const candidate = { draft: d, timing, warnings, event, flightNumber };
+  return [finish(airbnb?applyAirbnb(candidate,airbnb):candidate, supplier,airbnb?.hasImages)];
 }

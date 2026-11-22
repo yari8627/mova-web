@@ -1,4 +1,4 @@
-export type MailTime = { date: string; time: string; offset: string; raw: string };
+export type MailTime = { date: string; time: string; offset: string; raw: string; qualifier?: "after" | "before"; zone?: string };
 export const emptyMailTime = (raw = ""): MailTime => ({ date: "", time: "", offset: "", raw });
 export function calendarDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
@@ -26,9 +26,9 @@ export function receivedRange(from: string, to: string, timeZone: string) {
   const tomorrow = new Date(Date.parse(`${to}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   return { start: midnight(from), end: midnight(tomorrow) };
 }
-const months = ["gennaio january jan", "febbraio february feb", "marzo march mar", "aprile april apr", "maggio may", "giugno june jun", "luglio july jul", "agosto august aug", "settembre september sep sept", "ottobre october oct", "novembre november nov", "dicembre december dec"];
+const months = ["gennaio gen january jan", "febbraio february feb", "marzo march mar", "aprile april apr", "maggio mag may", "giugno giu june jun", "luglio lug july jul", "agosto ago august aug", "settembre set september sep sept", "ottobre ott october oct", "novembre november nov", "dicembre dic december dec"];
 const monthWords = months.flatMap(m => m.split(" ")).sort((a,b) => b.length-a.length).join("|");
-export function parseMailTime(raw: string): MailTime {
+export function parseMailTime(raw: string, locale?: "it" | "en"): MailTime {
   const out = emptyMailTime(raw.trim().slice(0, 160));
   const iso = raw.match(/\b\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)\b/);
   if (iso) { const value = splitMailInstant(iso[0]); if (!calendarDate(value.date)) value.date = ""; if (!/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?$/.test(value.time)) value.time = ""; return value; }
@@ -36,8 +36,8 @@ export function parseMailTime(raw: string): MailTime {
   if (m) out.date = `${m[1]}-${m[2]}-${m[3]}`;
   else {
     m = raw.match(/\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b/);
-    if (m && +m[1] > 12) out.date = `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
-    else if (m && +m[2] > 12) out.date = `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+    if (m && (+m[1] > 12 || locale === "it")) out.date = `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+    else if (m && (+m[2] > 12 || locale === "en")) out.date = `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
     else {
       const named = raw.toLowerCase().match(new RegExp(`\\b(\\d{1,2})\\s+(${monthWords})\\.?\\s*,?\\s*(\\d{4})\\b`));
       const english = raw.toLowerCase().match(new RegExp(`\\b(${monthWords})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(\\d{4})\\b`));
@@ -46,9 +46,33 @@ export function parseMailTime(raw: string): MailTime {
   }
   if (!calendarDate(out.date)) out.date = "";
   const time = raw.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/); if (time) out.time = `${time[1].padStart(2,"0")}:${time[2]}`;
+  if (/(?:dopo|a partire da|dalle|after)\s+(?:(?:le|the)\s+)?(?:ore\s+)?\d{1,2}:\d{2}/i.test(raw)) out.qualifier = "after";
+  else if (/(?:entro|prima delle|fino alle|before|by)\s+(?:(?:le|the)\s+)?(?:ore\s+)?\d{1,2}:\d{2}/i.test(raw)) out.qualifier = "before";
   const offset = raw.match(/(?:UTC|GMT)?\s*([+-](?:0\d|1[0-4]):[0-5]\d)\b/); if (offset) out.offset = offset[1];
   if (/\b(?:UTC|GMT)\b/.test(raw) && !out.offset) out.offset = "Z";
   return out;
+}
+// Derive an offset only from a known lodging zone and a unique local civil time.
+export function inLodgingZone(value: MailTime, zone: string): MailTime {
+  if (!calendarDate(value.date) || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value.time) || value.offset) return value;
+  const target = Date.parse(`${value.date}T${value.time}:00Z`);
+  const fmt = new Intl.DateTimeFormat("en-GB", { timeZone: zone, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit", hourCycle:"h23" });
+  function local(epoch: number) { const p = Object.fromEntries(fmt.formatToParts(epoch).map(x=>[x.type,x.value])); return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second); }
+  let guess = target;
+  for(let i=0;i<6;i++) { const delta = target-local(guess); if (!delta) break; guess += delta; }
+  if (local(guess) !== target || [-7200000,-3600000,3600000,7200000].some(delta=>local(guess+delta)===target)) return value;
+  const minutes = (target-guess)/60000, absolute = Math.abs(minutes);
+  return { ...value, zone, offset: `${minutes<0?"-":"+"}${String(Math.floor(absolute/60)).padStart(2,"0")}:${String(absolute%60).padStart(2,"0")}` };
+}
+export function stayTimeText(value: MailTime) {
+  return [value.date ? value.date.split("-").reverse().join("/") : "", value.time ? `${value.qualifier === "after" ? "dopo le " : value.qualifier === "before" ? "entro le " : ""}${value.time}` : "", value.zone ? `${value.zone} (${value.offset})` : value.offset].filter(Boolean).join(" · ");
+}
+export function airbnbTimingNotes(start: MailTime, end: MailTime) {
+  return [["Check-in Airbnb",start],["Check-out Airbnb",end]].filter(([,value])=>(value as MailTime).qualifier).map(([label,value])=>`${label}: ${stayTimeText(value as MailTime)}`).join("\n");
+}
+export function airbnbStayNoteLabel(notes: string, which: "start" | "end") {
+  const prefix = which === "start" ? "Check-in Airbnb: " : "Check-out Airbnb: ";
+  return notes.split("\n").find(line=>line.startsWith(prefix))?.slice(prefix.length, prefix.length+300) || "";
 }
 export function parseMailRange(raw: string): { start: MailTime; end: MailTime } | null {
   const m = raw.match(new RegExp(`\\b(\\d{1,2})\\s*[–—-]\\s*(\\d{1,2})\\s+(${monthWords})(?:\\s+(\\d{4}))?\\b`,"i"));

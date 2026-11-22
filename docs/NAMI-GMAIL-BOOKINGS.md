@@ -102,7 +102,7 @@ node node_modules/typescript/bin/tsc --noEmit
 node node_modules/next/dist/bin/next build
 ```
 
-80/80 test PASS: 52 Gmail, 3 UI Gmail e 25 regressioni Prenotazioni/auth/profilo.
+86/86 test PASS: 57 Gmail, 4 UI Gmail e 25 regressioni Prenotazioni/auth/profilo.
 I test usano email sintetiche, Google simulato e un adapter transazionale in memoria;
 non attestano l'esecuzione della proposta su PostgreSQL reale né il comportamento
 di due connessioni PostgreSQL. La build non applica SQL e non richiede Gmail.
@@ -158,6 +158,46 @@ informazioni senza contesto affidabile restano da completare. PDF non analizzati
 Il rilascio proposto è fix forward sullo stesso progetto, senza nuove migrazioni
 o configurazioni. Dopo autorizzazione: fast-forward del solo commit candidato,
 Ready/alias Production e prova manuale del filtro e dell'anteprima prima di importare.
+
+## Fix Airbnb e filtri iPhone, successivo a c79b22d
+
+La baseline Production è `c79b22d`; questo fix resta locale fino all'autorizzazione.
+
+Causa verificata sulla struttura del messaggio, senza archiviarne il contenuto:
+le parti plain/HTML disponibili sono entro i limiti già esistenti e non richiedono
+OCR. Il nome è in un h2 senza etichetta, mentre check-in/out sono blocchi di tabella
+con righe vuote tra giorno della settimana, data completa e limite orario. Il parser
+precedente leggeva una sola riga e non riconosceva l'abbreviazione italiana `gen`.
+L'indirizzo era seguito da un comando di navigazione, da escludere dall'estrazione.
+
+- Priorità alla scheda HTML Airbnb: titolo della struttura esatto, località dal
+  titolo del soggiorno, indirizzo completo nel campo geografico esistente, ospiti
+  nelle note e riepilogo. Conservate le alternative MIME; processati anche forward
+  message/rfc822 già disponibili come albero MIME, senza aprire PDF o immagini.
+- Confini di paragrafi, titoli e celle preservati; campi su righe separate e mesi
+  IT abbreviati riconosciuti. Il timestamp del forward non fornisce anno o date.
+- `dopo le ore` e `entro le ore` restano limiti, visibili in anteprima e nelle note
+  salvate. Il rendering delle sole prenotazioni Airbnb importate usa tali limiti,
+  senza mostrarli come appuntamenti esatti. Nessuna modifica al modello database.
+- Con Norway/Norvegia/Norge esplicito nell'indirizzo si deriva Europe/Oslo tramite
+  Intl; non si usa il fuso del dispositivo come fuso dell'alloggio. Ore locali
+  inesistenti/ambigue e indirizzi senza una zona riconosciuta non vengono presunti.
+  Il messaggio verificato fornisce dati sufficienti: nessun nuovo passaggio manuale.
+- Se i dati sono completi, nessun avviso generico di dati mancanti. Se mancano dati
+  testuali ed esistono immagini, viene spiegato che i pixel non vengono analizzati.
+- Filtri in griglia con minmax(0,1fr), min-width:0, max-width:100% e border-box;
+  sotto 420 px sono sovrapposti. Contenimento dei due input e assenza di overflow
+  verificati a 320, 375 e 390 px nel browser; Safari su iPhone fisico non attestato.
+
+Prova reale del parser esclusivamente in memoria: nove riscontri positivi su nome,
+operatore, indirizzo, località, ospiti, riferimento, check-in, check-out e assenza
+di avvisi. Nessuna email reale salvata in file, fixture o log; nei test e screenshot
+sono usati nomi, indirizzi, date e riferimenti interamente sintetici.
+
+86 test, typecheck e build PASS. Regressioni incluse per MIME/forward, HTML Airbnb,
+ora legale, semantica dopo/entro, salvataggio e deduplicazione. Filtro di ricezione,
+cursori, chiavi dedupe, OAuth, database e notifiche restano invariati. Nessun push,
+deploy o importazione reale autorizzati da questa preparazione.
 
 `gmail.readonly` è restricted. Testing con utenti autorizzati e distribuzione
 pubblica hanno requisiti diversi: verifica dell'app/scope e, ove applicabile per

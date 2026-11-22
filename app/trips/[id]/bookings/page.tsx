@@ -2,6 +2,7 @@
 
 import { TripHeader } from "../../../components/trip-header";
 import { GmailBookings } from "../../../components/gmail-bookings";
+import { airbnbStayNoteLabel } from "../../../../lib/gmail-dates";
 import styles from "./bookings.module.css";
 import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
@@ -512,9 +513,9 @@ export default function BookingsPage() {
                   <div className={styles.metadata}>
                   {item.type === "flight" && item.originAirport && item.destinationAirport && bookingTitle(item) !== `${airportCode(item.originAirport)} → ${airportCode(item.destinationAirport)}` && <span className={styles.flightRoute}>{airportCode(item.originAirport)} → {airportCode(item.destinationAirport)}</span>}
                   {item.startDate && <span>
-                    <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{dateLabel(item.startDate)}
+                    <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{item.type === "hotel" && item.source === "email" && item.provider === "Airbnb" ? airbnbStayNoteLabel(item.notes || "","start") || dateLabel(item.startDate) : dateLabel(item.startDate)}
                   </span>}
-                  {item.endDate && item.endDate !== item.startDate && <span><CalendarDays size={14} /> {item.type === "hotel" ? "Check-out · " : "Fino al · "}{dateLabel(item.endDate)}</span>}
+                  {item.endDate && item.endDate !== item.startDate && <span><CalendarDays size={14} /> {item.type === "hotel" ? "Check-out · " : "Fino al · "}{item.type === "hotel" && item.source === "email" && item.provider === "Airbnb" ? airbnbStayNoteLabel(item.notes || "","end") || dateLabel(item.endDate) : dateLabel(item.endDate)}</span>}
                   {(item.location || (item.type === "flight" && (item.originAirport || item.destinationAirport))) && (
                     <span>
                       <MapPin size={14} /> {item.location || [item.originAirport, item.destinationAirport].filter(Boolean).join(" → ")}

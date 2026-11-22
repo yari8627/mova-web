@@ -6,7 +6,7 @@ import { currentUser } from "./auth";
 import { tripAccess } from "./trip-access";
 import { BookingDraft, Candidate, GmailCipher, GmailError, GMAIL_SCOPE, candidateKeys, gmailConfig, gmailHash, normalize, suggestTrip, validateDraft } from "./gmail-core";
 import { GmailMessage, header, parseGmailMessage } from "./gmail-parser";
-import { receivedRange } from "./gmail-dates";
+import { airbnbTimingNotes, inLodgingZone, receivedRange, splitMailInstant } from "./gmail-dates";
 
 type User = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
 type Connection = { user_id: string; id: string; account_hash: string; ciphertext: string };
@@ -160,6 +160,14 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
     if (proof.userId !== user.id || proof.expires < Date.now() || proof.candidate.event === "cancellation") throw new GmailError(409, "Anteprima scaduta o cancellazione: ripeti la ricerca e verifica manualmente.");
     const draft = validateDraft(choice.draft);
     if (proof.candidate.timing?.end.raw && !draft.endDate) throw new GmailError(400, "Completa anche la data, l’ora e il fuso di fine presenti nell’email.");
+    if (proof.candidate.draft.provider === "Airbnb" && proof.candidate.draft.type === "hotel" && proof.candidate.timing && (proof.candidate.timing.start.qualifier || proof.candidate.timing.end.qualifier)) {
+      const preserve = (which: "start" | "end", instant: string) => {
+        const time = splitMailInstant(instant), source = proof.candidate.timing![which], zone = source.zone;
+        return { ...time, qualifier: source.qualifier, ...(zone && inLodgingZone({...time,offset:""},zone).offset === time.offset ? {zone} : {}) };
+      };
+      draft.notes = [draft.notes.split("\n").filter(line=>!/^Check-(?:in|out) Airbnb:/.test(line)).join("\n"),airbnbTimingNotes(preserve("start",draft.startDate),preserve("end",draft.endDate))].filter(Boolean).join("\n");
+      if (draft.notes.length>4000) throw new GmailError(400,"Note troppo lunghe: riduci il testo mantenendo i limiti orari del soggiorno.");
+    }
     return { choice, proof, draft };
   }).sort((a, b) => (a.proof.referenceKey || a.proof.fingerprint).localeCompare(b.proof.referenceKey || b.proof.fingerprint));
   const results: { key: string; status: string; error?: string }[] = [];
@@ -181,7 +189,8 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
       const matches = existing.filter(b => bookingMatch(draft, b) || rows.some(r => r.booking_id === b.id));
       if (choice.action === "create" && (proof.candidate.event === "change" || matches.length || proof.matches.length || rows.length)) throw new GmailError(409, "Possibile aggiornamento o duplicato: seleziona la prenotazione da aggiornare.");
       let id: string = randomUUID();
-      const sourceTimes = `Orari origine Gmail: ${draft.startDate}${draft.endDate ? ` → ${draft.endDate}` : ""}`;
+      const boundedStay = proof.candidate.timing?.start.qualifier || proof.candidate.timing?.end.qualifier;
+      const sourceTimes = `${boundedStay ? "Limiti orari origine Gmail (non appuntamenti)" : "Orari origine Gmail"}: ${draft.startDate}${draft.endDate ? ` → ${draft.endDate}` : ""}`;
       const data = { ...draft, notes: [draft.notes, sourceTimes].filter(Boolean).join("\n"), startDate: new Date(draft.startDate), endDate: draft.endDate ? new Date(draft.endDate) : null, source: "email", importedAt: new Date() };
       if (choice.action === "update") {
         const match = proof.matches.find(b => b.id === choice.bookingId && b.tripId === choice.tripId);

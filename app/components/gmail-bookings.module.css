@@ -10,7 +10,11 @@
 .header p { color:var(--text-secondary); margin:0; max-width:650px; }
 .tools { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin:20px 0; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:18px; }
 .field { display:flex; flex-direction:column; gap:6px; font-size:13px; font-weight:600; min-width:0; }
-.field input,.field select,.field textarea { width:100%; min-width:0; border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#f8f5ef; color:var(--navy); font:inherit; font-size:16px; font-weight:400; min-height:44px; }
+.field input,.field select,.field textarea { box-sizing:border-box; width:100%; max-width:100%; min-width:0; min-inline-size:0; border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#f8f5ef; color:var(--navy); font:inherit; font-size:16px; font-weight:400; min-height:44px; }
+.dateFilters { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; box-sizing:border-box; min-width:0; max-width:100%; }
+.dateFilters > * { min-width:0; max-width:100%; }
+.dateFilters input[type="date"] { inline-size:100%; max-inline-size:100%; }
+.dateFilters input[type="date"]::-webkit-date-and-time-value { min-width:0; text-align:left; }
 .field textarea { resize:vertical; }
 .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .wide { grid-column:1/-1; }
@@ -36,3 +40,5 @@
 .timefields small { display:block; overflow-wrap:anywhere; margin-top:10px; }
 .warning li { margin:4px 0 4px 16px; }
 @media(max-width:600px) { .panel{padding-left:16px;padding-right:16px;} .grid{grid-template-columns:1fr;} .tools{padding:14px;} .tools .field{flex:1 1 130px;} .card{padding:16px;} .footer button{width:100%;} }
+@media(max-width:600px) { .dateFilters{grid-template-columns:repeat(2,minmax(0,1fr));} .dateFilters > button{grid-column:1/-1;} }
+@media(max-width:420px) { .dateFilters{grid-template-columns:minmax(0,1fr);} }

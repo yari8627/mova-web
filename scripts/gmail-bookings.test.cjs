@@ -61,7 +61,7 @@ test('SQL proposal enforces persistent unique keys and isolates private tables w
 
 test('forwarded Airbnb separates platform, property and location from mail headers',()=>{
  const m=message('Da: Airbnb <automated@airbnb.com>\nData: lun 9 nov 2026 alle 22:18\nA: traveller@example.invalid\nAirbnb\nCodice di conferma: HMABC12345\nAlloggio: Casa Aurora\nIndirizzo: Via Esempio 12, Tromsø, Norvegia\nCheck-in: 7 gennaio 2027\nCheck-out: 9 gennaio 2027\nCancellazione gratuita\nGestisci prenotazione e modifica i tuoi dettagli',{subject:'Fwd: Viaggio confermato: ricevuta Airbnb'});
- const c=parser.parseGmailMessage(m)[0];assert.equal(c.draft.provider,'Airbnb');assert.equal(c.draft.title,'Casa Aurora — Via Esempio 12, Tromsø, Norvegia');assert.equal(c.draft.location,'Via Esempio 12, Tromsø, Norvegia');assert.equal(c.timing.start.date,'2027-01-07');assert.equal(c.timing.end.date,'2027-01-09');assert.equal(c.draft.startDate,'');assert.equal(c.event,'confirmation');assert(!c.draft.location.includes('@'));assert(c.warnings.some(w=>w.includes('ora, fuso')));
+ const c=parser.parseGmailMessage(m)[0];assert.equal(c.draft.provider,'Airbnb');assert.equal(c.draft.title,'Casa Aurora');assert.equal(c.draft.location,'Via Esempio 12, Tromsø, Norvegia');assert.equal(c.timing.start.date,'2027-01-07');assert.equal(c.timing.end.date,'2027-01-09');assert.equal(c.draft.startDate,'');assert.equal(c.event,'confirmation');assert(!c.draft.location.includes('@'));assert(c.warnings.some(w=>w.includes('ora, fuso')));
 });
 test('Booking HTML supplies property and stay dates, even with a plain text alternative',()=>{
  const m=message('Booking.com confirmation');m.payload={mimeType:'multipart/alternative',headers:[{name:'Subject',value:'Re: Conferma prenotazione'}],parts:[m.payload,message('<p>Booking.com https://www.booking.com/</p><table><tr><td>Codice prenotazione</td><td>123456789</td></tr><tr><td>Hotel</td><td>Casa Esempio</td></tr><tr><td>Check-in</td><td>January 7, 2027</td></tr><tr><td>Check-out</td><td>January 9, 2027</td></tr><tr><td>Address</td><td>London, UK</td></tr></table><p>Free cancellation. Manage your booking.</p>',{html:true}).payload]};
@@ -119,3 +119,29 @@ test('known timestamp seconds are retained and partial checkout cannot silently 
 });
 
 test('receipt search rejects missing time zone instead of silently treating local dates as UTC',async()=>{const h=harness();await assert.rejects(()=>h.server.searchGmail(h.user,{from:'2026-11-22',to:'2026-11-22'}),e=>e.status===400);assert.equal(h.bookings.length,0);});
+
+const airbnbHtml=require('./fixtures/gmail-airbnb.cjs');
+function syntheticStayMessage(){return message(airbnbHtml(),{html:true,subject:'Fwd: Viaggio confermato: ricevuta per le date 14–16 gennaio'});}
+test('Airbnb HTML heading, table date blocks, address and guests are fully extracted without subject guessing',()=>{
+ const m=syntheticStayMessage(),c=parser.parseGmailMessage(m)[0];assert.equal(c.draft.title,"Il rifugio dell'alba");assert.equal(c.draft.provider,'Airbnb');assert.equal(c.draft.reference,'HMTEST2027');assert.equal(c.draft.location,'Exampleveien 42, 9000 Tromsø, Norway');assert(c.draft.notes.includes('Località: Comune Esempio'));assert(c.draft.notes.includes('Ospiti: 3 adulti'));
+ assert.equal(c.timing.start.date,'2027-01-14');assert.equal(c.timing.start.time,'16:00');assert.equal(c.timing.start.qualifier,'after');assert.equal(c.timing.end.date,'2027-01-16');assert.equal(c.timing.end.time,'11:00');assert.equal(c.timing.end.qualifier,'before');assert.equal(c.timing.start.zone,'Europe/Oslo');assert.equal(c.draft.startDate,'2027-01-14T16:00+01:00');assert.equal(c.draft.endDate,'2027-01-16T11:00+01:00');assert.equal(c.event,'confirmation');assert.equal(c.warnings.length,0);
+ assert(c.draft.notes.includes('dopo le 16:00'));assert(c.draft.notes.includes('entro le 11:00'));assert(parser.messageBodies(m).html[0].length>35000);
+});
+test('forwarded MIME alternatives prefer the complete HTML stay over a short plain summary',()=>{
+ const m=message('Airbnb <automated@airbnb.com>\nCodice di conferma: HMTEST2027\nSoggiorno: 14–16 gennaio',{subject:'Fwd: Conferma prenotazione'});const plain=m.payload;m.payload={mimeType:'multipart/alternative',headers:plain.headers,parts:[plain,syntheticStayMessage().payload]};const c=parser.parseGmailMessage(m)[0];assert.equal(c.draft.title,"Il rifugio dell'alba");assert.equal(c.timing.start.date,'2027-01-14');assert.equal(c.warnings.length,0);assert(!c.draft.location.includes('@'));
+ const nested={id:'forwarded',payload:{mimeType:'multipart/mixed',headers:plain.headers,parts:[{mimeType:'message/rfc822',filename:'forwarded.eml',parts:[syntheticStayMessage().payload]},{mimeType:'application/pdf',filename:'ignored.pdf',body:{data:Buffer.from('not used').toString('base64url')}}]}};assert.equal(parser.parseGmailMessage(nested)[0].draft.reference,'HMTEST2027');
+});
+test('Airbnb local dates use their explicit language and address zone; DST gaps and folds are not guessed',()=>{
+ assert.equal(dates.parseMailTime('gio 07/01/2027 dopo le ore 15:00','it').date,'2027-01-07');assert.equal(dates.parseMailTime('07/01/2027 15:00').date,'');
+ const summer=dates.inLodgingZone(dates.parseMailTime('14 luglio 2027 dopo le ore 16:00'),'Europe/Oslo');assert.equal(summer.offset,'+02:00');assert.equal(summer.qualifier,'after');
+ for(const raw of ['28 marzo 2027 02:30','31 ottobre 2027 02:30'])assert.equal(dates.inLodgingZone(dates.parseMailTime(raw),'Europe/Oslo').offset,'');
+ const noCountry=message(airbnbHtml().replace('Norway','Country not specified'),{html:true});const c=parser.parseGmailMessage(noCountry)[0];assert.equal(c.timing.start.offset,'');assert.equal(c.draft.startDate,'');assert(c.warnings.some(w=>w.includes('fuso')));
+});
+test('Airbnb data in image pixels is never invented or read as text',()=>{
+ const c=parser.parseGmailMessage(message('<p>Airbnb &lt;automated@airbnb.com&gt;</p><p>Codice conferma: HMIMAGE123</p><img src="cid:synthetic-confirmation" alt="Il nome nascosto e gli orari sono nei pixel"/>',{html:true}))[0];assert.equal(c.draft.title,'Soggiorno Airbnb da completare');assert.equal(c.draft.startDate,'');assert(c.warnings.some(w=>w.includes('immagini')));
+});
+test('confirmed Airbnb imports retain after/before semantics in notes and remain deduplicated',async()=>{
+ const h=harness(),m=syntheticStayMessage();h.setFetch(async u=>new Response(JSON.stringify(u.includes('/messages?')?{messages:[{id:m.id}]}:m)));const p=await h.server.searchGmail(h.user,{from:'2026-11-22',to:'2026-12-02',timeZone:'Europe/Rome'}),row=p.candidates[0];const choice={token:row.token,tripId:'trip',action:'create',draft:{...row.draft,notes:'Ospiti: 3 adulti'}};
+ await h.server.importGmail(h.user,{confirm:true,choices:[choice]});assert.equal(h.bookings.length,1);const notes=h.bookings[0].notes;assert(notes.includes('dopo le 16:00'));assert(notes.includes('entro le 11:00'));assert(notes.includes('non appuntamenti'));assert(dates.airbnbStayNoteLabel(notes,'start').includes('dopo le'));assert(dates.airbnbStayNoteLabel(notes,'end').includes('entro le'));
+ const again=await h.server.importGmail(h.user,{confirm:true,choices:[choice]});assert.equal(again.results[0].status,'saltata: già presente');assert.equal(h.bookings.length,1);
+});
