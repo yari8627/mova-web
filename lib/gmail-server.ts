@@ -6,7 +6,7 @@ import { prisma } from "./prisma";
 import { currentUser } from "./auth";
 import { tripAccess } from "./trip-access";
 import { BookingDraft, Candidate, GmailCipher, GmailError, GMAIL_SCOPE, candidateKeys, gmailConfig, gmailHash, normalize, suggestTrip, validateDraft } from "./gmail-core";
-import { GmailMessage, header, parseGmailMessage } from "./gmail-parser";
+import { GmailMessage, header, parseGmailMessage, type ParseDiagnostics } from "./gmail-parser";
 import { airbnbTimingNotes, inLodgingZone, receivedRange, splitMailInstant } from "./gmail-dates";
 
 type User = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
@@ -42,8 +42,8 @@ async function manageTrip(tripId: string, user: User) {
   if (!access.allowed || access.role === "participant") throw new GmailError(403, "Non puoi importare in questo viaggio.");
   return access.trip;
 }
-export async function gmailTrips(user: User) {
-  return prisma.trip.findMany({ where: { OR: [{ ownerId: user.id }, { participants: { some: { email: { equals: user.email, mode: "insensitive" }, status: "confirmed", role: "co-organizer" } } }] }, select: { id: true, name: true, city: true, country: true, startDate: true, endDate: true }, orderBy: { startDate: "desc" } });
+export async function gmailTrips(user: User, db: Pick<Prisma.TransactionClient, "trip"> = prisma) {
+  return db.trip.findMany({ where: { OR: [{ ownerId: user.id }, { participants: { some: { email: { equals: user.email, mode: "insensitive" }, status: "confirmed", role: "co-organizer" } } }] }, select: { id: true, name: true, city: true, country: true, startDate: true, endDate: true }, orderBy: { startDate: "desc" } });
 }
 export async function gmailStatus(user: User) {
   gmailConfig(); const cipher = new GmailCipher();
@@ -125,8 +125,9 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
   const list = await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
-  const candidates: { key: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string }[] }[] = [];
+  const candidates: { key: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
+  const excluded: Partial<Record<NonNullable<ParseDiagnostics["excluded"]>, number>> = {};
   const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
     catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++; return null; } throw e; }
@@ -137,19 +138,22 @@ export async function searchGmail(user: User, input: { from: string; to: string;
     const received = typeof message.internalDate === "string" && /^\d{1,16}$/.test(message.internalDate) ? Number(message.internalDate) : NaN;
     if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++; continue; }
     examined++;
-    const parsed = parseGmailMessage(message);
+    const diagnostics: ParseDiagnostics = {};
+    const parsed = parseGmailMessage(message,diagnostics);
+    if(diagnostics.excluded) excluded[diagnostics.excluded]=(excluded[diagnostics.excluded] || 0)+1;
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
-      const ledger = await prisma.$queryRawUnsafe<{ booking_id: string | null; source_key: string; fingerprint: string }[]>('SELECT booking_id,source_key,fingerprint FROM nami_gmail.import_record WHERE user_id=$1 AND account_hash=$2 AND (source_key=$3 OR fingerprint=$4 OR (reference_key=$5 AND reference_key<>\'\'))', user.id, c.account_hash, sourceKey, keys.fingerprint, keys.referenceKey);
-      const duplicate = ledger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
-      const matches = bookings.filter(b => bookingMatch(candidate.draft, b) || ledger.some(r => r.booking_id === b.id));
+      const ledger = await prisma.$queryRawUnsafe<{ booking_id: string | null; source_key: string; fingerprint: string; booking_exists: boolean }[]>('SELECT booking_id,source_key,fingerprint,EXISTS(SELECT 1 FROM public."Booking" b WHERE b.id=booking_id) AS booking_exists FROM nami_gmail.import_record WHERE user_id=$1 AND account_hash=$2 AND (source_key=$3 OR fingerprint=$4 OR (reference_key=$5 AND reference_key<>\'\'))', user.id, c.account_hash, sourceKey, keys.fingerprint, keys.referenceKey);
+      const liveLedger = ledger.filter(r => r.booking_exists);
+      const duplicate = liveLedger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
+      const matches = bookings.filter(b => bookingMatch(candidate.draft, b) || liveLedger.some(r => r.booking_id === b.id));
       const proof: Preview = { userId: user.id, connectionId: c.id, accountHash: c.account_hash, sourceKey, ...keys, expires: Date.now() + 1800000, candidate, matches: matches.map(b => ({ id: b.id, tripId: b.tripId, hash: bookingHash(b) })) };
-      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId })) });
+      candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId, tripName: trips.find(t => t.id === b.tripId)?.name || "Viaggio" })) });
     }
   }
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { candidates, trips, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { candidates, trips, excluded, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {
@@ -161,12 +165,12 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
     if (proof.userId !== user.id || proof.expires < Date.now() || proof.candidate.event === "cancellation") throw new GmailError(409, "Anteprima scaduta o cancellazione: ripeti la ricerca e verifica manualmente.");
     const draft = validateDraft(choice.draft);
     if (proof.candidate.timing?.end.raw && !draft.endDate) throw new GmailError(400, "Completa anche la data, l’ora e il fuso di fine presenti nell’email.");
-    if (proof.candidate.draft.provider === "Airbnb" && proof.candidate.draft.type === "hotel" && proof.candidate.timing && (proof.candidate.timing.start.qualifier || proof.candidate.timing.end.qualifier)) {
+    if (["Airbnb","Booking.com"].includes(proof.candidate.draft.provider) && proof.candidate.draft.type === "hotel" && proof.candidate.timing && (proof.candidate.timing.start.qualifier || proof.candidate.timing.end.qualifier)) {
       const preserve = (which: "start" | "end", instant: string) => {
         const time = splitMailInstant(instant), source = proof.candidate.timing![which], zone = source.zone;
         return { ...time, qualifier: source.qualifier, ...(zone && inLodgingZone({...time,offset:""},zone).offset === time.offset ? {zone} : {}) };
       };
-      draft.notes = [draft.notes.split("\n").filter(line=>!/^Check-(?:in|out) Airbnb:/.test(line)).join("\n"),airbnbTimingNotes(preserve("start",draft.startDate),preserve("end",draft.endDate))].filter(Boolean).join("\n");
+      draft.notes = [draft.notes.split("\n").filter(line=>!/^Check-(?:in|out) (?:Airbnb|Booking\.com):/.test(line)).join("\n"),airbnbTimingNotes(preserve("start",draft.startDate),preserve("end",draft.endDate),proof.candidate.draft.provider)].filter(Boolean).join("\n");
       if (draft.notes.length>4000) throw new GmailError(400,"Note troppo lunghe: riduci il testo mantenendo i limiti orari del soggiorno.");
     }
     return { choice, proof, draft };
@@ -184,11 +188,15 @@ export async function importGmail(user: User, input: { confirm: boolean; choices
       await tx.$queryRawUnsafe('SELECT id FROM public."Participant" WHERE "tripId"=$1 FOR SHARE', choice.tripId);
       const trip = await tx.trip.findUnique({ where: { id: choice.tripId }, include: { participants: true } });
       if (!trip || !(trip.ownerId === user.id || trip.participants.some(p => p.email.toLowerCase() === user.email.toLowerCase() && p.status === "confirmed" && p.role === "co-organizer"))) throw new GmailError(403, "Permesso viaggio non più valido.");
+      // Reclaim only this user's matching orphan mappings, under the same import lock.
+      // Manual booking sync keeps IDs but replaces rows; never delete a mapping to a live booking.
+      await tx.$executeRawUnsafe('DELETE FROM nami_gmail.import_record r WHERE user_id=$1 AND account_hash=$2 AND (source_key=$3 OR fingerprint=$4 OR (reference_key=$5 AND reference_key<>\'\')) AND NOT EXISTS(SELECT 1 FROM public."Booking" b WHERE b.id=r.booking_id)', user.id, c.account_hash, proof.sourceKey, proof.fingerprint, proof.referenceKey);
       const rows = await tx.$queryRawUnsafe<{ source_key: string; fingerprint: string; booking_id: string | null }[]>('SELECT source_key,fingerprint,booking_id FROM nami_gmail.import_record WHERE user_id=$1 AND account_hash=$2 AND (source_key=$3 OR fingerprint=$4 OR (reference_key=$5 AND reference_key<>\'\'))', user.id, c.account_hash, proof.sourceKey, proof.fingerprint, proof.referenceKey);
       if (rows.some(r => r.source_key === proof.sourceKey || r.fingerprint === proof.fingerprint)) return "saltata: già presente";
-      const existing = await tx.booking.findMany({ where: { tripId: choice.tripId } });
+      const accessibleTrips = await gmailTrips(user,tx);
+      const existing = await tx.booking.findMany({ where: { tripId: { in: accessibleTrips.map(t => t.id) } } });
       const matches = existing.filter(b => bookingMatch(draft, b) || rows.some(r => r.booking_id === b.id));
-      if (choice.action === "create" && (proof.candidate.event === "change" || matches.length || proof.matches.length || rows.length)) throw new GmailError(409, "Possibile aggiornamento o duplicato: seleziona la prenotazione da aggiornare.");
+      if (choice.action === "create" && (proof.candidate.event === "change" || matches.length || rows.length)) throw new GmailError(409, "Possibile aggiornamento o duplicato: seleziona la prenotazione da aggiornare.");
       let id: string = randomUUID();
       const boundedStay = proof.candidate.timing?.start.qualifier || proof.candidate.timing?.end.qualifier;
       const sourceTimes = `${boundedStay ? "Limiti orari origine Gmail (non appuntamenti)" : "Orari origine Gmail"}: ${draft.startDate}${draft.endDate ? ` → ${draft.endDate}` : ""}`;

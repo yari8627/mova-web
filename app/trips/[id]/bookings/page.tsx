@@ -236,6 +236,13 @@ export default function BookingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const highlightedBookingId = searchParams.get("booking");
+  const [gmailSaved,setGmailSaved]=useState("");
+  useEffect(()=>{
+    const count=Number(searchParams.get("gmailSaved"));
+    if(count>0 && Number.isInteger(count) && count<=50) setGmailSaved(`Prenotazioni salvate: ${count}.`);
+    if(searchParams.has("gmailSaved")){const url=new URL(window.location.href);url.searchParams.delete("gmailSaved");window.history.replaceState(null,"",`${url.pathname}${url.search}${url.hash}`);}
+  },[searchParams]);
+  useEffect(()=>{if(!paneActive)setGmailSaved("");},[paneActive]);
   const { canManage } = useTripPermissions(id);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [showEditor, setShowEditor] = useState(false);
@@ -458,7 +465,7 @@ export default function BookingsPage() {
         <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
         </div>
-          {canManage && <GmailBookings tripId={id} onImported={async (result) => {
+          {canManage && <GmailBookings active={paneActive} tripId={id} onImported={async (result) => {
             removeTripSnapshot(id);
             const remote = await fetchTripSnapshot(id);
             if (remote) { setBookings(remote.bookings); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); }
@@ -474,7 +481,7 @@ export default function BookingsPage() {
           )}
       </div>
       <section className="bookings-panel">
-        {Number(searchParams.get("gmailSaved")) > 0 && <p role="status">Prenotazioni salvate: {Number(searchParams.get("gmailSaved"))}.</p>}
+        {gmailSaved && <p role="status">{gmailSaved}</p>}
         <div className="booking-overview">
           <div className="booking-kpi-total">
             <strong>{bookings.length}</strong>
@@ -516,9 +523,9 @@ export default function BookingsPage() {
                   <div className={styles.metadata}>
                   {item.type === "flight" && item.originAirport && item.destinationAirport && bookingTitle(item) !== `${airportCode(item.originAirport)} → ${airportCode(item.destinationAirport)}` && <span className={styles.flightRoute}>{airportCode(item.originAirport)} → {airportCode(item.destinationAirport)}</span>}
                   {item.startDate && <span>
-                    <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{item.type === "hotel" && item.source === "email" && item.provider === "Airbnb" ? airbnbStayNoteLabel(item.notes || "","start") || dateLabel(item.startDate) : dateLabel(item.startDate)}
+                    <CalendarDays size={14} /> {item.type === "hotel" ? "Check-in · " : ""}{item.type === "hotel" && item.source === "email" && ["Airbnb","Booking.com"].includes(item.provider || "") ? airbnbStayNoteLabel(item.notes || "","start",item.provider || "Airbnb") || dateLabel(item.startDate) : dateLabel(item.startDate)}
                   </span>}
-                  {item.endDate && item.endDate !== item.startDate && <span><CalendarDays size={14} /> {item.type === "hotel" ? "Check-out · " : "Fino al · "}{item.type === "hotel" && item.source === "email" && item.provider === "Airbnb" ? airbnbStayNoteLabel(item.notes || "","end") || dateLabel(item.endDate) : dateLabel(item.endDate)}</span>}
+                  {item.endDate && item.endDate !== item.startDate && <span><CalendarDays size={14} /> {item.type === "hotel" ? "Check-out · " : "Fino al · "}{item.type === "hotel" && item.source === "email" && ["Airbnb","Booking.com"].includes(item.provider || "") ? airbnbStayNoteLabel(item.notes || "","end",item.provider || "Airbnb") || dateLabel(item.endDate) : dateLabel(item.endDate)}</span>}
                   {(item.location || (item.type === "flight" && (item.originAirport || item.destinationAirport))) && (
                     <span>
                       <MapPin size={14} /> {item.location || [item.originAirport, item.destinationAirport].filter(Boolean).join(" → ")}

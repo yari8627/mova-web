@@ -67,11 +67,11 @@ export function inLodgingZone(value: MailTime, zone: string): MailTime {
 export function stayTimeText(value: MailTime) {
   return [value.date ? value.date.split("-").reverse().join("/") : "", value.time ? `${value.qualifier === "after" ? "dopo le " : value.qualifier === "before" ? "entro le " : ""}${value.time}` : "", value.zone ? `${value.zone} (${value.offset})` : value.offset].filter(Boolean).join(" · ");
 }
-export function airbnbTimingNotes(start: MailTime, end: MailTime) {
-  return [["Check-in Airbnb",start],["Check-out Airbnb",end]].filter(([,value])=>(value as MailTime).qualifier).map(([label,value])=>`${label}: ${stayTimeText(value as MailTime)}`).join("\n");
+export function airbnbTimingNotes(start: MailTime, end: MailTime, provider = "Airbnb") {
+  return [[`Check-in ${provider}`,start],[`Check-out ${provider}`,end]].filter(([,value])=>(value as MailTime).qualifier).map(([label,value])=>`${label}: ${stayTimeText(value as MailTime)}`).join("\n");
 }
-export function airbnbStayNoteLabel(notes: string, which: "start" | "end") {
-  const prefix = which === "start" ? "Check-in Airbnb: " : "Check-out Airbnb: ";
+export function airbnbStayNoteLabel(notes: string, which: "start" | "end", provider = "Airbnb") {
+  const prefix = which === "start" ? `Check-in ${provider}: ` : `Check-out ${provider}: `;
   return notes.split("\n").find(line=>line.startsWith(prefix))?.slice(prefix.length, prefix.length+300) || "";
 }
 export function parseMailRange(raw: string): { start: MailTime; end: MailTime } | null {

@@ -18,7 +18,7 @@ export async function syncBookingActivities(tx: Prisma.TransactionClient, id: st
           const eventDate = new Date(event.value); const calendarDate = Date.parse(`${event.value.slice(0,10)}T00:00:00Z`);
           const day = Math.max(1, Math.round((calendarDate - tripStart) / 86400000) + 1);
           const clock = event.value.match(/T(\d{2}:\d{2})/)?.[1] || eventDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-          const qualifier = type === "hotel" ? String(item.notes || "").split("\n").find(line=>line.startsWith(`Check-${event.event === "start" ? "in" : "out"} Airbnb:`))?.match(/dopo le|entro le/)?.[0] : "";
+          const qualifier = type === "hotel" ? String(item.notes || "").split("\n").find(line=>["Airbnb","Booking.com"].some(provider=>line.startsWith(`Check-${event.event === "start" ? "in" : "out"} ${provider}:`)))?.match(/dopo le|entro le/)?.[0] : "";
           const time = [qualifier,clock].filter(Boolean).join(" ");
           const activityId = `booking-${bookingId}-${event.event}`;
           await tx.activity.upsert({ where: { id: activityId }, update: { day, title: eventTitle(event.event), place: eventPlace(event.event), time, bookingId, bookingEvent: event.event }, create: { sortOrder: nextOrder++, id: activityId, tripId: id, bookingId, bookingEvent: event.event, day, title: eventTitle(event.event), place: eventPlace(event.event), time, done: false } });
