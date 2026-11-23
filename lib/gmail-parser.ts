@@ -21,7 +21,7 @@ export function htmlText(html: string) {
     return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : "";
   }));
 }
-export function redactBookingPin(text: string) { return text.replace(/\b(?:codice\s+)?PIN(?:\s+code)?\s*[:：#]?\s*\d{3,12}\b/gi,"PIN: [riservato]"); }
+export function redactBookingPin(text: string) { return text.replace(/\b(?:codice\s+)?PIN(?:\s+code)?\s*[:：#]?\s*\d(?:[.\s\u200b\u200c\u200d\ufeff]*\d){2,11}\b/gi,"PIN: [riservato]"); }
 export function messageBodies(message: GmailMessage) {
   const plain: string[] = [], html: string[] = [];
   let visited = 0, bytes = 0;
@@ -184,6 +184,12 @@ function validReference(value: string) {
     && !/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(reference);
 }
 function bookingReference(text: string, supplier = "") {
+  if (supplier === "Booking.com") {
+    // Booking's short label is provider-scoped, never a generic numeric fallback.
+    const normalized=text.replace(/[\u00a0\u202f]/g," ").replace(/[\u200b\u200c\u200d\ufeff]/g,"");
+    const short=normalized.match(/(?:^|\n)[ \t]*conferma(?:[ \t\r\n]*[:：#=][ \t\r\n]*|[ \t]*\r?\n[ \t]*)(\d(?:[. \t\r\n]*\d){7,13})(?![. \t\r\n]*\d)(?=[ \t]*(?:\r?\n|$|PIN\b|[;,]))/i);
+    if(short && !/^(?:\d{4}[.\s]+\d{2}[.\s]+\d{2}|\d{2}[.\s]+\d{2}[.\s]+\d{4})$/.test(short[1].trim())) return short[1].replace(/\D/g, "");
+  }
   const labels = "PNR|Booking (?:reference|code|number|ID)|Reservation (?:number|code|ID)|Confirmation (?:number|code)|(?:E-?ticket|Ticket) (?:number|no\\.?|code)|(?:Codice|Numero|N[°º.]?) (?:di )?(?:prenotazione|conferma|biglietto)|Codice PNR";
   // A labelled identifier is evidence; dates, flight numbers and generic numbers are not.
   const pattern = new RegExp(`\\b(?:${labels})(?:[ \\t]*[:：#=][ \\t\\r\\n]*|(?:[ \\t]*\\r?\\n[ \\t]*)+|[ \\t]+)([a-z0-9][a-z0-9./-]{3,63})(?=[ \\t]*(?:\\r?\\n|$)|[ \\t]*[;,])`, "gi");

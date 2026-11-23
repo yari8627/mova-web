@@ -25,8 +25,6 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [success, setSuccess] = useState("");
   const [counts,setCounts]=useState({excluded:0,duplicates:0});
-  const [targetAvailable,setTargetAvailable]=useState(false);
-  const [trace,setTrace]=useState<{target:boolean;stage:string;reason:string} | null>(null);
   const [rows, setRows] = useState<Row[]>([]), [trips, setTrips] = useState<Trip[]>([]), [cursor, setCursor] = useState<string | null>(null);
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 2); return dateString(d); });
   const [to, setTo] = useState(() => dateString(new Date()));
@@ -35,7 +33,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const [searched, setSearched] = useState(false);
   const dialog = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
   const busyRef = useRef(busy); busyRef.current = busy;
-  useEffect(() => { if (!active) { setTrace(null); setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
+  useEffect(() => { if (!active) { setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
   useEffect(() => {
     const u = new URL(window.location.href), status = u.searchParams.get("gmail");
     if (status === "connected" || status === "denied") {
@@ -63,10 +61,10 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     return () => { document.body.style.overflow = old; document.removeEventListener("keydown", key); previous?.focus(); };
   }, [open]);
   async function run(fn: () => Promise<void>) { if (busy) return; setBusy(true); setError(""); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Operazione non riuscita."); } finally { setBusy(false); } }
-  function cancel() { setCounts({excluded:0,duplicates:0});setTrace(null); setRows([]); setCursor(null); setExamined(0); setSearched(false); setNotice(""); setError(""); setSuccess(""); setOpen(false); }
+  function cancel() { setCounts({excluded:0,duplicates:0}); setRows([]); setCursor(null); setExamined(0); setSearched(false); setNotice(""); setError(""); setSuccess(""); setOpen(false); }
   async function begin() {
-    setCounts({excluded:0,duplicates:0});setTrace(null);setOpen(true); setSuccess(""); setRows([]); setNotice(""); setSearched(false); setCursor(null); setExamined(0);
-    await run(async () => { const status = await api("connection"); setTargetAvailable(status.targetDiagnosticAvailable===true); setConnected(status.connected); setEmail(status.email || ""); });
+    setCounts({excluded:0,duplicates:0});setOpen(true); setSuccess(""); setRows([]); setNotice(""); setSearched(false); setCursor(null); setExamined(0);
+    await run(async () => { const status = await api("connection"); setConnected(status.connected); setEmail(status.email || ""); });
   }
   async function search(next = false) {
     await run(async () => {
@@ -78,7 +76,6 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       const total = (next ? examined : 0) + data.examined; setExamined(total);
       const discarded=Object.values(data.excluded || {}).reduce((sum:number,value)=>sum+Number(value),0);
       setCounts({excluded:(next?counts.excluded:0)+discarded,duplicates:(next?counts.duplicates:0)+Number(data.duplicates || 0)+(next?rows.length:0)+data.candidates.length-merged.length});
-      setTrace(null);
       setNotice(`${merged.length} conferme riconosciute · ${total} email esaminate complessive.`);
     });
   }
@@ -101,7 +98,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       <label className={styles.field}>Fuso dell’orario<input value={value.offset} placeholder="Es. +01:00 oppure Z" maxLength={6} onChange={e=>update("offset",e.target.value)} /></label>
     </div>{value.qualifier && <small>Questo è un limite orario del soggiorno, non un appuntamento.</small>}{value.zone && <small>Ora locale dell’alloggio: {value.zone}, ricavata dall’indirizzo.</small>}{value.raw && <small>Testo originale: {value.raw}</small>}</fieldset>;
   }
-  function resetSearch() { setCounts({excluded:0,duplicates:0});setTrace(null); setCursor(null); setRows([]); setNotice(""); setSearched(false); setExamined(0); }
+  function resetSearch() { setCounts({excluded:0,duplicates:0}); setCursor(null); setRows([]); setNotice(""); setSearched(false); setExamined(0); }
   async function confirm() {
     await run(async () => {
       const selected = rows.filter(r => r.selected);
@@ -168,7 +165,6 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         </article>)}</fieldset>}
         {searched && counts.duplicates>0 && <p>{counts.duplicates} conferme ripetute raggruppate.</p>}
         {searched && counts.excluded>0 && <details className={styles.details}><summary>Email non riconosciute ({counts.excluded})</summary><p>Questi messaggi non contengono informazioni sufficienti per proporre una prenotazione. Non saranno importati.</p></details>}
-        {targetAvailable && <details className={styles.details}><summary>Diagnostica temporanea</summary><button type="button" disabled={busy} onClick={()=>void run(async()=>{setTrace(null);const data=await api("search","POST",{from:"2026-11-21",to:"2026-11-23",timeZone:"Europe/Rome",diagnoseTarget:true});setTrace(data.targetDiagnostic);})}>Diagnostica mirata Booking</button>{trace && <p>target: {String(trace.target)} · fase: {trace.stage} · motivo: {trace.reason}</p>}</details>}
         {searched && <div className={styles.footer}>{cursor && <button className="secondary-button" disabled={busy} onClick={() => void search(true)}>Esamina altre email</button>}<button className="primary-button" disabled={busy || !selection || selection > 50} onClick={() => void confirm()}>Conferma importazione ({selection})</button><button className="secondary-button" disabled={busy} onClick={() => { cancel(); }}>Annulla</button></div>}
       </div>
     </div>, document.body)}

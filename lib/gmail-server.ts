@@ -1,4 +1,3 @@
-import { gmailDiagnosticTrace, BOOKING_TARGET_QUERY, targetDiagnostic } from "./gmail-diagnostics";
 import { syncBookingActivities } from "./booking-itinerary";
 import { randomBytes, randomUUID } from "crypto";
 import { cookies } from "next/headers";
@@ -48,7 +47,7 @@ export async function gmailTrips(user: User, db: Pick<Prisma.TransactionClient, 
 }
 export async function gmailStatus(user: User) {
   gmailConfig(); const cipher = new GmailCipher();
-  try { const c = await connection(user.id); const tokens = cipher.open<Tokens>(c.ciphertext, connectionContext(user.id, c.id)); return { connected: true, email: tokens.email, ...(gmailDiagnosticTrace(user.id,process.env).enabled?{targetDiagnosticAvailable:true}:{}) }; }
+  try { const c = await connection(user.id); const tokens = cipher.open<Tokens>(c.ciphertext, connectionContext(user.id, c.id)); return { connected: true, email: tokens.email }; }
   catch (e) { if (e instanceof GmailError && e.status === 409) return { connected: false }; throw e; }
 }
 export async function connectGmail(user: User, tripId: string) {
@@ -84,15 +83,15 @@ export async function callbackGmail(user: User, request: Request) {
   await prisma.$executeRawUnsafe('INSERT INTO nami_gmail.connection(user_id,id,account_hash,ciphertext) VALUES($1,$2::uuid,$3,$4) ON CONFLICT(user_id) DO UPDATE SET id=excluded.id,account_hash=excluded.account_hash,ciphertext=excluded.ciphertext,updated_at=now()', user.id, id, gmailHash(profile.sub), cipher.seal(tokens, connectionContext(user.id, id)));
   return `${config.origin}/trips/${encodeURIComponent(tripId)}/bookings?gmail=connected`;
 }
-async function gmailAccess(user: User, persistRefresh = true) {
+async function gmailAccess(user: User) {
   const config = gmailConfig(), cipher = new GmailCipher();
   return prisma.$transaction(async tx => {
-    const c = await connection(user.id, tx, persistRefresh ? "FOR UPDATE" : ""), tokens = cipher.open<Tokens>(c.ciphertext, connectionContext(user.id, c.id));
+    const c = await connection(user.id, tx, "FOR UPDATE"), tokens = cipher.open<Tokens>(c.ciphertext, connectionContext(user.id, c.id));
     if (tokens.expires < Date.now() + 60000) {
       const t = await googleJson<{ access_token?: string; expires_in?: number; refresh_token?: string }>("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ refresh_token: tokens.refresh, client_id: config.clientId, client_secret: config.clientSecret, grant_type: "refresh_token" }) });
       if (!t.access_token || !Number.isFinite(t.expires_in)) throw new GmailError(409, "Ricollega Gmail per continuare.");
       tokens.access = t.access_token; tokens.refresh = t.refresh_token || tokens.refresh; tokens.expires = Date.now() + Math.min(Number(t.expires_in), 86400) * 1000;
-      if(persistRefresh) await tx.$executeRawUnsafe('UPDATE nami_gmail.connection SET ciphertext=$1,updated_at=now() WHERE user_id=$2 AND id=$3::uuid', cipher.seal(tokens, connectionContext(user.id, c.id)), user.id, c.id);
+      await tx.$executeRawUnsafe('UPDATE nami_gmail.connection SET ciphertext=$1,updated_at=now() WHERE user_id=$2 AND id=$3::uuid', cipher.seal(tokens, connectionContext(user.id, c.id)), user.id, c.id);
     }
     return { connection: c, tokens };
   }, { timeout: 20000 });
@@ -121,92 +120,57 @@ function bookingMatch(d: BookingDraft, b: BookingRow, updating=false) {
   }
   return sameReference || !!(d.startDate && d.startDate.slice(0,10)===b.startDate.toISOString().slice(0,10) && normalize(d.title)===normalize(b.title));
 }
-export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string; diagnoseTarget?: boolean }) {
-  const targeted=input.diagnoseTarget===true;
-  if(targeted && !gmailDiagnosticTrace(user.id,process.env).enabled) throw new GmailError(403,"Diagnostica non disponibile.");
-  if(targeted && (input.from!=="2026-11-21" || input.to!=="2026-11-23" || input.timeZone!=="Europe/Rome" || input.cursor)) throw new GmailError(400,"Periodo diagnostico non valido.");
+export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string }) {
+  if ("diagnoseTarget" in input) throw new GmailError(400, "Diagnostica temporanea rimossa. Ricarica NAMI.");
   const from = input.from, to = input.to;
   if (typeof from !== "string" || typeof to !== "string" || !/^\d{4}-\d\d-\d\d$/.test(from) || !/^\d{4}-\d\d-\d\d$/.test(to) || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || new Date(from).toISOString().slice(0, 10) !== from || new Date(to).toISOString().slice(0, 10) !== to || from > to || Date.parse(to) - Date.parse(from) > 366 * 86400000 * 5) throw new GmailError(400, "Periodo non valido (massimo cinque anni).");
   const timeZone = input.timeZone;
   let range: { start: number; end: number };
   try { if (typeof timeZone !== "string" || timeZone.length > 100) throw Error(); range = receivedRange(from, to, timeZone); } catch { throw new GmailError(400, "Periodo o fuso di ricezione non valido."); }
-  const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user,!targeted), trips = await gmailTrips(user);
+  const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user), trips = await gmailTrips(user);
   const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[] }>(input.cursor, `cursor:${user.id}`) : null;
   if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
   const seen=new Set<string>(cursor?.seen || []);
   let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change"}`;
-  const rawTrace=gmailDiagnosticTrace(user.id,process.env);
-  const trace={record:(id:string,reason:string)=>{if(targeted && id===targetId)rawTrace.record(id,reason);}};
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
-  type MessageList = { messages?: { id: string }[]; nextPageToken?: string };
-  const listMessages=(p:URLSearchParams)=>googleJson<MessageList>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${p}`,{headers:{Authorization:`Bearer ${tokens.access}`}});
-  let targetId="";
-  if(targeted){
-    const found=await listMessages(new URLSearchParams({q:`after:${after} before:${before} -in:trash -in:spam ${BOOKING_TARGET_QUERY}`,maxResults:"2",fields:"messages/id,nextPageToken"}));
-    if(found.nextPageToken || (found.messages?.length || 0)>1) return {targetDiagnostic:{target:false,stage:"search",reason:"target_ambiguous"}};
-    if(!found.messages?.length) return {targetDiagnostic:{target:false,stage:"search",reason:"target_not_found"}};
-    targetId=found.messages[0].id;
-    if(!/^[a-zA-Z0-9_-]{1,128}$/.test(targetId)) return {targetDiagnostic:{target:false,stage:"search",reason:"target_invalid_id"}};
-  }
-  const list = await listMessages(params);
-  if(targeted){
-    // Reproduce production ordering through the target, including earlier duplicate candidates.
-    let pages=1;
-    while(!list.messages?.some(m=>m.id===targetId) && list.nextPageToken && pages<10){
-      const page=await listMessages(new URLSearchParams({q,maxResults:"10",pageToken:list.nextPageToken}));
-      list.messages=[...(list.messages || []),...(page.messages || [])];list.nextPageToken=page.nextPageToken;pages++;
-    }
-    const index=list.messages?.findIndex(m=>m.id===targetId) ?? -1;
-    if(index<0) return {targetDiagnostic:{target:true,stage:"search",reason:list.nextPageToken?"search_limit_reached":"search_filter_excluded"}};
-    list.messages=list.messages!.slice(0,index+1);
-  }
+  const list = await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
   const candidates: { key: string; identityKey: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
   const excluded: Partial<Record<NonNullable<ParseDiagnostics["excluded"]>|"insufficient_details", number>> = {};
-  let diagnosticFetchFailure=false;
-  const fetched = await Promise.all((list.messages || []).slice(0, targeted?100:10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
+  const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
-    catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++; trace.record(item.id,"fetch_oversized"); return null; } if(targeted){diagnosticFetchFailure=true;return null;} throw e; }
+    catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++;  return null; } throw e; }
   }));
-  if(diagnosticFetchFailure) return {targetDiagnostic:{target:true,stage:"fetch",reason:"fetch_failed_pipeline_incomplete"}};
   for (const fetchedMessage of fetched) {
     if (!fetchedMessage) continue;
     const { item, message } = fetchedMessage;
     const received = typeof message.internalDate === "string" && /^\d{1,16}$/.test(message.internalDate) ? Number(message.internalDate) : NaN;
-    if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++; trace.record(item.id,"receipt_excluded"); continue; }
+    if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++;  continue; }
     examined++;
     const diagnostics: ParseDiagnostics = {};
     const parsed = parseGmailMessage(message,diagnostics);
-    for(const reason of diagnostics.mimeIssues || [])trace.record(item.id,reason);
-    if(diagnostics.excluded) trace.record(item.id,diagnostics.excluded);
     if(diagnostics.excluded) excluded[diagnostics.excluded]=(excluded[diagnostics.excluded] || 0)+1;
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
       const quality=previewQuality(candidate);
-      if(quality==="Non riconosciuta"){excluded.insufficient_details=(excluded.insufficient_details || 0)+1;trace.record(item.id,"insufficient_details");continue;}
+      if(quality==="Non riconosciuta"){excluded.insufficient_details=(excluded.insufficient_details || 0)+1;continue;}
       const identityKey=gmailHash(`${keys.fingerprint}:${candidate.event}`);
-      if(seen.has(identityKey)){duplicates++;trace.record(item.id,"repeated_preview");continue;}
+      if(seen.has(identityKey)){duplicates++;continue;}
       seen.add(identityKey);
       const ledger = await prisma.$queryRawUnsafe<{ booking_id: string | null; source_key: string; fingerprint: string; booking_exists: boolean }[]>('SELECT booking_id,source_key,fingerprint,EXISTS(SELECT 1 FROM public."Booking" b WHERE b.id=booking_id) AS booking_exists FROM nami_gmail.import_record WHERE user_id=$1 AND account_hash=$2 AND (source_key=$3 OR fingerprint=$4 OR (reference_key=$5 AND reference_key<>\'\'))', user.id, c.account_hash, sourceKey, keys.fingerprint, keys.referenceKey);
       const liveLedger = ledger.filter(r => r.booking_exists);
       const duplicate = liveLedger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
       const matches = bookings.filter(b => bookingMatch(candidate.draft, b,candidate.event==="change") || liveLedger.some(r => r.booking_id === b.id));
-      trace.record(item.id,duplicate?"duplicate_preview":"candidate_preview");
-      if(targeted) continue;
+
       const proof: Preview = { userId: user.id, connectionId: c.id, accountHash: c.account_hash, sourceKey, ...keys, expires: Date.now() + 1800000, candidate, matches: matches.map(b => ({ id: b.id, tripId: b.tripId, hash: bookingHash(b) })) };
       candidates.push({ key: sourceKey, identityKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : matches.length ? "Da verificare" : quality, matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId, tripName: trips.find(t => t.id === b.tripId)?.name || "Viaggio" })) });
     }
   }
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  if(targeted){
-    // Never return candidates, tokens, subjects, identifiers or hashes for a diagnostic request.
-    const hash=rawTrace.entries[0]?.id || "";
-    return {targetDiagnostic:targetDiagnostic(rawTrace.entries,hash)};
-  }
   return { candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };

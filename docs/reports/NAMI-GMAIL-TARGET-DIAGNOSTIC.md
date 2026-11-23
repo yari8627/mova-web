@@ -1,3 +1,5 @@
+> Ritirata dal codice nel successivo hotfix Booking: UI, selettore personale e percorso diagnostico rimossi. Documento storico, non istruzioni operative.
+
 # Diagnostica mirata Booking — locale
 
 Baseline f7ba7a5. Nessuna lettura Gmail reale, importazione, migrazione o modifica Production durante questo intervento.
