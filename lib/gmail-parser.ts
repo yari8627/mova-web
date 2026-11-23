@@ -134,7 +134,7 @@ function providerDetails(candidate: Candidate, body: string, supplier: string, h
   const zones=supplier==="Booking.com"?[countryZone,countryZone]:supplier==="Italo"?[stationZone(d.originAirport),stationZone(d.destinationAirport)]:[airportZone(d.originAirport),airportZone(d.destinationAirport)];
   if(!timing.start.offset && zones[0])timing.start=inLodgingZone(timing.start,zones[0]);
   if(!timing.end.offset && zones[1])timing.end=inLodgingZone(timing.end,zones[1]);
-  const extras=[["Ospiti","Guests|Ospiti"],["Passeggeri","Passengers|Passeggeri"],["Numero treno","Train number|Numero treno|Treno"],["Classe","Class|Classe|Ambiente"],["Posto","Seat|Posto"],["Carrozza","Coach|Carrozza"],["Camera","Room(?: type)?|Camera"],["Totale","Prezzo totale|Total price|Totale|Total"]];
+  const extras=[["Ospiti","Guests|Ospiti"],["Passeggeri","Passengers|Passeggeri|Passeggero|Passenger name|Nome passeggero|Intestatario"],["Numero treno","Train number|Numero treno|Treno"],["Classe","Class|Classe|Ambiente"],["Posto","Seat|Posto"],["Carrozza","Coach|Carrozza"],["Camera","Room(?: type)?|Camera"],["Totale","Prezzo totale|Total price|Totale|Total"]];
   for(const [label,names] of extras){const value=labelled(body,names);if(value && !d.notes.includes(`${label}: ${value}`))d.notes=[d.notes,`${label}: ${value}`].filter(Boolean).join("\n");}
   if(supplier === "Booking.com") d.notes=[d.notes,airbnbTimingNotes(timing.start,timing.end,supplier)].filter(Boolean).join("\n");
   return candidate;
@@ -219,6 +219,7 @@ function structured(html: string[], warnings: string[]): Candidate[] {
         d.location = address(r.address) || name(r.location) || route;
         const timing = { start: parseMailTime(String(v.checkinTime || v.pickupTime || r.departureTime || r.startDate || "")), end: parseMailTime(String(v.checkoutTime || v.dropoffTime || r.arrivalTime || r.endDate || "")) };
         d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
+        const trainNumber=name(r.trainNumber);if(trainNumber)d.notes=`Numero treno: ${trainNumber}`;
         const flightNumber = name(r.flightNumber); if (flightNumber) d.notes = `Numero volo: ${flightNumber}`;
         const guests = v.numAdults || v.numGuests; if (guests && /^\d+$/.test(String(guests))) d.notes += `${d.notes ? "\n" : ""}Ospiti: ${guests}`;
         const passenger = name(v.underName); if (passenger) d.notes += `${d.notes ? "\n" : ""}Intestatario: ${passenger}`;

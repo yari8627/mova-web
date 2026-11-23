@@ -42,3 +42,16 @@
 @media(max-width:600px) { .panel{padding-left:16px;padding-right:16px;} .grid{grid-template-columns:1fr;} .tools{padding:14px;} .tools .field{flex:1 1 130px;} .card{padding:16px;} .footer button{width:100%;} }
 @media(max-width:600px) { .dateFilters{grid-template-columns:repeat(2,minmax(0,1fr));} .dateFilters > button{grid-column:1/-1;} }
 @media(max-width:420px) { .dateFilters{grid-template-columns:minmax(0,1fr);} }
+
+/* Contain WebKit's intrinsic date editor as well as the outer grid cell. */
+.panel,.inner { box-sizing:border-box; min-inline-size:0; max-inline-size:100%; }
+.panel { inline-size:100%; overflow-x:hidden; }
+.dateFilters { overflow:hidden; }
+.dateFilters > .field { inline-size:100%; overflow:hidden; }
+.dateFilters input[type="date"] { display:block; appearance:none; -webkit-appearance:none; contain:inline-size; overflow:hidden; inline-size:100%; min-inline-size:0; max-inline-size:100%; }
+.dateFilters input[type="date"]::-webkit-datetime-edit { min-width:0; max-width:100%; padding:0; overflow:hidden; }
+.dateFilters input[type="date"]::-webkit-date-and-time-value { display:block; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.account { margin:12px 0; font-size:13px; }
+.account summary { cursor:pointer; padding:8px 0; }
+.trace { font-size:12px; overflow-wrap:anywhere; padding-left:18px; }
+@media(max-width:600px) { .tools.dateFilters { grid-template-columns:minmax(0,1fr); } }

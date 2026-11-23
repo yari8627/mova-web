@@ -77,11 +77,23 @@ export function validateDraft(value: unknown): BookingDraft {
   if (!out.title || !["flight", "hotel", "train", "car", "activity"].includes(out.type) || !["confirmed", "pending"].includes(out.status) || !validInstant(out.startDate) || (out.endDate && (!validInstant(out.endDate) || Date.parse(out.endDate) < Date.parse(out.startDate)))) throw new GmailError(400, "Controlla titolo, date e fusi orari.");
   return out as BookingDraft;
 }
+export function trainDetails(d: Pick<BookingDraft,"notes"|"originAirport"|"destinationAirport"|"location">){
+  const field=(labels:string)=>normalize(d.notes.match(new RegExp(`^(?:${labels}):[ \t]*([^\\n]+)`,"im"))?.[1] || "");
+  return {from:normalize(d.originAirport),to:normalize(d.destinationAirport),route:normalize(d.location),service:field("Numero treno|Train number"),passengers:[...d.notes.matchAll(/^(?:Passeggeri|Intestatario|Passenger name|Passengers):[ \t]*([^\n]+)/gim)].map(m=>normalize(m[1])).sort().join("|"),seat:field("Posto|Seat"),coach:field("Carrozza|Coach")};
+}
 export function candidateKeys(c: Candidate) {
-  const d = c.draft;
-  const referenceKey = d.reference ? gmailHash([d.type, normalize(d.provider), normalize(d.reference), normalize(d.originAirport), normalize(d.destinationAirport), normalize(c.flightNumber || "")].join("|")) : "";
-  const fingerprint = gmailHash([referenceKey, d.type, normalize(d.title), normalize(d.provider), d.startDate, d.endDate, normalize(d.location)].join("|"));
+  const d = c.draft, train=d.type==="train"?trainDetails(d):null;
+  const referenceKey = d.reference ? gmailHash([d.type, normalize(d.provider), normalize(d.reference), normalize(d.originAirport), normalize(d.destinationAirport), normalize(c.flightNumber || ""),...(train?[train.service,train.passengers,train.seat,train.coach,d.startDate?String(Date.parse(d.startDate)):c.timing?.start.date || ""]:[])].join("|")) : "";
+  const partial=(t: import("./gmail-dates").MailTime | undefined)=>t?[t.date,t.time,t.offset,t.zone || "",t.qualifier || ""].join("|"):"";
+  const start=d.startDate || partial(c.timing?.start),end=d.endDate || partial(c.timing?.end);
+  const fingerprint = gmailHash([referenceKey, d.type, ...(train?[]:[normalize(d.title)]), normalize(d.provider), train && d.startDate?String(Date.parse(d.startDate)):start, train && d.endDate?String(Date.parse(d.endDate)):end, normalize(train && d.originAirport && d.destinationAirport?`${d.originAirport}|${d.destinationAirport}`:d.location)].join("|"));
   return { referenceKey, fingerprint };
+}
+export function previewQuality(c:Candidate):"Importabile"|"Da verificare"|"Non riconosciuta"{
+ const d=c.draft,provider=!!d.provider,place=!!(d.location || (d.originAirport && d.destinationAirport)),calendar=!!(d.startDate || c.timing?.start.date),named=["hotel","activity","car"].includes(d.type) && !!d.title && !/da completare|da verificare/i.test(d.title);
+ if(!d.reference || Number(provider)+Number(place)+Number(calendar)+Number(named)<2 || (c.event==="uncertain" && Number(provider)+Number(place)+Number(calendar)+Number(named)<3))return "Non riconosciuta";
+ const complete=provider && place && (!["hotel","activity","car"].includes(d.type) || named) && (!["flight","train"].includes(d.type) || (!!d.originAirport && !!d.destinationAirport)) && !!d.startDate && (!(c.timing?.end.raw) || !!d.endDate) && (d.type!=="hotel" || !!d.endDate) && c.event==="confirmation";
+ return complete?"Importabile":"Da verificare";
 }
 const geographicAliases = [
   ["norvegia","norway","norge","tromso","balsfjord","tos"],
