@@ -32,7 +32,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (body.activities || body.bookings) await ensureActivityOrder();
   await prisma.$transaction(async (tx) => {
     if (!activitiesOnly) await tx.trip.upsert({ where: { id }, update: { name: trip.name, country: trip.country, countryCode: trip.countryCode, city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget === undefined ? undefined : body.budget }, create: { id, name: trip.name, country: trip.country, countryCode: trip.countryCode || "🌍", city: trip.city, startDate: new Date(`${trip.startDate}T12:00:00`), endDate: new Date(`${trip.endDate}T12:00:00`), people: Number(trip.people) || 1, theme: trip.theme || "blue", budget: body.budget ?? null, ownerId: user.id } });
+    if (body.activities) await tx.$queryRaw`SELECT "id" FROM "Trip" WHERE "id" = ${id} FOR UPDATE`;
     if (body.activities) { await tx.activity.deleteMany({ where: { tripId: id } }); await tx.activity.createMany({ data: body.activities.map((item: Item, sortOrder: number) => ({ sortOrder, id: String(item.id), tripId: id, day: Number(item.day), title: String(item.title || "").trim() || String(item.place).trim(), place: String(item.place).trim(), placeAddress: item.placeAddress ? String(item.placeAddress) : null, latitude: typeof item.latitude === "number" && Number.isFinite(item.latitude) && Math.abs(item.latitude) <= 90 ? item.latitude : null, longitude: typeof item.longitude === "number" && Number.isFinite(item.longitude) && Math.abs(item.longitude) <= 180 ? item.longitude : null, time: String(item.time || ""), done: Boolean(item.done), bookingId: item.bookingId ? String(item.bookingId) : null, bookingEvent: item.bookingEvent ? String(item.bookingEvent) : null })) }); }
+    if (body.activities && !body.bookings) {
+      const bookings=await tx.booking.findMany({where:{tripId:id}});
+      if(bookings.length) await syncBookingActivities(tx,id,bookings);
+    }
     if (body.bookings) {
       const bookingItems = body.bookings as Item[];
       const bookingIds = bookingItems.map((item) => String(item.id));

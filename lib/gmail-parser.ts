@@ -25,19 +25,24 @@ export function redactBookingPin(text: string) { return text.replace(/\b(?:codic
 export function messageBodies(message: GmailMessage) {
   const plain: string[] = [], html: string[] = [];
   let visited = 0, bytes = 0;
+  const issues=new Set<string>();
   function walk(p: GmailPart, depth: number) {
-    if (depth > 15 || ++visited > 100 || (p.filename && !(p.mimeType === "message/rfc822" && p.parts?.length))) return;
+    if (depth > 15 || ++visited > 100) {issues.add("mime_part_limit");return;}
+    if(p.mimeType==="message/rfc822" && !p.parts?.length)issues.add("mime_rfc822_unsupported");
+    if(p.filename && !(p.mimeType==="message/rfc822" && p.parts?.length)){if(["text/plain","text/html"].includes(p.mimeType || ""))issues.add("mime_text_attachment_skipped");return;}
     if (p.body?.data && ["text/plain", "text/html"].includes(p.mimeType || "")) {
       const data = Buffer.from(p.body.data, "base64url"); bytes += data.length;
-      if (bytes > 1000000) return;
+      if (bytes > 1000000) {issues.add("mime_body_limit");return;}
       const charset = header(p, "Content-Type").match(/charset=["']?([^;\s"']+)/i)?.[1] || "utf-8";
       let text: string; try { text = new TextDecoder(charset).decode(data); } catch { text = data.toString("utf8"); }
+      if(text.length>200000)issues.add("mime_text_truncated");
       (p.mimeType === "text/html" ? html : plain).push(clean(text));
     }
     p.parts?.forEach(part => walk(part, depth + 1));
   }
   if (message.payload) walk(message.payload, 0);
-  return { text: redactBookingPin([...new Set([...plain, ...html.map(htmlText)])].join("\n")), html };
+  if(!plain.length && !html.length)issues.add("mime_text_absent");
+  return { text: redactBookingPin([...new Set([...plain, ...html.map(htmlText)])].join("\n")), html, issues:[...issues] };
 }
 const blank = (): BookingDraft => ({ title: "", type: "activity", startDate: "", endDate: "", reference: "", provider: "", location: "", notes: "", originAirport: "", destinationAirport: "", status: "confirmed" });
 function readLine(text: string, names: string) { return text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:：]\\s*([^\\n]+)`, "i"))?.[1]?.trim().slice(0, 500) || ""; }
@@ -95,7 +100,7 @@ function applyAirbnb(candidate: Candidate, details: ReturnType<typeof airbnbDeta
   candidate.timing ||= {start:parseMailTime(d.startDate),end:parseMailTime(d.endDate)};
   if (details.start.date) candidate.timing.start = details.start;
   if (details.end.date) candidate.timing.end = details.end;
-  d.notes = [d.notes, details.locality && `Località: ${details.locality}`, details.guests && `Ospiti: ${details.guests}`, airbnbTimingNotes(candidate.timing.start,candidate.timing.end)].filter(Boolean).join("\n");
+  d.notes = [d.notes.split("\n").filter(line=>line.trim()!==details.guests).join("\n"), details.locality && `Località: ${details.locality}`, details.guests && `Ospiti: ${details.guests}`, airbnbTimingNotes(candidate.timing.start,candidate.timing.end)].filter(Boolean).join("\n");
   return candidate;
 }
 /** Read adjacent table cells/lines only inside explicitly labelled journey sections. */
@@ -227,9 +232,10 @@ function structured(html: string[], warnings: string[]): Candidate[] {
   }
   return found.slice(0, 12);
 }
-export type ParseDiagnostics = { excluded?: "missing_reference" | "unknown_booking_type" | "unconfirmed_booking_message" };
+export type ParseDiagnostics = { mimeIssues?: string[]; excluded?: "missing_reference" | "unknown_booking_type" | "unconfirmed_booking_message" };
 export function parseGmailMessage(message: GmailMessage, diagnostics?: ParseDiagnostics): Candidate[] {
   const subject = header(message.payload, "Subject"), bodies = messageBodies(message), text = `${subject}\n${bodies.text}`;
+  if(diagnostics) diagnostics.mimeIssues=bodies.issues;
   const event = messageEvent(subject, bodies.text), supplier = providerFor(message, bodies.text);
   const airbnb = supplier === "Airbnb" ? airbnbDetails(bodies) : null;
   // Only messages carrying an explicit booking/ticket identifier reach the preview.

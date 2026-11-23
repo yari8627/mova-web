@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import type { BookingDraft, Candidate } from "../../lib/gmail-core";
 import { inLodgingZone, mailInstant, splitMailInstant, stayTimeText, type MailTime } from "../../lib/gmail-dates";
-import { removeTripSnapshot } from "../../lib/trip-client-cache";
+import { fetchTripSnapshot, removeTripSnapshot } from "../../lib/trip-client-cache";
 import { TravelCategoryIcon, travelCategoryFromText } from "./travel-category-icon";
 import styles from "./gmail-bookings.module.css";
 
@@ -110,6 +110,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       setNotice(`${[...new Set(selected.map(r=>trips.find(t=>t.id===r.tripId)?.name).filter(Boolean))].join(", ")} · Importate: ${imported} · Aggiornate: ${updated} · Saltate/escluse: ${skipped} · Non importate: ${failed.length}.${failed.length ? ` ${failed.map((r: { error?: string }) => r.error).filter(Boolean).join(" ")}` : ""}`);
       if (!failed.length && imported + updated > 0) {
         const tripIds = [...new Set(selected.filter(r=>data.results.some((v:{key:string;status:string})=>v.key===r.key && ["importata","aggiornata"].includes(v.status))).map(r=>r.tripId!))];
+        await Promise.all(tripIds.map(id=>fetchTripSnapshot(id)));
         await onImported({count:imported+updated,tripIds});
         setSuccess(`${imported + updated} prenotazioni salvate · ${tripIds.map(id=>trips.find(t=>t.id===id)?.name || "Viaggio").join(", ")}.`);
         setNotice(""); setOpen(false); setRows([]);

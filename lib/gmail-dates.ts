@@ -82,3 +82,23 @@ export function parseMailRange(raw: string): { start: MailTime; end: MailTime } 
   }
   return { start: parseMailTime(`${m[1]} ${m[3]}${m[4] ? ` ${m[4]}` : ""}`), end: parseMailTime(`${m[2]} ${m[3]}${m[4] ? ` ${m[4]}` : ""}`) };
 }
+
+type LodgingBooking={startDate:string;endDate?:string|null;notes?:string|null;provider?:string|null;location?:string|null};
+export function lodgingStartInput(b:LodgingBooking){
+ const note=airbnbStayNoteLabel(b.notes || "","start",b.provider || "Airbnb");
+ const civil=parseMailTime(note,"it");
+ if(civil.date && civil.time && mailInstant(civil) && Date.parse(mailInstant(civil))===Date.parse(b.startDate))return `${civil.date}T${civil.time.slice(0,5)}`;
+ const original=(b.notes || "").match(/(?:Orari origine Gmail|Limiti orari origine Gmail \(non appuntamenti\)):\s*(\S+)/)?.[1];
+ return original && Date.parse(original)===Date.parse(b.startDate)?original.slice(0,16):b.startDate.slice(0,16);
+}
+export function editLodgingStart(b:LodgingBooking,local:string){
+ const note=airbnbStayNoteLabel(b.notes || "","start",b.provider || "Airbnb"),old=parseMailTime(note,"it");
+ const zone=note.match(/\b(?:Europe|America|Asia|Africa|Australia|Pacific)\/[A-Za-z_\/]+/)?.[0] || (/\b(?:Norway|Norvegia|Norge)\b/i.test(b.location || "")?"Europe/Oslo":"");
+ if(!zone)return null;
+ const start=inLodgingZone({date:local.slice(0,10),time:local.slice(11),offset:"",raw:local,qualifier:old.qualifier},zone),instant=mailInstant(start);
+ if(!instant || (b.endDate && Date.parse(instant)>Date.parse(b.endDate)))throw Error("Controlla data, ora e fuso del soggiorno: l’inizio deve precedere il check-out.");
+ const prefix=`Check-in ${b.provider || "Airbnb"}:`;
+ const notes=(b.notes || "").split("\n").filter(line=>!line.startsWith(prefix));
+ notes.push(`${prefix} ${stayTimeText(start)}`);
+ return {startDate:instant,endDate:b.endDate || "",notes:notes.join("\n")};
+}

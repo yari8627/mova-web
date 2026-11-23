@@ -63,8 +63,10 @@
 .bookings :global(.booking-modal) .temporalInput { display: block; width: 100%; min-width: 0; max-width: 100%; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; box-sizing: border-box; height: 46px; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: #f8f5ef; color: var(--navy); -webkit-text-fill-color: var(--navy); font-family: inherit; font-size: 16px; font-weight: inherit; line-height: 24px; text-align: left; appearance: none; -webkit-appearance: none; }
 .bookings :global(.booking-modal .flight-search-button) { width: fit-content; max-width: 100%; min-width: 0; min-height: 44px; justify-self: start; padding: 8px 12px; white-space: normal; text-align: left; line-height: 1.35; }
 .bookings :global(.flight-search-button > svg) { flex-shrink: 0; }
-.bookings :global(.booking-title-line) { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 8px; align-items: center; }
-.bookings :global(.booking-title-line .booking-source) { grid-column: 2; }
+.bookings :global(.booking-title-line) { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; gap: 8px; align-items: start; }
+.bookings :global(.booking-title-line > strong) { grid-column: 2; min-width: 0; }
+.bookings :global(.booking-title-line .booking-source) { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; }
+@media (max-width: 360px) { .bookings :global(.booking-title-line .booking-source) { grid-column: 2 / -1; grid-row: 2; } }
 
 .metadata { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 10px; margin-top: 2px; }
 .metadata > span { display: inline-flex; align-items: flex-start; gap: 5px; max-width: 100%; font-size: 12px; line-height: 1.35; color: var(--text-secondary); overflow-wrap: anywhere; }

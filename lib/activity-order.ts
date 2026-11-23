@@ -55,3 +55,18 @@ export function insertActivityByTime<T extends OrderedActivity & { time: string 
   remaining.splice(index, 0, activity);
   return numberActivities(remaining);
 }
+
+/** Booking limits are display metadata; the timeline clock stays a civil HH:mm value. */
+export function timelineClock(value:string){
+ const m=value.match(/^(?:(?:dopo le|entro le|dalle|prima delle)\s+)?((?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)$/i);
+ return m?.[1] || "";
+}
+/** Sort timed slots together; untimed activities retain their existing slot and relative order. */
+export function chronologicalActivities<T extends OrderedActivity & {time:string}>(items:T[]):T[]{
+ const ordered=sortActivities(items),days=new Map<number,T[]>();
+ for(const item of ordered){const day=days.get(item.day)||[];day.push(item);days.set(item.day,day);}
+ return [...days.values()].flatMap(day=>{
+  const timed=day.map((item,index)=>({item,index,clock:timelineClock(item.time)})).filter(v=>v.clock).sort((a,b)=>(a.clock.length===5?a.clock+":00":a.clock).localeCompare(b.clock.length===5?b.clock+":00":b.clock) || a.index-b.index);
+  let i=0;return day.map(item=>timelineClock(item.time)?timed[i++].item:item);
+ });
+}

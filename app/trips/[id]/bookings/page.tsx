@@ -1,8 +1,9 @@
 "use client";
 
 import { TripHeader } from "../../../components/trip-header";
+import { additionalBookingNotes, bookingGuests } from "../../../../lib/booking-view";
 import { GmailBookings } from "../../../components/gmail-bookings";
-import { airbnbStayNoteLabel } from "../../../../lib/gmail-dates";
+import { airbnbStayNoteLabel, lodgingStartInput, editLodgingStart } from "../../../../lib/gmail-dates";
 import styles from "./bookings.module.css";
 import boutique from "../itinerary.module.css";
 import { useTripPaneActive } from "../../../components/trip-pane-path";
@@ -306,7 +307,9 @@ export default function BookingsPage() {
     );
     setBookings(ordered);
     window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(ordered));
-    return syncTripResource(id, "bookings", ordered);
+    const saved=await syncTripResource(id, "bookings", ordered);
+    if(saved) await fetchTripSnapshot(id);
+    return saved;
   }
   function openNew() {
     if (document.activeElement instanceof HTMLElement)
@@ -328,7 +331,7 @@ export default function BookingsPage() {
     setDraft({
       title: item.title,
       type: item.type,
-      startDate: item.startDate.slice(0, 16),
+      startDate: item.source === "email" && item.type === "hotel" ? lodgingStartInput(item) : item.startDate.slice(0, 16),
       endDate: item.endDate?.slice(0, 16) || "",
       reference: item.reference || "",
       status: "confirmed",
@@ -355,7 +358,10 @@ export default function BookingsPage() {
       return;
     setSaving(true);
     setSaveError("");
-    const confirmedDraft = { ...draft, startDate: `${date}T${time}`, endDate: "", status: "confirmed" as const };
+    let lodgingEdit=null;
+    const original=bookings.find(item=>item.id===editingId);
+    try{if(original?.source==="email" && original.type==="hotel")lodgingEdit=editLodgingStart(original,`${date}T${time}`);}catch(e){setSaving(false);setSaveError(e instanceof Error?e.message:"Controlla gli orari del soggiorno.");return;}
+    const confirmedDraft = { ...draft, startDate: `${date}T${time}`, endDate: "", status: "confirmed" as const, ...(lodgingEdit || {}) };
     const completed =
       draft.type === "flight"
         ? {
@@ -466,7 +472,6 @@ export default function BookingsPage() {
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
         </div>
           {canManage && <GmailBookings active={paneActive} tripId={id} onImported={async (result) => {
-            removeTripSnapshot(id);
             const remote = await fetchTripSnapshot(id);
             if (remote) { setBookings(remote.bookings); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); }
             if (result?.tripIds.length === 1 && result.tripIds[0] !== id) router.push(`/trips/${encodeURIComponent(result.tripIds[0])}/bookings?gmailSaved=${result.count}`);
@@ -539,8 +544,8 @@ export default function BookingsPage() {
                     </small>
                   )}
                   </div>
-                  {item.notes?.match(/^(?:Ospiti|Passeggeri):[^\n]+/im)?.[0] && <p className="booking-notes">{item.notes.match(/^(?:Ospiti|Passeggeri):[^\n]+/im)![0]}</p>}
-                  {item.notes && <details><summary>Dettagli e note</summary><p className="booking-notes">{item.notes.split("\n").filter(line=>!/(?:Orari origine Gmail|Limiti orari origine Gmail)/.test(line)).join("\n")}</p></details>}
+                  {bookingGuests(item) && <p className="booking-notes">Ospiti: {bookingGuests(item)}</p>}
+                  {additionalBookingNotes(item) && <details><summary>Dettagli e note</summary><p className="booking-notes">{additionalBookingNotes(item)}</p></details>}
 
                 </div>
                 {(canManage || Boolean(attachmentCounts[item.id])) && (

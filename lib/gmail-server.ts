@@ -1,3 +1,4 @@
+import { gmailDiagnosticTrace } from "./gmail-diagnostics";
 import { syncBookingActivities } from "./booking-itinerary";
 import { randomBytes, randomUUID } from "crypto";
 import { cookies } from "next/headers";
@@ -122,24 +123,34 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change"}`;
+  const trace=gmailDiagnosticTrace(user.id,process.env);
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
   const list = await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
+  trace.record("search",list.nextPageToken?"search_more_pages":"search_page_complete");
+  if(trace.enabled){
+    // Bounded ID-only coverage probe: no extra message bodies or headers are retrieved.
+    const coverageParams=new URLSearchParams({q:`after:${after} before:${before} -in:trash -in:spam`,maxResults:"10"});
+    const coverage=await googleJson<{messages?:{id:string}[]}>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${coverageParams}`,{headers:{Authorization:`Bearer ${tokens.access}`}});
+    for(const item of coverage.messages || [])if(!(list.messages || []).some(m=>m.id===item.id))trace.record(item.id,"search_filter_or_pagination");
+  }
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
   const candidates: { key: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
   const excluded: Partial<Record<NonNullable<ParseDiagnostics["excluded"]>, number>> = {};
   const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
-    catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++; return null; } throw e; }
+    catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++; trace.record(item.id,"fetch_oversized"); return null; } throw e; }
   }));
   for (const fetchedMessage of fetched) {
     if (!fetchedMessage) continue;
     const { item, message } = fetchedMessage;
     const received = typeof message.internalDate === "string" && /^\d{1,16}$/.test(message.internalDate) ? Number(message.internalDate) : NaN;
-    if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++; continue; }
+    if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++; trace.record(item.id,"receipt_excluded"); continue; }
     examined++;
     const diagnostics: ParseDiagnostics = {};
     const parsed = parseGmailMessage(message,diagnostics);
+    for(const reason of diagnostics.mimeIssues || [])trace.record(item.id,reason);
+    if(diagnostics.excluded) trace.record(item.id,diagnostics.excluded);
     if(diagnostics.excluded) excluded[diagnostics.excluded]=(excluded[diagnostics.excluded] || 0)+1;
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
@@ -147,13 +158,14 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       const liveLedger = ledger.filter(r => r.booking_exists);
       const duplicate = liveLedger.some(r => r.source_key === sourceKey || r.fingerprint === keys.fingerprint);
       const matches = bookings.filter(b => bookingMatch(candidate.draft, b) || liveLedger.some(r => r.booking_id === b.id));
+      trace.record(item.id,duplicate?"duplicate_preview":"candidate_preview");
       const proof: Preview = { userId: user.id, connectionId: c.id, accountHash: c.account_hash, sourceKey, ...keys, expires: Date.now() + 1800000, candidate, matches: matches.map(b => ({ id: b.id, tripId: b.tripId, hash: bookingHash(b) })) };
       candidates.push({ key: sourceKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.length || matches.length || candidate.event !== "confirmation" ? "Da verificare" : "Da importare", matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId, tripName: trips.find(t => t.id === b.tripId)?.name || "Viaggio" })) });
     }
   }
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { candidates, trips, excluded, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { ...(trace.enabled?{diagnostics:trace.entries}:{}), candidates, trips, excluded, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {

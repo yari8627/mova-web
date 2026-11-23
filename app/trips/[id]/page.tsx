@@ -1,12 +1,13 @@
 "use client";
-import { TravelCategoryIcon, travelCategoryFromText } from "../../components/travel-category-icon";
+import { BookingOperatorImage } from "../../components/booking-operator-image";
+import { bookingEventDetail, type BookingView } from "../../../lib/booking-view";
 
 import { ItineraryPlacePhoto } from "../../components/itinerary-place-photo";
 import { useTripUserId } from "../../components/trip-session";
 import { TripHeader } from "../../components/trip-header";
 import { applyActivityPlace, editActivityPlace, prepareActivityDraft, restoreActivityMetadata, activityRoute, latestActivityRequest, type TitleSource } from "../../../lib/itinerary-activity";
 import styles from "./itinerary.module.css";
-import { sortActivities, numberActivities, moveActivity, insertActivityByTime } from "../../../lib/activity-order";
+import { chronologicalActivities, timelineClock, sortActivities, numberActivities, moveActivity, insertActivityByTime } from "../../../lib/activity-order";
 import { useTripPaneActive } from "../../components/trip-pane-path";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -83,6 +84,7 @@ export default function TripPage() {
   const [routeMessage, setRouteMessage] = useState<{ day: number; text: string } | null>(null);
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState("");
+  const [linkedBookings,setLinkedBookings]=useState<BookingView[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const activitiesRef = useRef<Activity[]>([]);
   const pendingCompletions = useRef(new Map<string, { done: boolean; promise: Promise<boolean> }>());
@@ -175,10 +177,24 @@ export default function TripPage() {
     const cachedTrip = readTripSnapshot(id) as Trip | null;
     setTrip(cachedTrip ? { ...cachedTrip, startDate: cachedTrip.startDate.slice(0, 10), endDate: cachedTrip.endDate.slice(0, 10) } : fallbackTrip);
     const snapshot = readTripSnapshot(id);
+    setLinkedBookings(snapshot?.bookings || []);
     applyIncomingActivities(snapshot ? sortActivities(snapshot.activities) : savedActivities ? sortActivities(JSON.parse(savedActivities)) : []);
-    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const metadataById = new Map(cached.map(item => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => restoreActivityMetadata(item, metadataById.get(item.id))); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); applyIncomingActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
+    async function load() { const remote = await fetchTripSnapshot(id); if (remote) { setLinkedBookings(remote.bookings); const cached = savedActivities ? JSON.parse(savedActivities) as Activity[] : []; const metadataById = new Map(cached.map(item => [item.id, item])); const mergedActivities = remote.activities.map((item: Activity) => restoreActivityMetadata(item, metadataById.get(item.id))); setTrip({ ...remote, startDate: remote.startDate.slice(0, 10), endDate: remote.endDate.slice(0, 10) } as Trip); applyIncomingActivities(sortActivities(mergedActivities)); window.localStorage.setItem(`mova-itinerary-${id}`, JSON.stringify(mergedActivities)); } }
     void load();
   }, [id]);
+
+  useEffect(()=>{
+    const receive=(event:Event)=>{
+      const detail=(event as CustomEvent).detail;
+      if(detail?.id!==id || !detail.value)return;
+      const remote=detail.value,metadata=new Map(activitiesRef.current.map(item=>[item.id,item]));
+      setLinkedBookings(remote.bookings || []);
+      applyIncomingActivities(sortActivities(remote.activities.map((item:Activity)=>restoreActivityMetadata(item,metadata.get(item.id)))));
+      try{window.localStorage.setItem(`mova-itinerary-${id}`,JSON.stringify(remote.activities));}catch{/* Optional offline cache. */}
+    };
+    window.addEventListener("mova-trip-snapshot",receive);
+    return()=>window.removeEventListener("mova-trip-snapshot",receive);
+  },[id]);
 
   useEffect(() => {
     if (!trip?.country) return;
@@ -288,8 +304,11 @@ export default function TripPage() {
       const ordered = numberActivities(next.map(item => current.has(item.id) ? { ...item, done: current.get(item.id)!.done } : item));
       if (optimistic) { updateActivities(ordered); previewed = true; }
       if (!await syncTripResource(id, "activities", ordered, trip || undefined)) throw new Error();
-      updateActivities(ordered);
-      try { window.localStorage.setItem('mova-itinerary-' + id, JSON.stringify(ordered)); } catch { /* Server save is authoritative even if storage is full. */ }
+      const fresh=await fetchTripSnapshot(id);
+      const metadata=new Map(ordered.map(item=>[item.id,item]));
+      const synchronized=fresh?sortActivities(fresh.activities.map((item:Activity)=>restoreActivityMetadata(item,metadata.get(item.id)))):ordered;
+      updateActivities(synchronized);
+      try { window.localStorage.setItem('mova-itinerary-' + id, JSON.stringify(synchronized)); } catch { /* Server save is authoritative even if storage is full. */ }
       window.dispatchEvent(new CustomEvent("mova-itinerary-updated", { detail: { tripId: id } }));
       return true;
     } catch {
@@ -362,7 +381,7 @@ export default function TripPage() {
   const days = useMemo(() => trip ? tripDays(trip.startDate, trip.endDate) : [], [trip?.startDate, trip?.endDate]);
   const activitiesByDay = useMemo(() => {
     const result = new Map<number, Activity[]>();
-    for (const activity of activities) { const items = result.get(activity.day) || []; items.push(activity); result.set(activity.day, items); }
+    for (const activity of chronologicalActivities(activities)) { const items = result.get(activity.day) || []; items.push(activity); result.set(activity.day, items); }
     return result;
   }, [activities]);
 
@@ -397,13 +416,13 @@ export default function TripPage() {
           {dayActivities.length === 0 ? <div className={`empty-itinerary-day drop-zone ${dropTarget === `day-${day}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`day-${day}`); }} onDrop={() => dropActivity(day)}><CalendarDays size={19} /><span>{draggedId ? "Rilascia qui l’attività" : "Nessuna attività programmata"}</span></div> : <div className="timeline">{dayActivities.map((item, index) => { return <div key={item.id} className={styles.timelineEntry}>
           <div className={`activity-drop-line ${dropTarget === `before-${item.id}` ? "drag-over" : ""}`} onDragOver={(event) => { event.preventDefault(); setDropTarget(`before-${item.id}`); }} onDrop={() => dropActivity(day, item.id)}><span>Rilascia qui</span></div>
           <article className={`timeline-item ${draggedId === item.id ? "dragging" : ""}`} draggable={canEditItinerary && !activitySaving} onDragStart={(event) => { setDraggedId(item.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.id); }} onDragOver={(event) => dragOverActivity(event, dayActivities, index)} onDrop={(event) => dragOverActivity(event, dayActivities, index, true)} onDragEnd={() => { setDraggedId(null); setDropTarget(null); }}>
-            <div className={styles.activityTime}>{item.time && <time>{item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
+            <div className={styles.activityTime}>{item.time && <time>{item.bookingId ? timelineClock(item.time).slice(0,5) : item.time}</time>}<button className={`activity-check ${item.done ? "done" : ""}`} disabled={!canEditItinerary || activitySaving || completionSaving.has(item.id)} onClick={() => toggleActivity(item.id)} aria-label={item.done ? "Segna da completare" : "Segna come completata"}>{item.done && <Check size={15} />}</button></div>
             <div className="timeline-card">
               <div className={`timeline-card-content ${item.place ? "has-photo" : ""}`}>
-                {item.bookingId && !item.placeId && !item.photoName && !item.photoUrl ? <figure className="activity-place-photo" aria-label="Prenotazione"><TravelCategoryIcon category={travelCategoryFromText(item.title, item.place)} size={32} /></figure> : item.place && <ItineraryPlacePhoto target={item} country={trip.country} countryCode={countryIsoCode || ""} userId={userId} active={paneActive} />}
+                {item.bookingId ? <BookingOperatorImage provider={linkedBookings.find(b=>b.id===item.bookingId)?.provider} type={linkedBookings.find(b=>b.id===item.bookingId)?.type} title={item.title} /> : item.place && <ItineraryPlacePhoto target={item} country={trip.country} countryCode={countryIsoCode || ""} userId={userId} active={paneActive} />}
                 <div className="timeline-card-main">
                   <div className="timeline-card-heading">
-                    <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3></div></div>
+                    <div className="timeline-card-title"><div>{item.bookingId && <button className="booking-link-chip" onClick={() => router.push(`/trips/${id}/bookings?booking=${encodeURIComponent(item.bookingId!)}`)}>Prenotazione sincronizzata</button>}<h3>{item.title}</h3>{item.bookingId && bookingEventDetail(linkedBookings.find(b=>b.id===item.bookingId),item.bookingEvent) && <small>{bookingEventDetail(linkedBookings.find(b=>b.id===item.bookingId),item.bookingEvent)}</small>}</div></div>
                   </div>
                   <div className="activity-meta"><span><MapPin size={16} /> {item.placeAddress || item.place}</span></div>
 
