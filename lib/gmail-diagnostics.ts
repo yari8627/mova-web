@@ -7,3 +7,13 @@ export function gmailDiagnosticTrace(userId:string,env=process.env){
  const entries:{id:string;reason:string}[]=[];
  return {enabled,entries,record(id:string,reason:string){if(key && allowed.has(reason) && entries.length<100)entries.push({id:createHmac("sha256",key).update(id).digest("hex"),reason});}};
 }
+
+// Fixed incident selector: server-only, never supplied by the client or returned/logged.
+export const BOOKING_TARGET_QUERY = 'subject:"Hanne North Guest Studios" "booking.com"';
+export type TargetDiagnostic = { target: boolean; stage: string; reason: string };
+export function targetDiagnostic(entries: {id:string;reason:string}[], targetHash: string): TargetDiagnostic {
+ const reasons=entries.filter(e=>e.id===targetHash).map(e=>e.reason);
+ const last=reasons.includes("candidate_preview")?"candidate_preview":reasons.includes("duplicate_preview")?"duplicate_preview":reasons.at(-1) || "pipeline_incomplete";
+ const stage=last.endsWith("preview")?"preview":last==="insufficient_details"?"validation":last==="receipt_excluded"?"receipt":last==="fetch_oversized"?"fetch":last==="pipeline_incomplete"?"fetch":"parser";
+ return {target:true,stage:last==="repeated_preview"?"deduplication":stage,reason:last==="missing_reference"?[...reasons.filter(r=>r.startsWith("mime_")),last].join("; "):last};
+}
