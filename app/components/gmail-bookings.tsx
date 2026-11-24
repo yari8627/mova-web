@@ -8,7 +8,7 @@ import { BookingFields } from "./booking-fields";
 import { BookingPlaceField,type BookingPlace } from "./booking-place-field";
 import { suggestTrip } from "../../lib/gmail-geography";
 import { X } from "lucide-react";
-import { mergeGmailPreviews } from "../../lib/gmail-preview";
+import { collectGmailPages } from "../../lib/gmail-pagination";
 import type { BookingDraft, Candidate } from "../../lib/gmail-core";
 import { inLodgingZone, mailInstant, splitMailInstant, stayTimeText, type MailTime } from "../../lib/gmail-dates";
 import { fetchTripSnapshot, removeTripSnapshot } from "../../lib/trip-client-cache";
@@ -17,8 +17,8 @@ import styles from "./gmail-bookings.module.css";
 
 type Trip = { id: string; name: string; city: string; country?:string; startDate?:string; endDate?:string };
 type Row = { key: string; identityKey?: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; warnings: string[]; event: Candidate["event"]; email: { subject: string; from: string; date: string }; state: string; suggestedTripId: string | null; matches: { id: string; title: string; tripId: string; tripName?: string }[]; selected?: boolean; tripId?: string; bookingId?: string };
-async function api(path: string, method = "GET", body?: unknown) {
-  const response = await fetch(`/api/gmail/${path}`, { method, cache: "no-store", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+async function api(path: string, method = "GET", body?: unknown, signal?:AbortSignal) {
+  const response = await fetch(`/api/gmail/${path}`, { method, signal, cache: "no-store", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json(); if (!response.ok) throw new Error(data.error || "Gmail non disponibile."); return data;
 }
 const dateString = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -40,9 +40,10 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const [searched, setSearched] = useState(false);
   const dialog = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
   const editorBox=useRef<HTMLDivElement>(null);
+  const searchRequest=useRef<AbortController | null>(null);
   const errorBox = useRef<HTMLDivElement>(null);
   const busyRef = useRef(busy); busyRef.current = busy;
-  useEffect(() => { if (!active) { setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
+  useEffect(() => { if (!active) { searchRequest.current?.abort(); setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
   useEffect(()=>{if(editing){editorBox.current?.scrollIntoView?.({block:"start"});editorBox.current?.focus?.();}},[editing]);
   useEffect(()=>{if(error){errorBox.current?.scrollIntoView?.({block:"nearest"});errorBox.current?.focus?.();}},[error]);
   useEffect(() => {
@@ -78,17 +79,17 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     setCounts({excluded:0,duplicates:0});setOpen(true); setSuccess(""); setRows([]); setNotice(""); setSearched(false); setCursor(null); setExamined(0);
     await run(async () => { const status = await api("connection"); setConnected(status.connected); setEmail(status.email || ""); });
   }
-  async function search(next = false) {
-    await run(async () => {
-      const data = await api("search", "POST", { from, to, timeZone, ...(next && cursor ? { cursor } : {}) });
-      data.candidates = data.candidates.map((r: Row)=>({...r,tripId:r.suggestedTripId || undefined}));
-      const merged=mergeGmailPreviews(next?rows:[],data.candidates);
-      setRows(merged);setEditing(null);
-      setTrips(data.trips); setCursor(data.nextCursor); setSearched(true);
-      const total = (next ? examined : 0) + data.examined; setExamined(total);
-      const discarded=Object.values(data.excluded || {}).reduce((sum:number,value)=>sum+Number(value),0);
-      setCounts({excluded:(next?counts.excluded:0)+discarded,duplicates:(next?counts.duplicates:0)+Number(data.duplicates || 0)+(next?rows.length:0)+data.candidates.length-merged.length});
-      setNotice(`${merged.length} conferme riconosciute · ${total} email esaminate complessive.`);
+  async function search() {
+    await run(async()=>{
+      searchRequest.current?.abort();const controller=new AbortController();searchRequest.current=controller;
+      setRows([]);setEditing(null);setNotice("");setSearched(true);
+      const result=await collectGmailPages<Row>(async(cursor,signal)=>{
+        const data=await api("search","POST",{from,to,timeZone,...(cursor?{cursor}:{})},signal);
+        return {...data,candidates:data.candidates.map((r:Row)=>({...r,tripId:r.suggestedTripId || undefined}))};
+      },(rows,page)=>{setRows(rows);setTrips(page.trips as Trip[]);},{signal:controller.signal});
+      if(controller.signal.aborted)return;
+      setNotice(`${result.rows.length} prenotazioni trovate`);
+      if(result.partial)setError("Risultati parziali: non è stato possibile esaminare tutte le email dell’intervallo. Riprova la ricerca o restringi le date.");
     });
   }
   function edit(key: string, change: Partial<Row>) { setRows(current => current.map(r => r.key === key ? { ...r, ...change } : r)); }
@@ -155,7 +156,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         {connected && <div className={`${styles.tools} ${styles.dateFilters}`}><label className={styles.field}>Email dal<input type="date" disabled={busy} value={from} onInput={e => { setFrom(e.currentTarget.value); resetSearch(); }} onChange={e => { setFrom(e.target.value); resetSearch(); }} /></label><label className={styles.field}>Al<input type="date" disabled={busy} value={to} onInput={e => { setTo(e.currentTarget.value); resetSearch(); }} onChange={e => { setTo(e.target.value); resetSearch(); }} /></label><button className="primary-button" disabled={busy} onClick={() => void search()}>Cerca prenotazioni</button></div>}
 
         {notice && <div role="status" className={styles.notice}>{notice}</div>}
-        {busy && <p role="status">Operazione in corso…</p>}
+        {busy && <p role="status">Caricamento…</p>}
 
         {searched && <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}><legend className={styles.srOnly}>Anteprima prenotazioni</legend>
         {rows.map(row => <article key={row.key} className={styles.card}>
@@ -182,10 +183,8 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
           </BookingForm></div>}
 
         </article>)}</fieldset>}
-        {searched && counts.duplicates>0 && <p>{counts.duplicates} conferme ripetute raggruppate.</p>}
-        {searched && counts.excluded>0 && <details className={styles.details}><summary>Email non riconosciute ({counts.excluded})</summary><p>Questi messaggi non contengono informazioni sufficienti per proporre una prenotazione. Non saranno importati.</p></details>}
         {error && <div ref={errorBox} tabIndex={-1} role="alert" className={styles.warning}>{error}</div>}
-        {searched && <div className={styles.footer}>{cursor && <button className="secondary-button" disabled={busy} onClick={() => void search(true)}>Esamina altre email</button>}<button className="secondary-button" disabled={busy} onClick={() => { cancel(); }}>Annulla</button></div>}
+        {searched && <div className={styles.footer}><button className="secondary-button" disabled={busy} onClick={() => { cancel(); }}>Annulla</button></div>}
       </div>
     </div>, document.body)}
   </>;
