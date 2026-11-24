@@ -1,3 +1,4 @@
+import { placeTimezone } from "../../../lib/place-timezone";
 import { NextResponse } from "next/server";
 import { currentUser } from "../../../lib/auth";
 import { GooglePlaceLimitError, googlePlaceRequest } from "../../../lib/google-place-requests";
@@ -18,7 +19,7 @@ async function googlePlaceDetails(placeId: string, sessionToken: string, detail:
   const place = await response.json();
   const photo = detail === "location" ? undefined : (place.photos as GooglePhoto[] | undefined)?.[0];
   const attribution = photo?.authorAttributions?.[0];
-  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place", photoName: photo?.name, photoAttribution: attribution?.displayName, photoAttributionUri: attribution?.uri };
+  return { id: `google:${place.id}`, placeId: place.id, provider: "google", name: place.displayName?.text || place.formattedAddress, address: place.formattedAddress || "", latitude: place.location?.latitude, longitude: place.location?.longitude, type: place.primaryType || "place", timeZone: detail === "location" ? placeTimezone(place.location?.latitude,place.location?.longitude) : undefined, photoName: photo?.name, photoAttribution: attribution?.displayName, photoAttributionUri: attribution?.uri };
 }
 
 async function googleAutocomplete(query: string, countryCode: string, sessionToken: string) {
@@ -43,7 +44,7 @@ async function nominatimAutocomplete(query: string, countryCode: string) {
   const response = await fetch(`https://nominatim.openstreetmap.org/search?${search}`, { headers: { "User-Agent": "NAMITravel/0.1 (travel itinerary place search)" }, signal: AbortSignal.timeout(4500), next: { revalidate: 86400 } });
   if (!response.ok) return [];
   const results = await response.json() as NominatimPlace[];
-  return results.map((place) => { const parts = place.display_name.split(",").map((part) => part.trim()); return { id: String(place.place_id), provider: "openstreetmap", name: place.name || parts[0] || place.display_name, address: parts.slice(1).join(", "), latitude: Number(place.lat), longitude: Number(place.lon), type: place.type || place.category || "place" }; });
+  return results.map((place) => { const parts = place.display_name.split(",").map((part) => part.trim()); return { id: String(place.place_id), provider: "openstreetmap", name: place.name || parts[0] || place.display_name, address: parts.slice(1).join(", "), latitude: Number(place.lat), longitude: Number(place.lon), timeZone: placeTimezone(Number(place.lat),Number(place.lon)), type: place.type || place.category || "place" }; });
 }
 
 export async function GET(request: Request) {

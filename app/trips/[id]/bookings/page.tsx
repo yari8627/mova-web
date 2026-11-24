@@ -1,5 +1,7 @@
 "use client";
+import { BookingForm } from "../../../components/booking-form";
 
+import { BookingFields } from "../../../components/booking-fields";
 import { TripHeader } from "../../../components/trip-header";
 import { additionalBookingNotes, bookingGuests } from "../../../../lib/booking-view";
 import { GmailBookings } from "../../../components/gmail-bookings";
@@ -632,31 +634,8 @@ export default function BookingsPage() {
                 <X size={20} />
               </button>
             </div>
-            <form
-              className="trip-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                save();
-              }}
-            >
-              <label>
-                Tipo
-                <select
-                  value={draft.type}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      type: event.target.value as Booking["type"],
-                    })
-                  }
-                >
-                  <option value="flight">Volo</option>
-                  <option value="hotel">Hotel</option>
-                  <option value="train">Treno</option>
-                  <option value="car">Auto o Transfer</option>
-                  <option value="activity">Attività</option>
-                </select>
-              </label>
+            <BookingForm onSave={()=>void save()}>
+              <BookingFields section="identity" value={draft} onChange={change=>setDraft(current=>({...current,...change} as typeof current))}/>
               {draft.type === "flight" ? (
                 <div className="form-grid airport-fields">
                   <AirportField
@@ -674,20 +653,7 @@ export default function BookingsPage() {
                     }
                   />
                 </div>
-              ) : (
-                <label>
-                  Titolo
-                  <input
-                    value={draft.title}
-                    onChange={(event) =>
-                      setDraft({ ...draft, title: event.target.value })
-                    }
-                    placeholder="Nome della prenotazione"
-                    required
-                    autoFocus
-                  />
-                </label>
-              )}
+              ) : null}
               <div className={styles.dateTimeFields}>
                 <label>
                   Data
@@ -776,51 +742,7 @@ export default function BookingsPage() {
                   )}
                 </>
               )}
-              <div className="form-grid">
-                <label>
-                  Fornitore
-                  <input
-                    value={draft.provider}
-                    onChange={(event) =>
-                      setDraft({ ...draft, provider: event.target.value })
-                    }
-                    placeholder="Compagnia, hotel, agenzia…"
-                  />
-                </label>
-                {draft.type !== "flight" && (
-                  <label>
-                    Luogo
-                    <input
-                      value={draft.location}
-                      onChange={(event) =>
-                        setDraft({ ...draft, location: event.target.value })
-                      }
-                      placeholder="Stazione, struttura, indirizzo…"
-                    />
-                  </label>
-                )}
-              </div>
-              <label>
-                Riferimento o Conferma
-                <input
-                  value={draft.reference}
-                  onChange={(event) =>
-                    setDraft({ ...draft, reference: event.target.value })
-                  }
-                  placeholder="Codice prenotazione, numero volo…"
-                />
-              </label>
-              <label>
-                Note
-                <textarea
-                  value={draft.notes}
-                  onChange={(event) =>
-                    setDraft({ ...draft, notes: event.target.value })
-                  }
-                  placeholder="Check-in, bagagli, condizioni o altre informazioni utili"
-                  rows={3}
-                />
-              </label>
+              <BookingFields section="details" value={draft} onVerified={p=>setDraft(current=>({...current,location:[p.name,p.address].filter(Boolean).join(", ")}))} onChange={change=>setDraft(current=>({...current,...change} as typeof current))}/>
               {saveError && <div className="flight-search-error">{saveError}</div>}
               <div className="modal-actions">
                 <button
@@ -834,7 +756,7 @@ export default function BookingsPage() {
                   {saving ? "Salvataggio…" : "Salva prenotazione"}
                 </button>
               </div>
-            </form>
+            </BookingForm>
           </div>
         </div>
       )}

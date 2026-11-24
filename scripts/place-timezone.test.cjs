@@ -1,0 +1,7 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+function load(file){const b={exports:{},require,Intl,Date};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,b);return b.exports;}
+const {placeTimezone}=load('lib/place-timezone.ts'),{inLodgingZone,mailInstant}=load('lib/gmail-dates.ts');
+test('precise local timezone lookup maps Skjervøy to Oslo, not merged Berlin zone',()=>{assert.equal(placeTimezone(70.034,20.974),'Europe/Oslo');assert.equal(placeTimezone(41.9,12.5),'Europe/Rome');assert.equal(placeTimezone(40.71,-74),'America/New_York');});
+test('invalid, unknown and ocean coordinates never produce invented zones',()=>{for(const p of [[undefined,20],[91,20],[0,NaN],[0,0]])assert.equal(placeTimezone(...p),'');});
+test('verified Oslo location resolves date-specific offset and retains after/before semantics',()=>{for(const [date,offset]of [['2027-01-10','+01:00'],['2027-07-10','+02:00']]){const t=inLodgingZone({date,time:'15:00',offset:'',raw:'synthetic',qualifier:'after'},placeTimezone(70.034,20.974));assert.equal(t.offset,offset);assert.equal(t.qualifier,'after');assert.equal(mailInstant(t),date+'T15:00'+offset);}});
+test('nonexistent and ambiguous Oslo DST hours remain unresolved',()=>{for(const date of ['2027-03-28','2027-10-31'])assert.equal(inLodgingZone({date,time:'02:30',offset:'',raw:''},'Europe/Oslo').offset,'');});
