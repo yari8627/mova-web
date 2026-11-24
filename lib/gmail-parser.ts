@@ -117,6 +117,13 @@ function bookingAddress(body: string, html: string) {
   for(const m of html.matchAll(/<(address|a|p|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)) consider(htmlText(m[2]));
   for(let i=0;i<lines.length;i++) {
     consider(lines[i]);
+    // Split inline spans may separate every address component. Require postal evidence
+    // and an explicit final country; never search arbitrary surrounding prose.
+    for(let count=2;count<=5 && i+count<=lines.length;count++) {
+      const parts=lines.slice(i,i+count);
+      if(countryCode(parts.at(-1) || "")){consider(parts.slice(0,-1).join(" ")+", "+parts.at(-1));if(parts.length>=3)consider(parts.slice(0,-2).join(" ")+", "+parts.at(-2)+", "+parts.at(-1));}
+      consider(parts.join(" "));
+    }
     // Newline-separated street / postcode locality / country, without crossing other labels.
     if(countryCode(lines[i]) && i>=2) consider(`${lines[i-2]}, ${lines[i-1]}, ${lines[i]}`);
     if(i && /^[0-9]{4,5}\s/.test(lines[i]))consider(`${lines[i-1]}, ${lines[i]}`);

@@ -32,8 +32,10 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const [examined, setExamined] = useState(0);
   const [searched, setSearched] = useState(false);
   const dialog = useRef<HTMLDivElement>(null), opener = useRef<HTMLButtonElement>(null);
+  const errorBox = useRef<HTMLDivElement>(null);
   const busyRef = useRef(busy); busyRef.current = busy;
   useEffect(() => { if (!active) { setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
+  useEffect(()=>{if(error){errorBox.current?.scrollIntoView?.({block:"nearest"});errorBox.current?.focus?.();}},[error]);
   useEffect(() => {
     const u = new URL(window.location.href), status = u.searchParams.get("gmail");
     if (status === "connected" || status === "denied") {
@@ -103,7 +105,8 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     await run(async () => {
       const selected = rows.filter(r => r.selected);
       if (!selected.length) throw new Error("Seleziona almeno una prenotazione.");
-      if (selected.some(r => !r.tripId)) throw new Error("Scegli il viaggio per ogni prenotazione selezionata.");
+      const missingTrip=selected.find(r=>!r.tripId);
+      if(missingTrip) throw new Error(`${missingTrip.draft.title}: scegli il viaggio nel campo Viaggio prima di confermare.`);
       if (selected.some(r=>!r.draft.startDate || (r.timing && Object.values(r.timing.end).some(Boolean) && !r.draft.endDate))) throw new Error("Completa data, ora e fuso nei dettagli delle prenotazioni selezionate, inclusa la fine quando presente nell’email.");
       const data = await api("import", "POST", { confirm: true, choices: selected.map(r => ({ token: r.token, draft: r.draft, tripId: r.tripId, action: r.bookingId ? "update" : "create", bookingId: r.bookingId })) });
       for (const id of new Set(selected.map(r => r.tripId!))) { removeTripSnapshot(id); window.localStorage.removeItem(`mova-bookings-${id}`); }
@@ -131,7 +134,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         <header className={styles.header}><div><h2 id="gmail-title">Importa da Gmail</h2><p>Scegli il periodo in cui hai ricevuto le conferme di viaggio</p></div><button type="button" className="icon-button" aria-label="Chiudi importazione Gmail" disabled={busy} onClick={cancel}><X /></button></header>
         {connected ? <details className={styles.account}><summary>Account Gmail</summary><p>Gmail collegato: <strong>{email}</strong></p><button disabled={busy} className="secondary-button" onClick={() => void run(async () => { const r = await api("connection", "DELETE"); setConnected(false); setEmail(""); resetSearch(); setNotice(r.revoked ? "Gmail scollegato." : "Gmail scollegato da NAMI. Verifica la revoca nel tuo account Google."); })}>Scollega Gmail</button><p>Date di ricezione incluse · {timeZone}</p></details> : !busy && <button disabled={busy} className="primary-button" onClick={() => void run(async () => { const result = await api("connect", "POST", { tripId }); window.location.assign(result.url); })}>Collega Gmail</button>}
         {connected && <div className={`${styles.tools} ${styles.dateFilters}`}><label className={styles.field}>Email dal<input type="date" disabled={busy} value={from} onInput={e => { setFrom(e.currentTarget.value); resetSearch(); }} onChange={e => { setFrom(e.target.value); resetSearch(); }} /></label><label className={styles.field}>Al<input type="date" disabled={busy} value={to} onInput={e => { setTo(e.currentTarget.value); resetSearch(); }} onChange={e => { setTo(e.target.value); resetSearch(); }} /></label><button className="primary-button" disabled={busy} onClick={() => void search()}>Cerca prenotazioni</button></div>}
-        {error && <div role="alert" className={styles.warning}>{error}</div>}
+
         {notice && <div role="status" className={styles.notice}>{notice}</div>}
         {busy && <p role="status">Operazione in corso…</p>}
         {rows.length > 0 && <label><input type="checkbox" checked={rows.some(r => r.selected) && rows.filter(r => r.state !== "Già presente" && r.event !== "cancellation").every(r => r.selected)} onChange={e => setRows(current => current.map(r => ({ ...r, selected: r.state !== "Già presente" && r.event !== "cancellation" && e.target.checked })))} disabled={busy || rows.every(r => r.state === "Già presente" || r.event === "cancellation")} /> Seleziona tutte le prenotazioni importabili</label>}
@@ -165,6 +168,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         </article>)}</fieldset>}
         {searched && counts.duplicates>0 && <p>{counts.duplicates} conferme ripetute raggruppate.</p>}
         {searched && counts.excluded>0 && <details className={styles.details}><summary>Email non riconosciute ({counts.excluded})</summary><p>Questi messaggi non contengono informazioni sufficienti per proporre una prenotazione. Non saranno importati.</p></details>}
+        {error && <div ref={errorBox} tabIndex={-1} role="alert" className={styles.warning}>{error}</div>}
         {searched && <div className={styles.footer}>{cursor && <button className="secondary-button" disabled={busy} onClick={() => void search(true)}>Esamina altre email</button>}<button className="primary-button" disabled={busy || !selection || selection > 50} onClick={() => void confirm()}>Conferma importazione ({selection})</button><button className="secondary-button" disabled={busy} onClick={() => { cancel(); }}>Annulla</button></div>}
       </div>
     </div>, document.body)}
