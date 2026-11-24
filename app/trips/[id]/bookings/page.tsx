@@ -1,4 +1,5 @@
 "use client";
+import { BookingToast } from "../../../components/booking-toast";
 import { BookingForm } from "../../../components/booking-form";
 
 import { BookingFields } from "../../../components/booking-fields";
@@ -242,7 +243,7 @@ export default function BookingsPage() {
   const [gmailSaved,setGmailSaved]=useState("");
   useEffect(()=>{
     const count=Number(searchParams.get("gmailSaved"));
-    if(count>0 && Number.isInteger(count) && count<=50) setGmailSaved(`Prenotazioni salvate: ${count}.`);
+    if(count>0 && Number.isInteger(count) && count<=50) setGmailSaved(count===1?"1 prenotazione salvata":`${count} prenotazioni salvate`);
     if(searchParams.has("gmailSaved")){const url=new URL(window.location.href);url.searchParams.delete("gmailSaved");window.history.replaceState(null,"",`${url.pathname}${url.search}${url.hash}`);}
   },[searchParams]);
   useEffect(()=>{if(!paneActive)setGmailSaved("");},[paneActive]);
@@ -473,6 +474,7 @@ export default function BookingsPage() {
         <h1 className="trip-section-title">Prenotazioni</h1>
         <p>Voli, soggiorni, trasporti e attività in un unico posto.</p>
         </div>
+          <div className={styles.actions}>
           {canManage && <GmailBookings active={paneActive} tripId={id} onImported={async (result) => {
             const remote = await fetchTripSnapshot(id);
             if (remote) { setBookings(remote.bookings); window.localStorage.setItem(`mova-bookings-${id}`, JSON.stringify(remote.bookings)); }
@@ -486,9 +488,10 @@ export default function BookingsPage() {
               <Plus size={18} /> Aggiungi Prenotazione
             </button>
           )}
+          </div>
       </div>
       <section className="bookings-panel">
-        {gmailSaved && <p role="status">{gmailSaved}</p>}
+        {gmailSaved && <BookingToast message={gmailSaved}/>}
         <div className="booking-overview">
           <div className="booking-kpi-total">
             <strong>{bookings.length}</strong>

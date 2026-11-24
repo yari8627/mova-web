@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { BookingToast } from "./booking-toast";
 import { BookingForm } from "./booking-form";
 import { BookingFields } from "./booking-fields";
 import { BookingPlaceField,type BookingPlace } from "./booking-place-field";
@@ -137,7 +138,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         const tripIds = [...new Set(selected.filter(r=>data.results.some((v:{key:string;status:string})=>v.key===r.key && ["importata","aggiornata"].includes(v.status))).map(r=>r.tripId!))];
         await Promise.all(tripIds.map(id=>fetchTripSnapshot(id)));
         await onImported({count:imported+updated,tripIds});
-        setSuccess(`${imported + updated} prenotazioni salvate · ${tripIds.map(id=>trips.find(t=>t.id===id)?.name || "Viaggio").join(", ")}.`);
+        setSuccess(imported+updated===1?"1 prenotazione salvata":`${imported+updated} prenotazioni salvate`);
         setNotice(""); setOpen(false); setRows([]);
       } else if (imported + updated > 0) await onImported();
     });
@@ -145,7 +146,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const selection = rows.filter(r => r.selected).length;
   return <>
     <button ref={opener} type="button" className={`primary-button booking-add-button ${styles.trigger}`} onClick={() => void begin()}><img src="/brands/gmail.svg" width={20} height={20} alt="" aria-hidden="true" />Importa da Gmail</button>
-    {!open && success && <p role="status" className={styles.notice}>{success}</p>}
+    {!open && success && <BookingToast message={success}/>}
     {open && createPortal(<div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="gmail-title" className={styles.panel}>
       <div className={styles.inner}>
         <header className={styles.header}><div><h2 id="gmail-title">Importa da Gmail</h2><p>Scegli il periodo in cui hai ricevuto le conferme di viaggio</p></div><button type="button" className="icon-button" aria-label="Chiudi importazione Gmail" disabled={busy} onClick={cancel}><X /></button></header>

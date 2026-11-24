@@ -80,3 +80,7 @@
 .temporalHint { position: absolute; inset: 1px 30px 1px 1px; display: flex; align-items: center; padding: 9px; border-radius: 11px; background: #f8f5ef; color: var(--text-secondary); font-size: 16px; line-height: 24px; pointer-events: none; }
 .bookings :global(.booking-modal) .temporalInput[data-empty="true"] { -webkit-text-fill-color: transparent; }
 .bookings :global(.booking-modal) .temporalInput::-webkit-date-and-time-value { min-height: 24px; margin: 0; text-align: left; }
+
+.bookings :global(.expenses-title) > .actions { display:flex; flex:0 1 auto; flex-wrap:wrap; align-items:stretch; gap:8px; min-width:0; max-width:100%; }
+.bookings .actions :global(.booking-add-button) { flex:1 1 auto; width:auto; min-width:0; min-height:44px; margin:0; padding:12px 14px; font-size:12px; white-space:nowrap; }
+@media(max-width:600px){.bookings :global(.expenses-title) > .actions { flex:1 1 100%; }.bookings .actions :global(.booking-add-button){flex:1 1 150px;}}
