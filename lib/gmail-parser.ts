@@ -1,4 +1,4 @@
-import { BookingDraft, Candidate } from "./gmail-core";
+import { BookingDraft, Candidate, countryCode, locationCountry } from "./gmail-core";
 import { airbnbTimingNotes, emptyMailTime, inLodgingZone, mailInstant, parseMailRange, parseMailTime } from "./gmail-dates";
 
 export type GmailPart = { mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { data?: string; size?: number }; parts?: GmailPart[] };
@@ -103,6 +103,26 @@ function applyAirbnb(candidate: Candidate, details: ReturnType<typeof airbnbDeta
   d.notes = [d.notes.split("\n").filter(line=>line.trim()!==details.guests).join("\n"), details.locality && `Località: ${details.locality}`, details.guests && `Ospiti: ${details.guests}`, airbnbTimingNotes(candidate.timing.start,candidate.timing.end)].filter(Boolean).join("\n");
   return candidate;
 }
+/** Postal evidence is required for an unlabelled address; ambiguous candidates stay blank. */
+function bookingAddress(body: string, html: string) {
+  const lines=body.split(/\r?\n/).map(v=>v.replace(/\s+/g," ").trim()).filter(Boolean);
+  const candidates=new Set<string>();
+  function consider(value:string) {
+    const v=place(value.replace(/\s+/g," ").replace(/\s*,\s*/g,", ").trim());
+    if(!v || v.length>250 || !locationCountry(v) || /(?:PIN|conferma|confirmation|booking|fatturazione|billing|sede legale|registered office|telefono|phone|https?|@)\b/i.test(v))return;
+    // Street with house number, then postal code and locality, then explicit country.
+    if(!/^(?=[^,]*\p{L})(?=[^,]*\d)[^,]+,\s*(?:[A-Z]{1,2}[- ]?)?\d{4,5}\s+\p{L}[^,]*,\s*[^,]+$/u.test(v))return;
+    candidates.add(v);
+  }
+  for(const m of html.matchAll(/<(address|a|p|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)) consider(htmlText(m[2]));
+  for(let i=0;i<lines.length;i++) {
+    consider(lines[i]);
+    // Newline-separated street / postcode locality / country, without crossing other labels.
+    if(countryCode(lines[i]) && i>=2) consider(`${lines[i-2]}, ${lines[i-1]}, ${lines[i]}`);
+    if(i && /^[0-9]{4,5}\s/.test(lines[i]))consider(`${lines[i-1]}, ${lines[i]}`);
+  }
+  return candidates.size===1?[...candidates][0]:"";
+}
 /** Read adjacent table cells/lines only inside explicitly labelled journey sections. */
 function providerDetails(candidate: Candidate, body: string, supplier: string, html = "") {
   if (!["Booking.com","easyJet","Italo"].includes(supplier)) return candidate;
@@ -119,11 +139,17 @@ function providerDetails(candidate: Candidate, body: string, supplier: string, h
     const headings=[...html.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(m=>htmlText(m[2]).replace(/\s+/g," ").trim());
     d.title ||= headings.find(v=>v.length>2 && !/booking\.com|conferm|confirmation|prenotazione|reservation|grazie|thank|check[ -]?(?:in|out)/i.test(v)) || "";
     d.title ||= block(/^(?:hotel(?: name)?|nome hotel|struttura|property(?: name)?)$/i,1);
-    d.location=block(/^(?:indirizzo|address)$/i,3) || d.location;
+    d.location=bookingAddress(body,html) || block(/^(?:indirizzo|address)$/i,3) || d.location;
+  }
+  function bookingBlock(label:RegExp) {
+    const i=lines.findIndex(v=>label.test(v.split(/[:：]/)[0].trim()));if(i<0)return "";
+    const out=[lines[i].replace(/^[^:：]+[:：]\s*/,"")===lines[i]?"":lines[i].replace(/^[^:：]+[:：]\s*/,"")];
+    for(let n=i+1;n<lines.length && n<=i+4;n++){if(sections.test(lines[n]) || /^[\p{L}][\p{L} \-]{0,60}[:：]/u.test(lines[n]))break;out.push(lines[n]);}
+    return out.filter(Boolean).join(" ").slice(0,500);
   }
   const locale=/\b(?:partenza|arrivo|ospiti|prenotazione|indirizzo|treno)\b/i.test(body)?"it":undefined;
-  const start=block(supplier==="Booking.com"?/^(?:check[ -]?in|arrivo|arrival)$/i:/^(?:partenza|departure|data (?:di )?partenza)$/i);
-  const end=block(supplier==="Booking.com"?/^(?:check[ -]?out|partenza|departure)$/i:/^(?:arrivo|arrival|data (?:di )?arrivo)$/i);
+  const start=(supplier==="Booking.com"?bookingBlock:block)(supplier==="Booking.com"?/^(?:check[ -]?in|arrivo|arrival)$/i:/^(?:partenza|departure|data (?:di )?partenza)$/i);
+  const end=(supplier==="Booking.com"?bookingBlock:block)(supplier==="Booking.com"?/^(?:check[ -]?out|partenza|departure)$/i:/^(?:arrivo|arrival|data (?:di )?arrivo)$/i);
   const timing=candidate.timing!;
   if((!timing.start.date || !timing.start.time) && start && parseMailTime(start,locale).date)timing.start=parseMailTime(start,locale);
   if((!timing.end.date || !timing.end.time) && end && parseMailTime(end,locale).date)timing.end=parseMailTime(end,locale);
