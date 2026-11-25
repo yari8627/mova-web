@@ -27,10 +27,10 @@ async function connection(userId: string, tx: Pick<Prisma.TransactionClient, "$q
 async function googleJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try { response = await fetch(url, { ...init, cache: "no-store", redirect: "error", signal: init.signal || AbortSignal.timeout(15000) }); }
-  catch { throw new GmailError(503, "Google non raggiungibile. Riprova."); }
+  catch(e) { throw Object.assign(new GmailError(503, "Google non raggiungibile. Riprova."),{diagnosticReason:e instanceof Error && ["TimeoutError","AbortError"].includes(e.name)?"timeout":"network"}); }
   if (!response.ok) {
-    if ([400, 401, 403].includes(response.status)) throw new GmailError(409, "Autorizzazione Gmail scaduta o revocata. Scollega e ricollega Gmail.");
-    throw new GmailError(503, response.status === 429 ? "Limite Gmail raggiunto. Riprova più tardi." : "Gmail temporaneamente non disponibile.");
+    if ([400, 401, 403].includes(response.status)) throw Object.assign(new GmailError(409, "Autorizzazione Gmail scaduta o revocata. Scollega e ricollega Gmail."),{diagnosticReason:"authorization"});
+    throw Object.assign(new GmailError(503, response.status === 429 ? "Limite Gmail raggiunto. Riprova più tardi." : "Gmail temporaneamente non disponibile."),{diagnosticReason:response.status===429?"rate_limit":"other"});
   }
   if (!response.body) throw new GmailError(503, "Risposta Gmail incompleta.");
   const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
@@ -121,8 +121,10 @@ function bookingMatch(d: BookingDraft, b: BookingRow, updating=false) {
   }
   return sameReference || !!(d.startDate && d.startDate.slice(0,10)===b.startDate.toISOString().slice(0,10) && normalize(d.title)===normalize(b.title));
 }
-export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string }) {
+export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string; diagnostics?:boolean }) {
   if ("diagnoseTarget" in input) throw new GmailError(400, "Diagnostica temporanea rimossa. Ricarica NAMI.");
+  const started=Date.now(),timings={access:0,list:0,fetch:0,body:0,pdf:0,validationDedup:0};
+  const counts={listed:0,fetched:0,unrecognized:0,beforeDedup:0,types:{flight:0,hotel:0,train:0,car:0,activity:0},pdfProcessed:0,pdfSkipped:0,pdfFailed:0,messageFailures:{timeout:0,network:0,oversized:0,authorization:0,rate_limit:0,other:0},pdfReasons:{} as Record<string,number>};
   const from = input.from, to = input.to;
   if (typeof from !== "string" || typeof to !== "string" || !/^\d{4}-\d\d-\d\d$/.test(from) || !/^\d{4}-\d\d-\d\d$/.test(to) || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || new Date(from).toISOString().slice(0, 10) !== from || new Date(to).toISOString().slice(0, 10) !== to || from > to || Date.parse(to) - Date.parse(from) > 366 * 86400000 * 5) throw new GmailError(400, "Periodo non valido (massimo cinque anni).");
   const timeZone = input.timeZone;
@@ -138,16 +140,20 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" voucher "e-ticket" from:italotreno.it from:easyjet.com}`;
+  timings.access=Date.now()-started;const listStarted=Date.now();
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
   const list = pdfPhase && cursor?.pending?.length ? {messages:cursor.pending.map(id=>({id})),nextPageToken:cursor.token || undefined} : await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
+  timings.list=Date.now()-listStarted;counts.listed=list.messages?.length||0;
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
   const candidates: { key: string; identityKey: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
   const excluded: Partial<Record<NonNullable<ParseDiagnostics["excluded"]>|"insufficient_details", number>> = {};
+  const fetchStarted=Date.now();
   const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
-    catch (e) { messagesPartial=true;if (e instanceof GmailError && e.status === 422) oversized++;return null; }
+    catch (e) { const reason=(e as {diagnosticReason?:string})?.diagnosticReason;const category=e instanceof GmailError && e.status===422?"oversized":reason && ["timeout","network","authorization","rate_limit"].includes(reason)?reason as "timeout"|"network"|"authorization"|"rate_limit":"other";counts.messageFailures[category]++;messagesPartial=true;if (e instanceof GmailError && e.status === 422) oversized++;return null; }
   }));
+  timings.fetch=Date.now()-fetchStarted;counts.fetched=fetched.filter(Boolean).length;
   for (const fetchedMessage of fetched) {
     if (!fetchedMessage) continue;
     const { item, message } = fetchedMessage;
@@ -155,7 +161,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
     if (!Number.isFinite(received) || received < range.start || received >= range.end) { outsideRange++;  continue; }
     examined++;
     const diagnostics: ParseDiagnostics = {};
-    let parsed = parseGmailMessage(message,diagnostics);
+    const bodyStarted=Date.now();let parsed = parseGmailMessage(message,diagnostics);timings.body+=Date.now()-bodyStarted;const pdfStarted=Date.now();
     const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && (!pdfPhase || pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2);
     if(defer)deferred.push(item.id);
     const pdf=defer?{candidates:parsed,partial:false}:await parsePdfAttachments(message,parsed,async attachmentId=>{
@@ -163,7 +169,10 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       const result=await googleJson<{data?:string;size?:number}>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}/attachments/${attachmentId}`,{headers:{Authorization:`Bearer ${tokens.access}`},signal:AbortSignal.timeout(2500)});
       if(!result.data || result.data.length>1400000)throw Error("attachment");return Buffer.from(result.data,"base64url");
     },pdfBudget);
-    parsed=pdf.candidates;attachmentsPartial ||= pdf.partial;
+    timings.pdf+=Date.now()-pdfStarted;
+    if("stats" in pdf && pdf.stats){counts.pdfProcessed+=pdf.stats.processed;counts.pdfSkipped+=pdf.stats.skipped;counts.pdfFailed+=pdf.stats.failed;for(const [key,value] of Object.entries(pdf.stats.reasons))counts.pdfReasons[key]=(counts.pdfReasons[key]||0)+value;}
+    parsed=pdf.candidates;attachmentsPartial ||= pdf.partial;if(!parsed.length)counts.unrecognized++;counts.beforeDedup+=parsed.length;for(const candidate of parsed)counts.types[candidate.draft.type]++;
+
     if(diagnostics.excluded) excluded[diagnostics.excluded]=(excluded[diagnostics.excluded] || 0)+1;
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
@@ -181,10 +190,11 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       candidates.push({ key: sourceKey, identityKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.some(w=>w.startsWith("Conflitto allegato")) || matches.length ? "Da verificare" : quality, matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId, tripName: trips.find(t => t.id === b.tripId)?.name || "Viaggio" })) });
     }
   }
+  timings.validationDedup=Date.now()-started-timings.access-timings.list-timings.fetch-timings.body-timings.pdf;
   if(deferred.length>200)attachmentsPartial=true;
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { searchStatus:{searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"},attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { ...(input.diagnostics===true?{searchStatus:{version:/^[a-f0-9]{7,40}$/i.test(process.env.VERCEL_GIT_COMMIT_SHA||"")?process.env.VERCEL_GIT_COMMIT_SHA:"local",durationMs:Date.now()-started,timings,counts,gmailPages:pdfPhase?0:1,queueOverflow:deferred.length>200,searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"}}:{}),attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {

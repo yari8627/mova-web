@@ -16,12 +16,14 @@ export function mergePdfCandidates(body:Candidate[],incoming:Candidate[]){const 
  }return out;}
 export function needsPdf(body:Candidate[]){return !body.length || body.some(c=>previewQuality(c)!=="Importabile" || (c.draft.type!=="activity" && !c.draft.endDate));}
 export async function parsePdfAttachments(message:GmailMessage,body:Candidate[],fetchPart:(id:string)=>Promise<Uint8Array>,budget:{used:number;pageUsed?:number},extract=extractPdf){
- if(!needsPdf(body))return {candidates:body,partial:false};
- const found=pdfParts(message);let candidates=body,partial=found.limited;const seen=new Set<string>();
- for(let i=0;i<found.parts.length;i++){const part=found.parts[i];if(i>=PDF_LIMITS.perMessage || budget.used>=PDF_LIMITS.perRequest || (budget.pageUsed || 0)>=2){partial=true;break;}const declared=part.body?.size;if(typeof declared!=="number" || declared>PDF_LIMITS.bytes || declared<16){partial=true;continue;}budget.used++;budget.pageUsed=(budget.pageUsed || 0)+1;
- try{const bytes=part.body?.data?Buffer.from(part.body.data,"base64url"):part.body?.attachmentId?await fetchPart(part.body.attachmentId):null;if(!bytes || bytes.length!==declared){partial=true;continue;}const result=await extract(bytes);if(!result.text){partial=true;continue;}const text=redactBookingPin(result.text);if(seen.has(text))continue;seen.add(text);
+ const stats={processed:0,skipped:0,failed:0,reasons:{} as Record<string,number>};
+ const fail=(reason:string)=>{stats.failed++;stats.reasons[reason]=(stats.reasons[reason]||0)+1;};
+ if(!needsPdf(body))return {candidates:body,partial:false,stats:{...stats,skipped:pdfParts(message).parts.length}};
+ const found=pdfParts(message);let candidates=body,partial=found.limited;const seen=new Set<string>();if(found.limited)fail("mime_limit");
+ for(let i=0;i<found.parts.length;i++){const part=found.parts[i];if(i>=PDF_LIMITS.perMessage || budget.used>=PDF_LIMITS.perRequest || (budget.pageUsed || 0)>=2){partial=true;stats.skipped+=found.parts.length-i;stats.reasons.budget=(stats.reasons.budget||0)+1;break;}const declared=part.body?.size;if(typeof declared!=="number" || declared>PDF_LIMITS.bytes || declared<16){partial=true;fail("declared_size");continue;}budget.used++;budget.pageUsed=(budget.pageUsed || 0)+1;
+ try{const bytes=part.body?.data?Buffer.from(part.body.data,"base64url"):part.body?.attachmentId?await fetchPart(part.body.attachmentId):null;if(!bytes || bytes.length!==declared){partial=true;fail("download_size");continue;}const result=await extract(bytes);if(!result.text){partial=true;fail(["bytes","format","timeout","text","pages","no_text","protected","unreadable"].includes(result.reason||"")?result.reason!:"unreadable");continue;}stats.processed++;const text=redactBookingPin(result.text);if(seen.has(text))continue;seen.add(text);
  if(/^(?:\s*)(?:invoice|fattura|brochure)\b/i.test(text) || (!/confermat|confirmed|confirmation|voucher|biglietto|ticket|reservation/i.test(text) && !(/conferma acquisto|booking confirmation|conferma prenotazione/i.test(header(message.payload,"Subject")) && /stazione|partenza|departure|flight|treno|aeroporto/i.test(text))))continue;
  const pdfMessage:GmailMessage={...message,payload:{mimeType:"text/plain",headers:message.payload?.headers,body:{data:Buffer.from(text).toString("base64url")}}};const parsed=parseGmailMessage(pdfMessage).filter(c=>c.event==="confirmation" || (c.event==="uncertain" && /\b(?:travel voucher|booking voucher|voucher di prenotazione|e-ticket|biglietto elettronico)\b/i.test(text)));if(/\b(?:travel voucher|booking voucher|voucher di prenotazione|e-ticket|biglietto elettronico)\b/i.test(text) && !/confirmed|reservation confirmation|booking confirmation|prenotazione[^\n]{0,100}confermata|conferma (?:della )?prenotazione/i.test(text))for(const c of parsed){c.event="uncertain";c.draft.status="pending";c.warnings.push("Voucher riconosciuto: verifica lo stato della prenotazione.");}candidates=mergePdfCandidates(candidates,parsed);
- }catch{partial=true;}}
- return {candidates,partial};
+ }catch{partial=true;fail("attachment_fetch");}}
+ return {candidates,partial,stats};
 }

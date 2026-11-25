@@ -9,7 +9,7 @@ import { BookingFields } from "./booking-fields";
 import { BookingPlaceField,type BookingPlace } from "./booking-place-field";
 import { suggestTrip } from "../../lib/gmail-geography";
 import { X } from "lucide-react";
-import { collectGmailPages } from "../../lib/gmail-pagination";
+import { collectGmailPages, safeSearchTrace } from "../../lib/gmail-pagination";
 import type { BookingDraft, Candidate } from "../../lib/gmail-core";
 import { inLodgingZone, mailInstant, splitMailInstant, stayTimeText, type MailTime } from "../../lib/gmail-dates";
 import { fetchTripSnapshot, removeTripSnapshot } from "../../lib/trip-client-cache";
@@ -20,7 +20,7 @@ type Trip = { id: string; name: string; city: string; country?:string; countryCo
 type Row = { place?:BookingPlace; key: string; identityKey?: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; warnings: string[]; event: Candidate["event"]; email: { subject: string; from: string; date: string }; state: string; suggestedTripId: string | null; matches: { id: string; title: string; tripId: string; tripName?: string }[]; tripId?: string; bookingId?: string };
 async function api(path: string, method = "GET", body?: unknown, signal?:AbortSignal) {
   const response = await fetch(`/api/gmail/${path}`, { method, signal, cache: "no-store", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
-  const data = await response.json(); if (!response.ok) throw new Error(data.error || "Gmail non disponibile."); return data;
+  let data;try{data=await response.json();}catch{throw Object.assign(new Error("Risposta Gmail non disponibile."),{httpStatus:response.status});} if (!response.ok) throw Object.assign(new Error(data.error || "Gmail non disponibile."),{httpStatus:response.status}); return data;
 }
 const dateString = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const kindNames = { flight: "Volo", hotel: "Alloggio", train: "Treno / bus / traghetto", car: "Noleggio auto", activity: "Attività" };
@@ -30,6 +30,11 @@ function warningsFor(row: Row) { return [...new Set(row.warnings)].filter(w=>!(r
 export function GmailBookings({ tripId, onImported, active = true }: { tripId: string; active?: boolean; onImported: (result?: { count: number; tripIds: string[] }) => Promise<void> }) {
   const [open, setOpen] = useState(false), [connected, setConnected] = useState(false), [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [diagnosticsArmed,setDiagnosticsArmed]=useState(false);
+  const [diagnostics,setDiagnostics]=useState<ReturnType<typeof safeSearchTrace>[]>([]);
+  const [diagnosticResult,setDiagnosticResult]=useState("");
+  const diagnosticGeneration=useRef(0);
+  function clearDiagnostics(){diagnosticGeneration.current++;setDiagnosticsArmed(false);setDiagnostics([]);setDiagnosticResult("");}
   const [success, setSuccess] = useState("");
   const [editing,setEditing]=useState<string | null>(null);
   const [counts,setCounts]=useState({excluded:0,duplicates:0});
@@ -44,7 +49,8 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   const searchRequest=useRef<AbortController | null>(null);
   const errorBox = useRef<HTMLDivElement>(null);
   const busyRef = useRef(busy); busyRef.current = busy;
-  useEffect(() => { if (!active) { searchRequest.current?.abort(); setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
+  useEffect(() => { if (!active) { clearDiagnostics();searchRequest.current?.abort(); setSuccess(""); setNotice(""); setRows([]); setOpen(false); setSearched(false); setCursor(null); setExamined(0); setError(""); } }, [active]);
+  useEffect(()=>()=>{diagnosticGeneration.current++;searchRequest.current?.abort();},[]);
   useEffect(()=>{if(editing){editorBox.current?.scrollIntoView?.({block:"start"});editorBox.current?.focus?.();}},[editing]);
   useEffect(()=>{if(error){errorBox.current?.scrollIntoView?.({block:"nearest"});errorBox.current?.focus?.();}},[error]);
   useEffect(() => {
@@ -74,7 +80,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     return () => { document.body.style.overflow = old; document.removeEventListener("keydown", key); previous?.focus(); };
   }, [open]);
   async function run(fn: () => Promise<void>) { if (busyRef.current) return; busyRef.current=true; setBusy(true); setError(""); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Operazione non riuscita."); } finally { busyRef.current=false; setBusy(false); } }
-  function cancel() { setEditing(null); setCounts({excluded:0,duplicates:0}); setRows([]); setCursor(null); setExamined(0); setSearched(false); setNotice(""); setError(""); setSuccess(""); setOpen(false); }
+  function cancel() { clearDiagnostics(); setEditing(null); setCounts({excluded:0,duplicates:0}); setRows([]); setCursor(null); setExamined(0); setSearched(false); setNotice(""); setError(""); setSuccess(""); setOpen(false); }
   async function begin() {
     setEditing(null);
     setCounts({excluded:0,duplicates:0});setOpen(true); setSuccess(""); setRows([]); setNotice(""); setSearched(false); setCursor(null); setExamined(0);
@@ -82,12 +88,14 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
   }
   async function search() {
     await run(async()=>{
+      const generation=++diagnosticGeneration.current;const diagnose=diagnosticsArmed;setDiagnosticsArmed(false);setDiagnostics([]);setDiagnosticResult("");
       searchRequest.current?.abort();const controller=new AbortController();searchRequest.current=controller;
       setRows([]);setEditing(null);setNotice("");setSearched(true);
       const result=await collectGmailPages<Row>(async(cursor,signal)=>{
-        const data=await api("search","POST",{from,to,timeZone,...(cursor?{cursor}:{})},signal);
+        const data=await api("search","POST",{from,to,timeZone,...(diagnose?{diagnostics:true}:{}),...(cursor?{cursor}:{})},signal);
         return {...data,candidates:data.candidates.map((r:Row)=>({...r,tripId:r.suggestedTripId || undefined}))};
-      },(rows,page)=>{setRows(rows);setTrips(page.trips as Trip[]);},{signal:controller.signal});
+      },(rows,page)=>{setRows(rows);setTrips(page.trips as Trip[]);},{signal:controller.signal,onDiagnostic:diagnose?event=>{if(generation===diagnosticGeneration.current)setDiagnostics(current=>[...current,safeSearchTrace(event)]);}:undefined});
+      if(diagnose && generation===diagnosticGeneration.current)setDiagnosticResult(result.partial?`partial:${result.reason}`:"complete");
       if(controller.signal.aborted)return;
       setNotice(`${result.rows.length} prenotazioni trovate`);
       if(result.partial)setError("Risultati parziali: non è stato possibile esaminare tutte le email dell’intervallo. Riprova la ricerca o restringi le date.");
@@ -121,7 +129,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     const suggested=suggestTrip({...draft,startDate:draft.startDate || next.start.date,endDate:draft.endDate || next.end.date},trips.filter(t=>t.startDate && t.endDate).map(t=>({...t,country:t.country || "",startDate:t.startDate!,endDate:t.endDate!})));
     edit(row.key,{place:p,draft,timing:next,suggestedTripId:suggested,tripId:row.tripId && row.tripId!==row.suggestedTripId?row.tripId:suggested || undefined});
   }
-  function resetSearch() { setCounts({excluded:0,duplicates:0}); setCursor(null); setRows([]); setNotice(""); setSearched(false); setExamined(0); }
+  function resetSearch() { clearDiagnostics(); setCounts({excluded:0,duplicates:0}); setCursor(null); setRows([]); setNotice(""); setSearched(false); setExamined(0); }
   async function confirm() {
     await run(async () => {
       const selected = rows.filter(r => r.key===editing && r.state!=="Già presente" && r.event!=="cancellation");
@@ -153,6 +161,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       <div className={styles.inner}>
         <header className={styles.header}><div><h2 id="gmail-title">Importa da Gmail</h2><p>Scegli il periodo in cui hai ricevuto le conferme di viaggio</p></div><button type="button" className="icon-button" aria-label="Chiudi importazione Gmail" disabled={busy} onClick={cancel}><X /></button></header>
         {connected ? <details className={styles.account}><summary>Account Gmail</summary><p>Gmail collegato: <strong>{email}</strong></p><button disabled={busy} className="secondary-button" onClick={() => void run(async () => { const r = await api("connection", "DELETE"); setConnected(false); setEmail(""); resetSearch(); setNotice(r.revoked ? "Gmail scollegato." : "Gmail scollegato da NAMI. Verifica la revoca nel tuo account Google."); })}>Scollega Gmail</button><p>Date di ricezione incluse · {timeZone}</p></details> : !busy && <button disabled={busy} className="primary-button" onClick={() => void run(async () => { const result = await api("connect", "POST", { tripId }); window.location.assign(result.url); })}>Collega Gmail</button>}
+        {connected && <details className={styles.account}><summary>Diagnostica temporanea (facoltativa)</summary><p>Solo contatori e tempi, nessun contenuto email. Dati in memoria fino alla chiusura o al cambio date.</p><button disabled={busy} aria-pressed={diagnosticsArmed} onClick={()=>setDiagnosticsArmed(!diagnosticsArmed)}>{diagnosticsArmed?"Diagnostica autorizzata per la prossima ricerca":"Autorizzo la diagnostica per la prossima ricerca"}</button>{diagnostics.length>0 && <><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",maxWidth:"100%"}}>{JSON.stringify({result:diagnosticResult,requests:diagnostics},null,2)}</pre><button disabled={busy} onClick={clearDiagnostics}>Cancella diagnostica</button></>}</details>}
         {connected && <div className={`${styles.tools} ${styles.dateFilters}`}><label className={styles.field}>Email dal<input type="date" disabled={busy} value={from} onInput={e => { setFrom(e.currentTarget.value); resetSearch(); }} onChange={e => { setFrom(e.target.value); resetSearch(); }} /></label><label className={styles.field}>Al<input type="date" disabled={busy} value={to} onInput={e => { setTo(e.currentTarget.value); resetSearch(); }} onChange={e => { setTo(e.target.value); resetSearch(); }} /></label><button className="primary-button" disabled={busy} onClick={() => void search()}>Cerca prenotazioni</button></div>}
 
         {notice && <div role="status" className={styles.notice}>{notice}</div>}

@@ -12,3 +12,19 @@ test('equal dates have stable ordering; invalid dates sort last',()=>{assert.equ
 test('unreadable or skipped attachments keep complete pages but final result explicitly partial',async()=>{const r=await collectGmailPages(async()=>({...page([row('one','2026-11-22')]),attachmentsPartial:true}),()=>{});assert(r.partial);assert.equal(r.reason,'attachments');assert.equal(r.rows.length,1);});
 
 test('deferred PDF enrichment replaces same source key rather than creating a second card',()=>{const preview=load('lib/gmail-preview.ts');const first={...row('stable-source','2026-11-19','partial'),draft:'partial'},enriched={...first,identityKey:'complete',draft:'complete'};const r=preview.mergeGmailPreviews([first],[enriched]);assert.equal(r.length,1);assert.equal(r[0].key,'stable-source');assert.equal(r[0].draft,'complete');});
+test('diagnostics distinguish request timeout, total timeout, backend error and client abort',async()=>{
+ const run=async(options={},request=()=>new Promise(()=>{}))=>{const events=[];await collectGmailPages(request,()=>{},{timeoutMs:5,...options,onDiagnostic:e=>events.push(e)});return events;};
+ assert.equal((await run())[0].outcome,'request_timeout');
+ assert.equal((await run({totalMs:2,timeoutMs:100}))[0].outcome,'total_timeout');
+ assert.equal((await run({},async()=>{throw Object.assign(Error('PRIVATE'),{httpStatus:503});}))[0].httpStatus,503);
+ const c=new AbortController();c.abort();assert.equal((await run({signal:c.signal}))[0].outcome,'client_abort');
+});
+test('diagnostic projection drops private fields and arbitrary exception contents',()=>{
+ const {safeSearchTrace}=load('lib/gmail-pagination.ts',{'./gmail-preview':load('lib/gmail-preview.ts')});
+ const trace=safeSearchTrace({request:1,durationMs:10,httpStatus:200,outcome:'response',server:{subject:'PRIVATE',searchId:'PRIVATE',version:'67e4543',counts:{listed:2,unrecognized:1,types:{train:1},subject:'PRIVATE',pdfReasons:{protected:1,PRIVATE:1}},partialReason:'complete'}});
+ assert(!JSON.stringify(trace).includes('PRIVATE'));assert.equal(trace.server.counts.types.train,1);assert.equal(trace.server.counts.unrecognized,1);assert.equal(trace.server.counts.pdfReasons.protected,1);
+});
+test('short complete search and pending pages retain explicit diagnostic cursor state',async()=>{
+ const events=[];let calls=0;const result=await collectGmailPages(async()=>({...page([],++calls===1?'next':null),searchStatus:{partialReason:calls===1?'pending':'complete'}}),()=>{},{onDiagnostic:e=>events.push(e)});
+ assert.equal(result.partial,false);assert.equal(events[0].remainingCursor,true);assert.equal(events[1].remainingCursor,false);assert.equal(events[1].server.partialReason,'complete');
+});
