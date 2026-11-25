@@ -1,4 +1,4 @@
-import { parsePdfAttachments,pdfParts,needsPdf } from "./gmail-pdf";
+import { parsePdfAttachments,pdfParts,needsPdf,PDF_LIMITS } from "./gmail-pdf";
 import { syncBookingActivities } from "./booking-itinerary";
 import { randomBytes, randomUUID } from "crypto";
 import { cookies } from "next/headers";
@@ -131,12 +131,12 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   let range: { start: number; end: number };
   try { if (typeof timeZone !== "string" || timeZone.length > 100) throw Error(); range = receivedRange(from, to, timeZone); } catch { throw new GmailError(400, "Periodo o fuso di ricezione non valido."); }
   const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user), trips = await gmailTrips(user);
-  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pending?:string[]; phase?:"body"|"pdf"; searchId?:string }>(input.cursor, `cursor:${user.id}`) : null;
+  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pending?:string[]; phase?:"body"|"pdf"; searchId?:string;pdfUsed?:number }>(input.cursor, `cursor:${user.id}`) : null;
   if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
   const searchId=cursor?.searchId || randomUUID();
   const seen=new Set<string>(cursor?.seen || []);
   const pdfPhase=cursor?.phase==="pdf" || (!!cursor?.pending?.length && !cursor?.token);
-  const pdfBudget={used:0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=pdfPhase?[]:[...(cursor?.pending || [])];
+  const pdfBudget={used:0,searchUsed:cursor?.pdfUsed||0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=pdfPhase?[]:[...(cursor?.pending || [])];
   const attachmentIssues:Record<string,number>={};let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" voucher "e-ticket" from:italotreno.it from:easyjet.com}`;
@@ -162,7 +162,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
     examined++;
     const diagnostics: ParseDiagnostics = {};
     const bodyStarted=Date.now();let parsed = parseGmailMessage(message,diagnostics);timings.body+=Date.now()-bodyStarted;const pdfStarted=Date.now();
-    const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && (!pdfPhase || pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2);
+    const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && (!pdfPhase || (pdfBudget.searchUsed<PDF_LIMITS.perSearch && pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2));
     if(defer)deferred.push(item.id);
     const pdf=defer?{candidates:parsed,partial:false}:await parsePdfAttachments(message,parsed,async attachmentId=>{
       if(!/^[a-zA-Z0-9_-]{1,1024}$/.test(attachmentId))throw Error("attachment");
@@ -194,7 +194,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   if(deferred.length>200)attachmentsPartial=true;
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { ...(input.diagnostics===true?{searchStatus:{version:/^[a-f0-9]{7,40}$/i.test(process.env.VERCEL_GIT_COMMIT_SHA||"")?process.env.VERCEL_GIT_COMMIT_SHA:"local",durationMs:Date.now()-started,timings,counts,gmailPages:pdfPhase?0:1,queueOverflow:deferred.length>200,searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"}}:{}),attachmentIssues,remainingWork:{gmailPage:Boolean(list.nextPageToken),pdfPending:deferred.length},attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { ...(input.diagnostics===true?{searchStatus:{version:/^[a-f0-9]{7,40}$/i.test(process.env.VERCEL_GIT_COMMIT_SHA||"")?process.env.VERCEL_GIT_COMMIT_SHA:"local",durationMs:Date.now()-started,timings,counts,gmailPages:pdfPhase?0:1,queueOverflow:deferred.length>200,searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"}}:{}),attachmentIssues,remainingWork:{gmailPage:Boolean(list.nextPageToken),pdfPending:deferred.length},attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,pdfUsed:pdfBudget.searchUsed,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {
