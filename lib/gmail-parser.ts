@@ -1,7 +1,7 @@
 import { BookingDraft, Candidate, countryCode, locationCountry } from "./gmail-core";
 import { airbnbTimingNotes, emptyMailTime, inLodgingZone, mailInstant, parseMailRange, parseMailTime } from "./gmail-dates";
 
-export type GmailPart = { mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { data?: string; size?: number }; parts?: GmailPart[] };
+export type GmailPart = { mimeType?: string; filename?: string; headers?: { name: string; value: string }[]; body?: { data?: string; size?: number; attachmentId?:string }; parts?: GmailPart[] };
 export type GmailMessage = { id: string; internalDate?: string; snippet?: string; payload?: GmailPart };
 const clean = (s: string) => s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").slice(0, 200000);
 export function decodeHeader(value: string) {
@@ -189,7 +189,7 @@ function finish(candidate: Candidate, supplier: string, hasImages = false): Cand
   d.title = d.type === "flight" ? (route ? `Volo ${route}` : "Volo da completare")
     : d.type === "train" ? (route ? `Treno ${route}` : "Trasporto da completare")
     : d.type === "hotel" ? (name ? (supplier === "Airbnb" ? name : /^hotel\b/i.test(name) ? name : `Hotel ${name}`) : supplier === "Airbnb" ? "Soggiorno Airbnb da completare" : "Soggiorno da completare")
-    : d.type === "activity" ? (name ? `${name}${d.location ? ` — ${d.location}` : ""}` : "Attività da completare") : "Noleggio auto da completare";
+    : d.type === "activity" ? (name ? `${name}${d.location ? ` — ${d.location}` : ""}` : "Attività da completare") : name || "Noleggio auto da completare";
   d.title = d.title.slice(0,500);
   const timing = candidate.timing || { start: parseMailTime(d.startDate), end: parseMailTime(d.endDate) };
   candidate.timing = timing;
@@ -285,9 +285,9 @@ export function parseGmailMessage(message: GmailMessage, diagnostics?: ParseDiag
   if (!reference) { if(diagnostics)diagnostics.excluded="missing_reference"; return []; }
   if (supplier === "Booking.com" && (event === "uncertain" || (event === "confirmation" && !/(?:prenotazione|reservation|booking)[^\n]{0,200}(?:confermat[ao]|confirmed)|(?:booking|reservation) confirmation|conferma (?:della |di )?prenotazione/i.test(text)))) { if(diagnostics)diagnostics.excluded="unconfirmed_booking_message"; return []; }
   const d = blank(), warnings = ["Controlla i dati estratti prima di confermare."];
-  const matchType = /Airbnb|Booking.com/.test(supplier) ? "hotel" : /Italo|Trenitalia/.test(supplier) ? "train" : /easyJet|Ryanair|ITA Airways/.test(supplier) ? "flight" : /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
+  const matchType = /Airbnb|Booking.com/.test(supplier) ? "hotel" : /Italo|Trenitalia/.test(supplier) ? "train" : /easyJet|Ryanair|ITA Airways/.test(supplier) ? "flight" : /flight|volo|airline|aeroporto/i.test(text) ? "flight" : /hotel|check.in|alloggio|lodging|accommodation/i.test(text) ? "hotel" : /car rental|auto a noleggio|autonoleggio|\btransfer\b|\bshuttle\b/i.test(text) ? "car" : /train|treno|bus|traghetto|ferry|rail/i.test(text) ? "train" : /activity|attivit|excursion|escursion|tour|ticket|bigliett/i.test(text) ? "activity" : null;
   if (!matchType) { if(diagnostics)diagnostics.excluded="unknown_booking_type"; return []; }
-  d.type = matchType; d.title = labelled(bodies.text, "Hotel(?: name)?|Nome hotel|Struttura|Nome (?:struttura|alloggio|attività|escursione)|Alloggio|Accommodation|Property(?: name)?|Apartment|Appartamento|Activity|Attività|Excursion|Escursione");
+  d.type = matchType; d.title = labelled(bodies.text, "Hotel(?: name)?|Nome hotel|Struttura|Nome (?:struttura|alloggio|attività|escursione)|Alloggio|Accommodation|Property(?: name)?|Apartment|Appartamento|Activity|Attività|Excursion|Escursione|Car rental name|Rental name|Transfer|Shuttle");
   if (supplier === "Booking.com" && !d.title) d.title=place(subject.match(/(?:la tua prenotazione per|your (?:booking|reservation) (?:at|for))\s+(.+?)\s+(?:è confermata|is confirmed)[.!]?$/i)?.[1] || "");
   d.reference = reference;
   d.provider = supplier || labelled(bodies.text, "Airline|Compagnia|Operator|Operatore|Provider");
@@ -307,7 +307,8 @@ export function parseGmailMessage(message: GmailMessage, diagnostics?: ParseDiag
   }
   d.startDate = mailInstant(timing.start); d.endDate = mailInstant(timing.end);
   const flightNumber = readLine(bodies.text, "Flight number|Numero volo|Flight|Volo");
-  const extra = [flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
+  const trainNumber=readLine(bodies.text,"Train number|Numero treno");
+  const extra = [trainNumber && `Numero treno: ${trainNumber}`,flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
   d.notes = extra.join("\n");
   const candidate = { draft: d, timing, warnings, event, flightNumber };
   return [finish(airbnb?applyAirbnb(candidate,airbnb):providerDetails(candidate,bodies.text,supplier,bodies.html.join("\n")), supplier,airbnb?.hasImages)];

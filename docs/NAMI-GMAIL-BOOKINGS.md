@@ -208,3 +208,13 @@ Riferimenti ufficiali:
 - https://developers.google.com/workspace/gmail/api/auth/web-server
 - https://developers.google.com/identity/protocols/oauth2
 - https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification
+
+
+## PDF testuali — Release locale
+L’azione Cerca esamina anche messaggi candidati con filename:pdf. Nessun nuovo scope. Sono considerati solo allegati MIME application/pdf con estensione PDF; intestazione e trailer devono essere validi. Recupero per ID Gmail soltanto, nessun link documento. I PDF non vengono persistiti.
+
+Limiti: 1 MB reale per PDF, 10 pagine, 100.000 caratteri, 2 allegati per messaggio e per pagina Gmail, 6 per ricerca paginata; budget conservato nel cursore cifrato. Download 2,5 s, estrazione 3,5 s in worker con heap 96 MB, terminazione forzata e stdout/stderr non pubblicati. Preflight Flate limitato a 2 MB per stream e 5 MB totali; massimo 200 stream; filtri concatenati o non supportati sono rifiutati. Nessun rendering, JavaScript, XFA, OCR o fetch di risorse documento. Il client concede fino a 45 s per pagina (90 s totali); resta entro il maxDuration server di 60 s e dichiara parziali i risultati se un allegato non è stato esaminato.
+
+Precedenza: dati già estratti dal corpo/strutturati conservati. Un allegato con stesso riferimento, tipologia e provider compatibile integra soltanto campi vuoti o segnaposto; conflitti mostrati come avvisi con il valore alternativo, stato Da verificare. Nessuna scelta silenziosa. Riferimenti diversi e segmenti di trasporto con tratte/orari distinti restano distinti. Se un PDF non fornisce un riferimento riconoscibile dal parser esistente non viene associato per sola somiglianza. Fatture/brochure senza conferma sono escluse. PDF illeggibili, protetti o scansionati non bloccano i dati del corpo; producono esame parziale dichiarato.
+
+PDF.js 6.5.438, richiesto Node >=22.13 o >=24. Worker e dipendenze sono inclusi esplicitamente nel tracing Next. Dati da PDF transitano solo in memoria e nei normali draft/token di anteprima, con redazione PIN già esistente. Il documento originale e il testo completo non sono salvati né registrati. OCR e gestione completa di modifiche/cancellazioni restano esclusi.
