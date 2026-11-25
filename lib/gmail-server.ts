@@ -1,4 +1,4 @@
-import { parsePdfAttachments } from "./gmail-pdf";
+import { parsePdfAttachments,pdfParts,needsPdf } from "./gmail-pdf";
 import { syncBookingActivities } from "./booking-itinerary";
 import { randomBytes, randomUUID } from "crypto";
 import { cookies } from "next/headers";
@@ -129,22 +129,22 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   let range: { start: number; end: number };
   try { if (typeof timeZone !== "string" || timeZone.length > 100) throw Error(); range = receivedRange(from, to, timeZone); } catch { throw new GmailError(400, "Periodo o fuso di ricezione non valido."); }
   const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user), trips = await gmailTrips(user);
-  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pdfUsed?:number }>(input.cursor, `cursor:${user.id}`) : null;
+  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pending?:string[] }>(input.cursor, `cursor:${user.id}`) : null;
   if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
   const seen=new Set<string>(cursor?.seen || []);
-  const pdfBudget={used:cursor?.pdfUsed || 0};let attachmentsPartial=false;
+  const pdfBudget={used:0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=[];
   let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
-  const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" filename:pdf}`;
+  const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" voucher "e-ticket" from:italotreno.it from:easyjet.com}`;
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
-  const list = await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
+  const list = cursor?.pending?.length ? {messages:cursor.pending.map(id=>({id})),nextPageToken:cursor.token || undefined} : await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
   const candidates: { key: string; identityKey: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
   const excluded: Partial<Record<NonNullable<ParseDiagnostics["excluded"]>|"insufficient_details", number>> = {};
   const fetched = await Promise.all((list.messages || []).slice(0, 10).filter(item => /^[a-zA-Z0-9_-]{1,128}$/.test(item.id)).map(async item => {
     try { return { item, message: await googleJson<GmailMessage>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, { headers: { Authorization: `Bearer ${tokens.access}` } }) }; }
-    catch (e) { if (e instanceof GmailError && e.status === 422) { oversized++;  return null; } throw e; }
+    catch (e) { messagesPartial=true;if (e instanceof GmailError && e.status === 422) oversized++;return null; }
   }));
   for (const fetchedMessage of fetched) {
     if (!fetchedMessage) continue;
@@ -154,7 +154,9 @@ export async function searchGmail(user: User, input: { from: string; to: string;
     examined++;
     const diagnostics: ParseDiagnostics = {};
     let parsed = parseGmailMessage(message,diagnostics);
-    const pdf=await parsePdfAttachments(message,parsed,async attachmentId=>{
+    const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2;
+    if(defer)deferred.push(item.id);
+    const pdf=defer?{candidates:parsed,partial:false}:await parsePdfAttachments(message,parsed,async attachmentId=>{
       if(!/^[a-zA-Z0-9_-]{1,1024}$/.test(attachmentId))throw Error("attachment");
       const result=await googleJson<{data?:string;size?:number}>(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}/attachments/${attachmentId}`,{headers:{Authorization:`Bearer ${tokens.access}`},signal:AbortSignal.timeout(2500)});
       if(!result.data || result.data.length>1400000)throw Error("attachment");return Buffer.from(result.data,"base64url");
@@ -179,7 +181,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   }
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { attachmentsPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: list.nextPageToken ? cipher.seal({ token: list.nextPageToken, from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200),pdfUsed:pdfBudget.used, expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:deferred, from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {

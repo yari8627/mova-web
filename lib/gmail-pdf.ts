@@ -1,8 +1,8 @@
 import {Worker} from "node:worker_threads";
 import path from "node:path";
-import {candidateKeys,normalize,type Candidate} from "./gmail-core";
-import {parseGmailMessage,redactBookingPin,type GmailMessage,type GmailPart} from "./gmail-parser";
-export const PDF_LIMITS={bytes:1000000,pages:10,text:100000,perMessage:2,perSearch:6,timeoutMs:3500};
+import {candidateKeys,normalize,previewQuality,type Candidate} from "./gmail-core";
+import {parseGmailMessage,redactBookingPin,header,type GmailMessage,type GmailPart} from "./gmail-parser";
+export const PDF_LIMITS={bytes:1000000,pages:10,text:100000,perMessage:2,perRequest:2,timeoutMs:3500};
 export type PdfResult={text?:string;reason?:string};
 export async function extractPdf(bytes:Uint8Array):Promise<PdfResult>{
  if(bytes.length>PDF_LIMITS.bytes)return {reason:"bytes"};
@@ -14,11 +14,13 @@ export function mergePdfCandidates(body:Candidate[],incoming:Candidate[]){const 
  if(index<0){out.push(candidate);continue;}const current=out[index];for(const field of ["title","provider","location","startDate","endDate","originAirport","destinationAirport"] as const){const a=current.draft[field],b=candidate.draft[field];if(!b)continue;if(!a || /da completare$/i.test(a)){current.draft[field]=b;if(field==="startDate" && candidate.timing)current.timing={...current.timing!,start:candidate.timing.start};if(field==="endDate" && candidate.timing)current.timing={...current.timing!,end:candidate.timing.end};}else if(normalize(a)!==normalize(b)){const warning=`Conflitto allegato — ${field}: ${b}. Verifica il valore prima di salvare.`;if(!current.warnings.includes(warning))current.warnings.push(warning);}}
  current.draft.notes=[...new Set([...current.draft.notes.split("\n"),...candidate.draft.notes.split("\n")])].filter(Boolean).join("\n").slice(0,4000);
  }return out;}
+export function needsPdf(body:Candidate[]){return !body.length || body.some(c=>previewQuality(c)!=="Importabile" || (c.draft.type!=="activity" && !c.draft.endDate));}
 export async function parsePdfAttachments(message:GmailMessage,body:Candidate[],fetchPart:(id:string)=>Promise<Uint8Array>,budget:{used:number;pageUsed?:number},extract=extractPdf){
+ if(!needsPdf(body))return {candidates:body,partial:false};
  const found=pdfParts(message);let candidates=body,partial=found.limited;const seen=new Set<string>();
- for(let i=0;i<found.parts.length;i++){const part=found.parts[i];if(i>=PDF_LIMITS.perMessage || budget.used>=PDF_LIMITS.perSearch || (budget.pageUsed || 0)>=2){partial=true;break;}const declared=part.body?.size;if(typeof declared!=="number" || declared>PDF_LIMITS.bytes || declared<16){partial=true;continue;}budget.used++;budget.pageUsed=(budget.pageUsed || 0)+1;
+ for(let i=0;i<found.parts.length;i++){const part=found.parts[i];if(i>=PDF_LIMITS.perMessage || budget.used>=PDF_LIMITS.perRequest || (budget.pageUsed || 0)>=2){partial=true;break;}const declared=part.body?.size;if(typeof declared!=="number" || declared>PDF_LIMITS.bytes || declared<16){partial=true;continue;}budget.used++;budget.pageUsed=(budget.pageUsed || 0)+1;
  try{const bytes=part.body?.data?Buffer.from(part.body.data,"base64url"):part.body?.attachmentId?await fetchPart(part.body.attachmentId):null;if(!bytes || bytes.length!==declared){partial=true;continue;}const result=await extract(bytes);if(!result.text){partial=true;continue;}const text=redactBookingPin(result.text);if(seen.has(text))continue;seen.add(text);
- if(/^(?:\s*)(?:invoice|fattura|brochure)\b/i.test(text) || !/confermat|confirmed|confirmation|voucher|biglietto|ticket|reservation/i.test(text))continue;
+ if(/^(?:\s*)(?:invoice|fattura|brochure)\b/i.test(text) || (!/confermat|confirmed|confirmation|voucher|biglietto|ticket|reservation/i.test(text) && !(/conferma acquisto|booking confirmation|conferma prenotazione/i.test(header(message.payload,"Subject")) && /stazione|partenza|departure|flight|treno|aeroporto/i.test(text))))continue;
  const pdfMessage:GmailMessage={...message,payload:{mimeType:"text/plain",headers:message.payload?.headers,body:{data:Buffer.from(text).toString("base64url")}}};const parsed=parseGmailMessage(pdfMessage).filter(c=>c.event==="confirmation" || (c.event==="uncertain" && /\b(?:travel voucher|booking voucher|voucher di prenotazione|e-ticket|biglietto elettronico)\b/i.test(text)));if(/\b(?:travel voucher|booking voucher|voucher di prenotazione|e-ticket|biglietto elettronico)\b/i.test(text) && !/confirmed|reservation confirmation|booking confirmation|prenotazione[^\n]{0,100}confermata|conferma (?:della )?prenotazione/i.test(text))for(const c of parsed){c.event="uncertain";c.draft.status="pending";c.warnings.push("Voucher riconosciuto: verifica lo stato della prenotazione.");}candidates=mergePdfCandidates(candidates,parsed);
  }catch{partial=true;}}
  return {candidates,partial};

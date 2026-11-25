@@ -1,6 +1,6 @@
 import { mergeGmailPreviews } from "./gmail-preview";
 type Row={key:string;identityKey?:string;email:{date:string}};
-type Page<T>={candidates:T[];nextCursor:string|null;examined:number;trips:unknown[];excluded?:Record<string,number>;duplicates?:number;attachmentsPartial?:boolean};
+type Page<T>={candidates:T[];nextCursor:string|null;examined:number;trips:unknown[];excluded?:Record<string,number>;duplicates?:number;attachmentsPartial?:boolean;messagesPartial?:boolean};
 export function receivedOrder<T extends Row>(rows:T[]):T[]{return [...rows].sort((a,b)=>(Date.parse(b.email.date)||0)-(Date.parse(a.email.date)||0)||a.key.localeCompare(b.key));}
 /** Sequential bounded pagination: no concurrent requests, no implicit retry or writes. */
 export async function collectGmailPages<T extends Row>(request:(cursor:string|undefined,signal:AbortSignal)=>Promise<Page<T>>,onPage:(rows:T[],page:Page<T>)=>void,options:{maxPages?:number;timeoutMs?:number;totalMs?:number;signal?:AbortSignal}={}){
@@ -13,7 +13,7 @@ export async function collectGmailPages<T extends Row>(request:(cursor:string|un
   try{
    const page=await Promise.race([request(cursor,controller.signal),new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error("timeout"));},Math.min(timeoutMs,deadline-Date.now()));})]);
    if(options.signal?.aborted)return {rows,partial:true,reason:"cancelled",pages};
-   attachmentsPartial ||= Boolean(page.attachmentsPartial);
+   attachmentsPartial ||= Boolean(page.attachmentsPartial || page.messagesPartial);
    rows=receivedOrder(mergeGmailPreviews(rows,page.candidates));pages++;onPage(rows,page);
    if(!page.nextCursor)return {rows,partial:attachmentsPartial,reason:attachmentsPartial?"attachments":"complete",pages};
    if(seen.has(page.nextCursor))return {rows,partial:true,reason:"cursor",pages};

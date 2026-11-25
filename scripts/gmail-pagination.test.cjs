@@ -10,3 +10,5 @@ test('total deadline and cancellation stop before further requests',async()=>{le
 test('equal dates have stable ordering; invalid dates sort last',()=>{assert.equal(receivedOrder([row('z','invalid'),row('b','2026-11-22'),row('a','2026-11-22')]).map(r=>r.key).join(','),'a,b,z');});
 
 test('unreadable or skipped attachments keep complete pages but final result explicitly partial',async()=>{const r=await collectGmailPages(async()=>({...page([row('one','2026-11-22')]),attachmentsPartial:true}),()=>{});assert(r.partial);assert.equal(r.reason,'attachments');assert.equal(r.rows.length,1);});
+
+test('deferred PDF enrichment replaces same source key rather than creating a second card',()=>{const preview=load('lib/gmail-preview.ts');const first={...row('stable-source','2026-11-19','partial'),draft:'partial'},enriched={...first,identityKey:'complete',draft:'complete'};const r=preview.mergeGmailPreviews([first],[enriched]);assert.equal(r.length,1);assert.equal(r[0].key,'stable-source');assert.equal(r[0].draft,'complete');});
