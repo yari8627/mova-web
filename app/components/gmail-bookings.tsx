@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { tripCountries,placeLabel } from "../../lib/booking-place-search";
 import { operatorLogo } from "../../lib/booking-view";
 import { BookingToast } from "./booking-toast";
 import { BookingForm } from "./booking-form";
@@ -15,8 +16,8 @@ import { fetchTripSnapshot, removeTripSnapshot } from "../../lib/trip-client-cac
 import { TravelCategoryIcon, travelCategoryFromText } from "./travel-category-icon";
 import styles from "./gmail-bookings.module.css";
 
-type Trip = { id: string; name: string; city: string; country?:string; startDate?:string; endDate?:string };
-type Row = { key: string; identityKey?: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; warnings: string[]; event: Candidate["event"]; email: { subject: string; from: string; date: string }; state: string; suggestedTripId: string | null; matches: { id: string; title: string; tripId: string; tripName?: string }[]; selected?: boolean; tripId?: string; bookingId?: string };
+type Trip = { id: string; name: string; city: string; country?:string; countryCode?:string; startDate?:string; endDate?:string };
+type Row = { place?:BookingPlace; key: string; identityKey?: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; warnings: string[]; event: Candidate["event"]; email: { subject: string; from: string; date: string }; state: string; suggestedTripId: string | null; matches: { id: string; title: string; tripId: string; tripName?: string }[]; tripId?: string; bookingId?: string };
 async function api(path: string, method = "GET", body?: unknown, signal?:AbortSignal) {
   const response = await fetch(`/api/gmail/${path}`, { method, signal, cache: "no-store", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json(); if (!response.ok) throw new Error(data.error || "Gmail non disponibile."); return data;
@@ -108,29 +109,29 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
     return <fieldset className={styles.timefields}><legend>{label}</legend><div className={styles.grid}>
       <label className={styles.field}>Data<input type="date" value={value.date} onInput={e=>update("date",e.currentTarget.value)} onChange={e=>update("date",e.target.value)} /></label>
       <label className={styles.field}>{value.qualifier === "after" ? "Ora: dopo le" : value.qualifier === "before" ? "Ora: entro le" : "Ora"}<input type="time" step="1" value={value.time} onInput={e=>update("time",e.currentTarget.value)} onChange={e=>update("time",e.target.value)} /></label>
-    </div>{["flight","train"].includes(row.draft.type) && !value.offset && <BookingPlaceField value={which==="start"?row.draft.originAirport:row.draft.destinationAirport} onChange={v=>edit(row.key,{draft:{...row.draft,[which==="start"?"originAirport":"destinationAirport"]:v}})} onVerified={p=>verifiedPlace(row,p,which)}/>}{value.qualifier && <small>Questo è un limite orario del soggiorno, non un appuntamento.</small>}{(value.zone || value.raw) && <details><summary>Dettagli orario</summary><small>{value.zone} {value.offset}</small><small>{value.raw}</small></details>}</fieldset>;
+    </div>{["flight","train"].includes(row.draft.type) && !value.offset && <BookingPlaceField countries={tripCountries(trips.find(t=>t.id===row.tripId))} value={which==="start"?row.draft.originAirport:row.draft.destinationAirport} onChange={v=>edit(row.key,{draft:{...row.draft,[which==="start"?"originAirport":"destinationAirport"]:v}})} onVerified={p=>verifiedPlace(row,p,which)}/>}{value.qualifier && <small>Questo è un limite orario del soggiorno, non un appuntamento.</small>}{(value.zone || value.raw) && <details><summary>Dettagli orario</summary><small>{value.zone} {value.offset}</small><small>{value.raw}</small></details>}</fieldset>;
   }
   function verifiedPlace(row:Row,p:BookingPlace,which?:"start"|"end") {
-    const location=[p.name,p.address].filter(Boolean).join(", ");
+    const location=placeLabel(p.name,p.address);
     const timing=row.timing || {start:splitMailInstant(row.draft.startDate),end:splitMailInstant(row.draft.endDate)};
     const convert=(t:MailTime)=>p.timeZone?inLodgingZone({...t,offset:"",zone:undefined},p.timeZone):{...t,offset:"",zone:undefined};
     const transport=["flight","train"].includes(row.draft.type);
     const next={start:which==="end"?timing.start:convert(timing.start),end:which==="start" || (transport && !which)?timing.end:convert(timing.end)};
     const draft={...row.draft,...(which?{[which==="start"?"originAirport":"destinationAirport"]:location}:{location}),startDate:mailInstant(next.start),endDate:mailInstant(next.end)};
     const suggested=suggestTrip({...draft,startDate:draft.startDate || next.start.date,endDate:draft.endDate || next.end.date},trips.filter(t=>t.startDate && t.endDate).map(t=>({...t,country:t.country || "",startDate:t.startDate!,endDate:t.endDate!})));
-    edit(row.key,{draft,timing:next,suggestedTripId:suggested,tripId:row.tripId && row.tripId!==row.suggestedTripId?row.tripId:suggested || undefined});
+    edit(row.key,{place:p,draft,timing:next,suggestedTripId:suggested,tripId:row.tripId && row.tripId!==row.suggestedTripId?row.tripId:suggested || undefined});
   }
   function resetSearch() { setCounts({excluded:0,duplicates:0}); setCursor(null); setRows([]); setNotice(""); setSearched(false); setExamined(0); }
   async function confirm() {
     await run(async () => {
-      const selected = rows.filter(r => r.selected);
-      if (!selected.length) throw new Error("Seleziona almeno una prenotazione.");
+      const selected = rows.filter(r => r.key===editing && r.state!=="Già presente" && r.event!=="cancellation");
+      if (!selected.length) throw new Error("Apri una prenotazione da salvare.");
       const missingTrip=selected.find(r=>!r.tripId);
       if(missingTrip) throw new Error(`${missingTrip.draft.title}: scegli il viaggio nel campo Viaggio prima di confermare.`);
       if (selected.some(r=>!r.draft.startDate || (r.timing && Object.values(r.timing.end).some(Boolean) && !r.draft.endDate))) throw new Error("Completa data e ora, poi seleziona una località valida dai suggerimenti. Un orario ambiguo durante il cambio d’ora va corretto.");
       const data = await api("import", "POST", { confirm: true, choices: selected.map(r => ({ token: r.token, draft: r.draft, tripId: r.tripId, action: r.bookingId ? "update" : "create", bookingId: r.bookingId })) });
       for (const id of new Set(selected.map(r => r.tripId!))) { removeTripSnapshot(id); window.localStorage.removeItem(`mova-bookings-${id}`); }
-      setRows(current => current.map(r => data.results.some((s: { key: string; status: string }) => s.key === r.key && s.status !== "non importata") ? { ...r, selected: false, state: "Già presente" } : r));
+      setRows(current => current.map(r => data.results.some((s: { key: string; status: string }) => s.key === r.key && s.status !== "non importata") ? { ...r, state: "Già presente" } : r));
       const imported = data.results.filter((r: { status: string }) => r.status === "importata").length;
       const updated = data.results.filter((r: { status: string }) => r.status === "aggiornata").length;
       const failed = data.results.filter((r: { status: string }) => r.status === "non importata");
@@ -145,7 +146,6 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       } else if (imported + updated > 0) await onImported();
     });
   }
-  const selection = rows.filter(r => r.selected).length;
   return <>
     <button ref={opener} type="button" className={`primary-button booking-add-button ${styles.trigger}`} onClick={() => void begin()}><img src="/brands/gmail.svg" width={20} height={20} alt="" aria-hidden="true" />Importa da Gmail</button>
     {!open && success && <BookingToast message={success}/>}
@@ -161,11 +161,10 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
         {searched && <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}><legend className={styles.srOnly}>Anteprima prenotazioni</legend>
         {rows.map(row => <article key={row.key} className={styles.card}>
           <div className={styles.compactHead}>
-            <label className={styles.checkArea}><input type="checkbox" aria-label={`Seleziona ${row.draft.title}`} checked={Boolean(row.selected)} disabled={row.state === "Già presente" || row.event === "cancellation"} onChange={e=>edit(row.key,{selected:e.target.checked,tripId:row.tripId || row.suggestedTripId || undefined})}/></label>
-            <button type="button" className={styles.cardAction} aria-label={`Dettagli ${row.draft.title}`} aria-expanded={editing===row.key} onClick={()=>{if(row.state==="Già presente" && row.matches.length===1){const match=row.matches[0];window.location.assign(`/trips/${encodeURIComponent(match.tripId)}/bookings?booking=${encodeURIComponent(match.id)}`);return;}setEditing(row.key);if(row.state!=="Già presente" && row.event!=="cancellation")edit(row.key,{selected:true,tripId:row.tripId || row.suggestedTripId || undefined});}}>
+            <button type="button" className={styles.cardAction} aria-label={`Dettagli ${row.draft.title}`} aria-expanded={editing===row.key} onClick={()=>{if(row.state==="Già presente" && row.matches.length===1){const match=row.matches[0];window.location.assign(`/trips/${encodeURIComponent(match.tripId)}/bookings?booking=${encodeURIComponent(match.id)}`);return;}setEditing(row.key);if(row.state!=="Già presente" && row.event!=="cancellation")edit(row.key,{tripId:row.tripId || row.suggestedTripId || undefined});}}>
               <span className={styles.operator}>{operatorLogo(row.draft.provider)?<img src={`/brands/${operatorLogo(row.draft.provider)}.svg`} alt=""/>:<TravelCategoryIcon category={travelCategoryFromText(row.draft.type,row.draft.location)} size={24}/>}</span>
               <span className={styles.cardCopy}><strong>{row.draft.title || "Prenotazione da verificare"}</strong><span>{row.draft.provider}</span><span>{row.draft.type==="hotel"?"Check-in":["flight","train"].includes(row.draft.type)?"Partenza":"Inizio"}: {timeSummary(row.timing?.start,row.draft.startDate)}</span>{(row.draft.endDate || row.timing?.end.date || row.timing?.end.raw) && <span>{row.draft.type==="hotel"?"Check-out":["flight","train"].includes(row.draft.type)?"Arrivo":"Fine"}: {timeSummary(row.timing?.end,row.draft.endDate)}</span>}</span>
-              {row.state==="Già presente"?<span className={styles.badge}>Importata</span>:row.state==="Da verificare"?<span className={styles.badge}>Da verificare</span>:null}
+              {row.state==="Già presente"?<span className={styles.importedCheck} aria-label="Importata">✓</span>:row.state==="Da verificare"?<span className={styles.badge}>Da verificare</span>:null}
             </button>
           </div>
           {editing===row.key && row.state==="Già presente" && <div className={styles.savedDetail}><p>Prenotazione già importata.</p>{row.matches.map(match=><a key={match.id} href={`/trips/${encodeURIComponent(match.tripId)}/bookings?booking=${encodeURIComponent(match.id)}`}>Apri prenotazione esistente · {match.tripName || match.title}</a>)}{!row.matches.length && <p>Apri il viaggio associato dalla sezione Prenotazioni.</p>}<button type="button" onClick={()=>setEditing(null)}>Chiudi dettaglio</button></div>}
@@ -174,12 +173,12 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
           {warningsFor(row).length > 0 && <ul className={styles.warning}>{warningsFor(row).map(w=><li key={w}>{w}</li>)}</ul>}
           <label className={styles.field}>Viaggio{row.suggestedTripId && row.tripId === row.suggestedTripId && <small>Suggerito: {trips.find(t => t.id === row.suggestedTripId)?.name}; puoi modificarlo.</small>}<select value={row.tripId || ""} onChange={e => edit(row.key, { tripId: e.target.value, bookingId: "" })}><option value="">Scegli un viaggio</option>{trips.map(t => <option key={t.id} value={t.id}>{t.name} · {t.city}</option>)}</select></label>
           {row.matches.length > 0 && <label className={styles.field}>Possibile aggiornamento<select value={row.bookingId || ""} onChange={e => edit(row.key, { bookingId: e.target.value, tripId: row.matches.find(m => m.id === e.target.value)?.tripId || row.tripId })}><option value="">Scegli la prenotazione da aggiornare</option>{row.matches.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}</select><small>Confermando, sostituirai i dati della prenotazione selezionata.</small></label>}
-          <BookingFields value={row.draft} onChange={change=>{const draft={...row.draft,...change} as BookingDraft;if(change.location!==undefined){const timing=row.timing || {start:splitMailInstant(draft.startDate),end:splitMailInstant(draft.endDate)};edit(row.key,{draft:{...draft,startDate:"",endDate:""},timing:{start:{...timing.start,offset:"",zone:undefined},end:{...timing.end,offset:"",zone:undefined}}});}else edit(row.key,{draft});}} onVerified={p=>verifiedPlace(row,p)}/>
+          <BookingFields countries={tripCountries(trips.find(t=>t.id===row.tripId))} value={row.draft} onChange={change=>{const draft={...row.draft,...change} as BookingDraft;if(change.location!==undefined){const timing=row.timing || {start:splitMailInstant(draft.startDate),end:splitMailInstant(draft.endDate)};edit(row.key,{place:undefined,draft:{...draft,startDate:"",endDate:""},timing:{start:{...timing.start,offset:"",zone:undefined},end:{...timing.end,offset:"",zone:undefined}}});}else edit(row.key,{draft});}} onVerified={p=>verifiedPlace(row,p)}/>
           <div>{timeFields(row,"start","Inizio")}{timeFields(row,"end","Fine (facoltativa)")}</div>
           {["flight","train"].includes(row.draft.type) && <>{field(row,"originAirport","Partenza")}{field(row,"destinationAirport","Arrivo")}</>}
           {error && <div role="alert" className={styles.warning}>{error}</div>}
           <button type="submit" className="primary-button" disabled={busy || row.state==="Già presente"}>Salva prenotazione</button>
-          <button type="button" className="secondary-button" onClick={()=>{edit(row.key,{selected:false});setEditing(null);}}>Annulla modifica</button>
+          <button type="button" className="secondary-button" onClick={()=>{setEditing(null);}}>Annulla modifica</button>
           </BookingForm></div>}
 
         </article>)}</fieldset>}

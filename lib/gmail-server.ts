@@ -43,7 +43,7 @@ async function manageTrip(tripId: string, user: User) {
   return access.trip;
 }
 export async function gmailTrips(user: User, db: Pick<Prisma.TransactionClient, "trip"> = prisma) {
-  return db.trip.findMany({ where: { OR: [{ ownerId: user.id }, { participants: { some: { email: { equals: user.email, mode: "insensitive" }, status: "confirmed", role: "co-organizer" } } }] }, select: { id: true, name: true, city: true, country: true, startDate: true, endDate: true }, orderBy: { startDate: "desc" } });
+  return db.trip.findMany({ where: { OR: [{ ownerId: user.id }, { participants: { some: { email: { equals: user.email, mode: "insensitive" }, status: "confirmed", role: "co-organizer" } } }] }, select: { id: true, name: true, city: true, country: true, countryCode:true, startDate: true, endDate: true }, orderBy: { startDate: "desc" } });
 }
 export async function gmailStatus(user: User) {
   gmailConfig(); const cipher = new GmailCipher();

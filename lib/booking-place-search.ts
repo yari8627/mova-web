@@ -1,0 +1,4 @@
+import { countryCode } from "./gmail-geography";
+export function placeLabel(name:string,address:string){const parts=[name,...address.split(",")].map(s=>s.trim()).filter(Boolean);const seen=new Set<string>();return parts.filter(s=>{const key=s.normalize("NFKD").toLocaleLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).join(", ");}
+export function tripCountries(trip?:{country?:string;countryCode?:string}){return [...new Set([trip?.countryCode || "",...(trip?.country || "").split(/[,;/|]+/)].map(s=>countryCode(s)).filter(Boolean))].sort();}
+export async function searchBookingPlaces<T>(query:string,countries:string[],get:(query:string,country:string)=>Promise<T[]>){const scoped=(await Promise.all(countries.map(c=>get(query,c)))).flat();return scoped.length?scoped:get(query,"");}
