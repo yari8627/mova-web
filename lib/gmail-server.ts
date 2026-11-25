@@ -129,15 +129,17 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   let range: { start: number; end: number };
   try { if (typeof timeZone !== "string" || timeZone.length > 100) throw Error(); range = receivedRange(from, to, timeZone); } catch { throw new GmailError(400, "Periodo o fuso di ricezione non valido."); }
   const cipher = new GmailCipher(), { connection: c, tokens } = await gmailAccess(user), trips = await gmailTrips(user);
-  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pending?:string[] }>(input.cursor, `cursor:${user.id}`) : null;
+  const cursor = input.cursor ? cipher.open<{ token: string; from: string; to: string; timeZone: string; connectionId: string; expires: number; seen?: string[]; pending?:string[]; phase?:"body"|"pdf"; searchId?:string }>(input.cursor, `cursor:${user.id}`) : null;
   if (cursor && (cursor.from !== from || cursor.to !== to || cursor.timeZone !== timeZone || cursor.connectionId !== c.id || cursor.expires < Date.now())) throw new GmailError(400, "Ricerca scaduta. Ricomincia.");
+  const searchId=cursor?.searchId || randomUUID();
   const seen=new Set<string>(cursor?.seen || []);
-  const pdfBudget={used:0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=[];
+  const pdfPhase=cursor?.phase==="pdf" || (!!cursor?.pending?.length && !cursor?.token);
+  const pdfBudget={used:0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=pdfPhase?[]:[...(cursor?.pending || [])];
   let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" voucher "e-ticket" from:italotreno.it from:easyjet.com}`;
   const params = new URLSearchParams({ q, maxResults: "10" }); if (cursor) params.set("pageToken", cursor.token);
-  const list = cursor?.pending?.length ? {messages:cursor.pending.map(id=>({id})),nextPageToken:cursor.token || undefined} : await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
+  const list = pdfPhase && cursor?.pending?.length ? {messages:cursor.pending.map(id=>({id})),nextPageToken:cursor.token || undefined} : await googleJson<{ messages?: { id: string }[]; nextPageToken?: string }>(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { Authorization: `Bearer ${tokens.access}` } });
   const bookings = await prisma.booking.findMany({ where: { tripId: { in: trips.map(t => t.id) } } });
   const candidates: { key: string; identityKey: string; token: string; draft: BookingDraft; timing?: Candidate["timing"]; event: Candidate["event"]; warnings: string[]; email: { subject: string; from: string; date: string }; suggestedTripId: string | null; state: string; matches: { id: string; title: string; tripId: string; tripName: string }[] }[] = [];
   let oversized = 0, examined = 0, outsideRange = 0;
@@ -154,7 +156,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
     examined++;
     const diagnostics: ParseDiagnostics = {};
     let parsed = parseGmailMessage(message,diagnostics);
-    const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2;
+    const defer=needsPdf(parsed) && pdfParts(message).parts.length>0 && (!pdfPhase || pdfBudget.used+Math.min(pdfParts(message).parts.length,2)>2);
     if(defer)deferred.push(item.id);
     const pdf=defer?{candidates:parsed,partial:false}:await parsePdfAttachments(message,parsed,async attachmentId=>{
       if(!/^[a-zA-Z0-9_-]{1,1024}$/.test(attachmentId))throw Error("attachment");
@@ -179,9 +181,10 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       candidates.push({ key: sourceKey, identityKey, token: cipher.seal(proof, `preview:${user.id}`), draft: candidate.draft, timing: candidate.timing, event: candidate.event, warnings: candidate.warnings, email: { subject: header(message.payload, "Subject").slice(0, 300), from: header(message.payload, "From").slice(0, 300), date: new Date(received).toISOString() }, suggestedTripId: suggestTrip({ ...candidate.draft, startDate: candidate.draft.startDate || candidate.timing?.start.date || "", endDate: candidate.draft.endDate || candidate.timing?.end.date || "" }, trips.map(t => ({ ...t, startDate: t.startDate.toISOString(), endDate: t.endDate.toISOString() }))), state: duplicate ? "Già presente" : candidate.warnings.some(w=>w.startsWith("Conflitto allegato")) || matches.length ? "Da verificare" : quality, matches: matches.map(b => ({ id: b.id, title: b.title, tripId: b.tripId, tripName: trips.find(t => t.id === b.tripId)?.name || "Viaggio" })) });
     }
   }
+  if(deferred.length>200)attachmentsPartial=true;
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:deferred, from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { searchStatus:{searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"},attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {
