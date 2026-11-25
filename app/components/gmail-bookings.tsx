@@ -98,7 +98,7 @@ export function GmailBookings({ tripId, onImported, active = true }: { tripId: s
       if(diagnose && generation===diagnosticGeneration.current)setDiagnosticResult(result.partial?`partial:${result.reason}`:"complete");
       if(controller.signal.aborted)return;
       setNotice(`${result.rows.length} prenotazioni trovate`);
-      if(result.partial)setError("Risultati parziali: non è stato possibile esaminare tutte le email dell’intervallo. Riprova la ricerca o restringi le date.");
+      if(result.partial)setError(result.completionState==="attachment_failures"?"Email esaminate. Non possiamo leggere o completare alcuni allegati; le prenotazioni riconosciute restano disponibili. Restringere le date non rende leggibili gli allegati.":result.completionState==="pdf_pending"?"Email esaminate. Alcuni allegati sono ancora da esaminare; le prenotazioni riconosciute restano disponibili.":result.completionState==="message_failures"?"Risultati parziali: alcune email non sono state recuperate. Riprova la ricerca.":"Risultati parziali: esame delle email non completato. Le prenotazioni riconosciute restano disponibili.");
     });
   }
   function edit(key: string, change: Partial<Row>) { setRows(current => current.map(r => r.key === key ? { ...r, ...change } : r)); }

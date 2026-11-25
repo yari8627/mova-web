@@ -124,7 +124,7 @@ function bookingMatch(d: BookingDraft, b: BookingRow, updating=false) {
 export async function searchGmail(user: User, input: { from: string; to: string; timeZone?: string; cursor?: string; diagnostics?:boolean }) {
   if ("diagnoseTarget" in input) throw new GmailError(400, "Diagnostica temporanea rimossa. Ricarica NAMI.");
   const started=Date.now(),timings={access:0,list:0,fetch:0,body:0,pdf:0,validationDedup:0};
-  const counts={listed:0,fetched:0,unrecognized:0,beforeDedup:0,types:{flight:0,hotel:0,train:0,car:0,activity:0},pdfProcessed:0,pdfSkipped:0,pdfFailed:0,messageFailures:{timeout:0,network:0,oversized:0,authorization:0,rate_limit:0,other:0},pdfReasons:{} as Record<string,number>};
+  const counts={listed:0,fetched:0,unrecognized:0,beforeDedup:0,qualityRejected:0,rejectionFields:{reference:0,provider:0,place:0,calendar:0,named:0,uncertain:0},types:{flight:0,hotel:0,train:0,car:0,activity:0},pdfProcessed:0,pdfSkipped:0,pdfFailed:0,messageFailures:{timeout:0,network:0,oversized:0,authorization:0,rate_limit:0,other:0},pdfReasons:{} as Record<string,number>};
   const from = input.from, to = input.to;
   if (typeof from !== "string" || typeof to !== "string" || !/^\d{4}-\d\d-\d\d$/.test(from) || !/^\d{4}-\d\d-\d\d$/.test(to) || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || new Date(from).toISOString().slice(0, 10) !== from || new Date(to).toISOString().slice(0, 10) !== to || from > to || Date.parse(to) - Date.parse(from) > 366 * 86400000 * 5) throw new GmailError(400, "Periodo non valido (massimo cinque anni).");
   const timeZone = input.timeZone;
@@ -137,7 +137,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   const seen=new Set<string>(cursor?.seen || []);
   const pdfPhase=cursor?.phase==="pdf" || (!!cursor?.pending?.length && !cursor?.token);
   const pdfBudget={used:0};let attachmentsPartial=false,messagesPartial=false;const deferred:string[]=pdfPhase?[]:[...(cursor?.pending || [])];
-  let duplicates=0;
+  const attachmentIssues:Record<string,number>={};let duplicates=0;
   const after = Math.floor(range.start / 1000) - 1, before = Math.ceil(range.end / 1000);
   const q = `after:${after} before:${before} -in:trash -in:spam {confirmation conferma confirmed confermata prenotazione reservation itinerary biglietto PNR "ticket number" "booking reference" cancellata cancelled annullata cancellazione rescheduled modifica "schedule change" voucher "e-ticket" from:italotreno.it from:easyjet.com}`;
   timings.access=Date.now()-started;const listStarted=Date.now();
@@ -170,14 +170,14 @@ export async function searchGmail(user: User, input: { from: string; to: string;
       if(!result.data || result.data.length>1400000)throw Error("attachment");return Buffer.from(result.data,"base64url");
     },pdfBudget);
     timings.pdf+=Date.now()-pdfStarted;
-    if("stats" in pdf && pdf.stats){counts.pdfProcessed+=pdf.stats.processed;counts.pdfSkipped+=pdf.stats.skipped;counts.pdfFailed+=pdf.stats.failed;for(const [key,value] of Object.entries(pdf.stats.reasons))counts.pdfReasons[key]=(counts.pdfReasons[key]||0)+value;}
+    if("stats" in pdf && pdf.stats){counts.pdfProcessed+=pdf.stats.processed;counts.pdfSkipped+=pdf.stats.skipped;counts.pdfFailed+=pdf.stats.failed;for(const [key,value] of Object.entries(pdf.stats.reasons)){counts.pdfReasons[key]=(counts.pdfReasons[key]||0)+value;attachmentIssues[key]=(attachmentIssues[key]||0)+value;}}
     parsed=pdf.candidates;attachmentsPartial ||= pdf.partial;if(!parsed.length)counts.unrecognized++;counts.beforeDedup+=parsed.length;for(const candidate of parsed)counts.types[candidate.draft.type]++;
 
     if(diagnostics.excluded) excluded[diagnostics.excluded]=(excluded[diagnostics.excluded] || 0)+1;
     for (let i = 0; i < parsed.length; i++) {
       const candidate = parsed[i], keys = candidateKeys(candidate), sourceKey = gmailHash(`${item.id}:${i}`);
       const quality=previewQuality(candidate);
-      if(quality==="Non riconosciuta"){excluded.insufficient_details=(excluded.insufficient_details || 0)+1;continue;}
+      if(quality==="Non riconosciuta"){counts.qualityRejected++;const d=candidate.draft;if(!d.reference)counts.rejectionFields.reference++;if(!d.provider)counts.rejectionFields.provider++;if(!(d.location || (d.originAirport && d.destinationAirport)))counts.rejectionFields.place++;if(!(d.startDate || candidate.timing?.start.date))counts.rejectionFields.calendar++;if(["hotel","activity","car"].includes(d.type) && (!d.title || /da completare|da verificare/i.test(d.title)))counts.rejectionFields.named++;if(candidate.event==="uncertain")counts.rejectionFields.uncertain++;excluded.insufficient_details=(excluded.insufficient_details || 0)+1;continue;}
       const identityKey=gmailHash(`${keys.fingerprint}:${candidate.event}`);
       if(seen.has(identityKey)){duplicates++;continue;}
       seen.add(identityKey);
@@ -194,7 +194,7 @@ export async function searchGmail(user: User, input: { from: string; to: string;
   if(deferred.length>200)attachmentsPartial=true;
   // Disconnect/reconnect during a search invalidates the entire response.
   if ((await connection(user.id)).id !== c.id) throw new GmailError(409, "Collegamento Gmail cambiato. Ripeti la ricerca.");
-  return { ...(input.diagnostics===true?{searchStatus:{version:/^[a-f0-9]{7,40}$/i.test(process.env.VERCEL_GIT_COMMIT_SHA||"")?process.env.VERCEL_GIT_COMMIT_SHA:"local",durationMs:Date.now()-started,timings,counts,gmailPages:pdfPhase?0:1,queueOverflow:deferred.length>200,searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"}}:{}),attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
+  return { ...(input.diagnostics===true?{searchStatus:{version:/^[a-f0-9]{7,40}$/i.test(process.env.VERCEL_GIT_COMMIT_SHA||"")?process.env.VERCEL_GIT_COMMIT_SHA:"local",durationMs:Date.now()-started,timings,counts,gmailPages:pdfPhase?0:1,queueOverflow:deferred.length>200,searchId,requestId:randomUUID(),phase:pdfPhase?"pdf":"body",messages:examined,returned:candidates.length,deduplicated:duplicates,pdfAttempts:pdfBudget.used,pdfPending:deferred.length,remainingGmailPage:Boolean(list.nextPageToken),partialReason:messagesPartial?"message_fetch":attachmentsPartial?"attachment_unreadable_or_limit":deferred.length || list.nextPageToken?"pending":"complete"}}:{}),attachmentIssues,remainingWork:{gmailPage:Boolean(list.nextPageToken),pdfPending:deferred.length},attachmentsPartial,messagesPartial, candidates, trips, excluded, duplicates, examined, outsideRange, oversized, timeZone, nextCursor: deferred.length || list.nextPageToken ? cipher.seal({ token: list.nextPageToken || "",pending:[...new Set(deferred)].slice(0,200),searchId,phase:list.nextPageToken?"body":"pdf", from, to, timeZone, connectionId: c.id, seen:[...seen].slice(-200), expires: Date.now() + 1800000 }, `cursor:${user.id}`) : null };
 }
 export type ImportChoice = { token: string; draft: unknown; tripId: string; action: "create" | "update"; bookingId?: string };
 export async function importGmail(user: User, input: { confirm: boolean; choices: ImportChoice[] }) {

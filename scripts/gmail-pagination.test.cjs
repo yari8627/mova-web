@@ -28,3 +28,9 @@ test('short complete search and pending pages retain explicit diagnostic cursor 
  const events=[];let calls=0;const result=await collectGmailPages(async()=>({...page([],++calls===1?'next':null),searchStatus:{partialReason:calls===1?'pending':'complete'}}),()=>{},{onDiagnostic:e=>events.push(e)});
  assert.equal(result.partial,false);assert.equal(events[0].remainingCursor,true);assert.equal(events[1].remainingCursor,false);assert.equal(events[1].server.partialReason,'complete');
 });
+
+test('P0 collector distinguishes pending Gmail, pending PDF, unreadable attachment, empty and valid completion',async()=>{
+ for(const [remainingWork,state] of [[{gmailPage:true,pdfPending:1},'gmail_pending'],[{gmailPage:false,pdfPending:1},'pdf_pending']]){const r=await collectGmailPages(async()=>({...page([],'pending'),remainingWork}),()=>{},{maxPages:1});assert.equal(r.completionState,state);}
+ const unreadable=await collectGmailPages(async()=>({...page([row('valid','2026-11-19')]),attachmentsPartial:true,attachmentIssues:{invalid_pdf:1},remainingWork:{gmailPage:false,pdfPending:0}}),()=>{});assert.equal(unreadable.completionState,'attachment_failures');assert.equal(unreadable.rows.length,1);assert.equal(unreadable.attachmentIssues.invalid_pdf,1);assert.equal(unreadable.remainingWork.pdfPending,0);
+ assert.equal((await collectGmailPages(async()=>page([]),()=>{})).completionState,'complete_empty');assert.equal((await collectGmailPages(async()=>page([row('one','2026-11-19')]),()=>{})).completionState,'complete_with_results');
+});
