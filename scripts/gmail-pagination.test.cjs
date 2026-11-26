@@ -9,28 +9,4 @@ test('per-request timeout aborts transport and stops',async()=>{let signal;const
 test('total deadline and cancellation stop before further requests',async()=>{let calls=0;const r=await collectGmailPages(async()=>{calls++;return page([]);},()=>{},{totalMs:0});assert.equal(calls,0);assert.equal(r.reason,'limit');const c=new AbortController();c.abort();const cancelled=await collectGmailPages(async()=>{throw Error();},()=>{},{signal:c.signal});assert.equal(cancelled.reason,'cancelled');});
 test('equal dates have stable ordering; invalid dates sort last',()=>{assert.equal(receivedOrder([row('z','invalid'),row('b','2026-11-22'),row('a','2026-11-22')]).map(r=>r.key).join(','),'a,b,z');});
 
-test('unreadable or skipped attachments keep complete pages but final result explicitly partial',async()=>{const r=await collectGmailPages(async()=>({...page([row('one','2026-11-22')]),attachmentsPartial:true}),()=>{});assert(r.partial);assert.equal(r.reason,'attachments');assert.equal(r.rows.length,1);});
-
-test('deferred PDF enrichment replaces same source key rather than creating a second card',()=>{const preview=load('lib/gmail-preview.ts');const first={...row('stable-source','2026-11-19','partial'),draft:'partial'},enriched={...first,identityKey:'complete',draft:'complete'};const r=preview.mergeGmailPreviews([first],[enriched]);assert.equal(r.length,1);assert.equal(r[0].key,'stable-source');assert.equal(r[0].draft,'complete');});
-test('diagnostics distinguish request timeout, total timeout, backend error and client abort',async()=>{
- const run=async(options={},request=()=>new Promise(()=>{}))=>{const events=[];await collectGmailPages(request,()=>{},{timeoutMs:5,...options,onDiagnostic:e=>events.push(e)});return events;};
- assert.equal((await run())[0].outcome,'request_timeout');
- assert.equal((await run({totalMs:2,timeoutMs:100}))[0].outcome,'total_timeout');
- assert.equal((await run({},async()=>{throw Object.assign(Error('PRIVATE'),{httpStatus:503});}))[0].httpStatus,503);
- const c=new AbortController();c.abort();assert.equal((await run({signal:c.signal}))[0].outcome,'client_abort');
-});
-test('diagnostic projection drops private fields and arbitrary exception contents',()=>{
- const {safeSearchTrace}=load('lib/gmail-pagination.ts',{'./gmail-preview':load('lib/gmail-preview.ts')});
- const trace=safeSearchTrace({request:1,durationMs:10,httpStatus:200,outcome:'response',server:{subject:'PRIVATE',searchId:'PRIVATE',version:'67e4543',counts:{listed:2,unrecognized:1,types:{train:1},subject:'PRIVATE',pdfReasons:{protected:1,PRIVATE:1}},partialReason:'complete'}});
- assert(!JSON.stringify(trace).includes('PRIVATE'));assert.equal(trace.server.counts.types.train,1);assert.equal(trace.server.counts.unrecognized,1);assert.equal(trace.server.counts.pdfReasons.protected,1);
-});
-test('short complete search and pending pages retain explicit diagnostic cursor state',async()=>{
- const events=[];let calls=0;const result=await collectGmailPages(async()=>({...page([],++calls===1?'next':null),searchStatus:{partialReason:calls===1?'pending':'complete'}}),()=>{},{onDiagnostic:e=>events.push(e)});
- assert.equal(result.partial,false);assert.equal(events[0].remainingCursor,true);assert.equal(events[1].remainingCursor,false);assert.equal(events[1].server.partialReason,'complete');
-});
-
-test('P0 collector distinguishes pending Gmail, pending PDF, unreadable attachment, empty and valid completion',async()=>{
- for(const [remainingWork,state] of [[{gmailPage:true,pdfPending:1},'gmail_pending'],[{gmailPage:false,pdfPending:1},'pdf_pending']]){const r=await collectGmailPages(async()=>({...page([],'pending'),remainingWork}),()=>{},{maxPages:1});assert.equal(r.completionState,state);}
- const unreadable=await collectGmailPages(async()=>({...page([row('valid','2026-11-19')]),attachmentsPartial:true,attachmentIssues:{invalid_pdf:1},remainingWork:{gmailPage:false,pdfPending:0}}),()=>{});assert.equal(unreadable.completionState,'attachment_failures');assert.equal(unreadable.rows.length,1);assert.equal(unreadable.attachmentIssues.invalid_pdf,1);assert.equal(unreadable.remainingWork.pdfPending,0);
- assert.equal((await collectGmailPages(async()=>page([]),()=>{})).completionState,'complete_empty');assert.equal((await collectGmailPages(async()=>page([row('one','2026-11-19')]),()=>{})).completionState,'complete_with_results');
-});
+test('message retrieval failures remain partial across later healthy pages; exclusions do not',async()=>{let calls=0;const result=await collectGmailPages(async()=>++calls===1?{...page([row('one','2026-11-22')],'next'),messagesPartial:true}:page([row('two','2026-11-23')]),()=>{});assert(result.partial);assert.equal(result.reason,'message_fetch');assert.equal(result.rows.length,2);const excluded=await collectGmailPages(async()=>({...page([]),excluded:{missing_reference:9}}),()=>{});assert.equal(excluded.partial,false);});

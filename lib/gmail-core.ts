@@ -91,6 +91,7 @@ export function candidateKeys(c: Candidate) {
 }
 export function previewQuality(c:Candidate):"Importabile"|"Da verificare"|"Non riconosciuta"{
  const d=c.draft,provider=!!d.provider,place=!!(d.location || (d.originAirport && d.destinationAirport)),calendar=!!(d.startDate || c.timing?.start.date),named=["hotel","activity","car"].includes(d.type) && !!d.title && !/da completare|da verificare/i.test(d.title);
+ if(d.reference && c.event==="confirmation" && ((d.type==="train" && ["Italo","Trenitalia"].includes(d.provider)) || (d.type==="flight" && ["easyJet","Ryanair","ITA Airways"].includes(d.provider))) && !place && !calendar)return "Da verificare";
  if(!d.reference || Number(provider)+Number(place)+Number(calendar)+Number(named)<2 || (c.event==="uncertain" && Number(provider)+Number(place)+Number(calendar)+Number(named)<3))return "Non riconosciuta";
  const complete=provider && place && (!["hotel","activity","car"].includes(d.type) || named) && (!["flight","train"].includes(d.type) || (!!d.originAirport && !!d.destinationAirport)) && !!d.startDate && (!(c.timing?.end.raw) || !!d.endDate) && (d.type!=="hotel" || !!d.endDate) && c.event==="confirmation";
  return complete?"Importabile":"Da verificare";
