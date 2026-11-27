@@ -52,6 +52,118 @@ function labelled(text: string, names: string) {
 function place(value: string) {
   return /@|<|>|https?:|mime-version|content-type|(?:^|\s)(?:from|sent|subject|to|da|inviato|oggetto|a)\s*:/i.test(value) ? "" : value.trim();
 }
+type JourneyFields = Record<string,string[]>;
+const journeyLabels: Record<string,RegExp> = {
+  origin:/^(?:da|from|partenza|departure|stazione (?:di )?partenza|departure station|aeroporto (?:di )?partenza|departure airport)$/i,
+  destination:/^(?:a|to|arrivo|arrival|stazione (?:di )?arrivo|arrival station|aeroporto (?:di )?arrivo|arrival airport)$/i,
+  date:/^(?:data|data (?:del )?viaggio|data volo|travel date|flight date|date)$/i,
+  startDate:/^(?:data (?:di )?partenza|departure date)$/i,endDate:/^(?:data (?:di )?arrivo|arrival date)$/i,
+  startTime:/^(?:ora(?:rio)? (?:di )?partenza|departure time)$/i,endTime:/^(?:ora(?:rio)? (?:di )?arrivo|arrival time)$/i,
+  times:/^(?:orari|orario|times)$/i,route:/^(?:tratta|percorso|route)$/i,
+  year:/^(?:anno (?:del )?viaggio|travel year)$/i,
+  train:/^(?:treno|numero treno|train number)$/i,flight:/^(?:volo|numero volo|flight number)$/i,
+  cabin:/^(?:ambiente|classe|class|cabin)$/i,coach:/^(?:carrozza|coach)$/i,seats:/^(?:post[oi]|seats?)$/i
+};
+const journeyKey=(v:string)=>Object.keys(journeyLabels).find(k=>journeyLabels[k].test(v.replace(/[:：]\s*$/,"").trim()));
+function addJourney(fields:JourneyFields,key:string|undefined,value:string){
+  const v=value.replace(/[ \t]+/g," ").trim().slice(0,500);
+  if(key==='origin'||key==='destination'){const side=key==='origin'?'start':'end';if(/^(?:\d{4}-\d\d-\d\d|\d{1,2}[/.-]\d{1,2})/.test(v)||(/^\d/.test(v)&&parseMailTime(v,'it').date))key=side+'Date';else if(/^\d{1,2}:\d\d$/.test(v))key=side+'Time';}
+  if(key && v && !journeyKey(v)){fields[key] ||= [];if(!fields[key].includes(v))fields[key].push(v);}
+}
+/** Bounded inert HTML tree. No DOM execution, URL loading or attribute evaluation. */
+function journeyTables(html:string):JourneyFields[] {
+  type Node={tag:string;children:(Node|string)[];skip:boolean;span:boolean};
+  const root:Node={tag:"root",children:[],skip:false,span:false},stack=[root];let count=0;
+  const source=html.slice(0,200000).replace(/<(script|style|head|footer|nav|aside)\b[^>]*>[\s\S]*?<\/\1>/gi,"");
+  for(const token of source.match(/<!--[\s\S]*?-->|<[^>]*>|[^<]+/g) || []){
+    if(++count>12000)return [];
+    if(token.startsWith('<!--'))continue;
+    if(token[0]!=="<"){stack.at(-1)!.children.push(token);continue;}
+    const tag=token.match(/^<\/?\s*([a-z0-9]+)/i)?.[1]?.toLowerCase();if(!tag)continue;
+    if(/^<\//.test(token)){const i=stack.map(n=>n.tag).lastIndexOf(tag);if(i>0)stack.length=i;continue;}
+    if(stack.length>60)return [];
+    const node:Node={tag,children:[],span:/\b(?:rowspan|colspan)\s*=\s*["']?(?:[2-9]|\d{2})/i.test(token),skip:stack.at(-1)!.skip || /\bhidden\b|aria-hidden\s*=\s*["']true|display\s*:\s*none|visibility\s*:\s*hidden|\b(?:footer|promotion|marketing|newsletter)\b/i.test(token)};
+    stack.at(-1)!.children.push(node);if(!/^(?:br|img|hr|input|meta|link|wbr)$/.test(tag)&& !/\/>$/.test(token))stack.push(node);
+  }
+  const text=(n:Node):string=>n.skip?"":n.children.map(c=>typeof c==="string"?htmlText(c):text(c)+(/^(?:br|div|p)$/.test(c.tag)?"\n":" ")).join("").trim();
+  const tables:Node[]=[root],blocks:Node[]=[];
+  function walk(n:Node){if(n.skip)return;if(n.tag==="table")tables.push(n);if(/^(?:p|div)$/.test(n.tag)&&!n.children.some(c=>typeof c!=="string"&&/^(?:table|div|p)$/.test(c.tag)))blocks.push(n);for(const c of n.children)if(typeof c!=="string")walk(c);}
+  walk(root);const result:JourneyFields[]=[];
+  for(const table of tables){
+    const rows:Node[][]=[];
+    function rowsIn(n:Node){for(const c of n.children){if(typeof c==="string"||c.skip||c.tag==="table")continue;if(c.tag==="tr"){const cells=c.children.filter((v):v is Node=>typeof v!=="string"&&/^(?:td|th)$/.test(v.tag));if(cells.length&&!cells.some(v=>v.span||v.children.some(x=>typeof x!=="string"&&x.tag==="table")))rows.push(cells);}else rowsIn(c);}}
+    rowsIn(table);let fields:JourneyFields={};const flush=()=>{if(Object.keys(fields).length)result.push(fields);fields={};};
+    for(let i=0;i<rows.length;i++){
+      const cells=rows[i].map(text),keys=cells.map(journeyKey);
+      if(cells.length===1&&keys[0]){const values:string[]=[];while(i+1<rows.length&&rows[i+1].length===1&&values.length<3){const next=text(rows[i+1][0]);if(journeyKey(next)||/^[^:：]+[:：]\s*\S/.test(next)&&!/^\d\d:\d\d$/.test(next))break;values.push(next);i++;}addJourney(fields,keys[0],values.join('\n'));continue;}
+      if(keys.filter(Boolean).length>=2 && cells.every((v,j)=>!v || keys[j])){
+        const next=rows[i+1]?.map(text);if(!next || next.length!==cells.length || next.every(v=>!v||journeyKey(v)))continue;
+        if((keys.includes('origin')||keys.includes('destination'))&&(fields.origin||fields.destination))flush();
+        keys.forEach((key,j)=>addJourney(fields,key,next[j]));i++;continue;
+      }
+      for(let j=0;j<cells.length;j++){
+        const key=keys[j];if(key && j+1<cells.length && !keys[j+1]){addJourney(fields,key,cells[++j]);continue;}
+        const parts=cells[j].match(/^([^:：\n]+)(?:[:：]\s*|\r?\n)([\s\S]+)$/);if(parts)addJourney(fields,journeyKey(parts[1]),parts[2]);
+      }
+    }flush();
+  }
+  const fields:JourneyFields={};for(const block of blocks){const parts=text(block).match(/^([^:：\n]+)(?:[:：]\s*|\r?\n)([\s\S]+)$/);if(parts)addJourney(fields,journeyKey(parts[1]),parts[2]);}if(Object.keys(fields).length)result.push(fields);
+  return result;
+}
+function textJourney(body:string){
+  const fields:JourneyFields={},lines=body.split(/\r?\n/).map(v=>v.trim()).filter(Boolean);
+  for(let i=0;i<lines.length;i++){const m=lines[i].match(/^([^:：]+)[:：]\s*(.+)$/);if(m)addJourney(fields,journeyKey(m[1]),m[2]);else if(journeyKey(lines[i])&&lines[i+1]&&!journeyKey(lines[i+1]))addJourney(fields,journeyKey(lines[i]),lines[++i]);}
+  return fields;
+}
+function transportNotes(fields:JourneyFields){
+  const rules:[string,string,RegExp][]=[['train','Numero treno',/^\d{2,6}$/],['flight','Numero volo',/^(?:[A-Z][A-Z0-9]{1,2}\s*)?\d{2,5}$/i],['cabin','Classe',/^(?:Smart|Prima(?: Business)?|Club(?: Executive)?|Economy|Business|Standard|First|Seconda|Prima classe)$/i],['coach','Carrozza',/^\d{1,3}[A-Z]?$/i],['seats','Posto',/^\d{1,3}[A-Z]?(?:\s*[,;]\s*\d{1,3}[A-Z]?)*$/i]];
+  return rules.flatMap(([key,label,pattern])=>{let values=[...new Set(fields[key]||[])];if(key==='seats'&&values.length>1&&(fields.coach||[]).length<=1&&values.every(v=>pattern.test(v)))values=[[...new Set(values.flatMap(v=>v.split(/\s*[,;]\s*/)))].join(', ')];return values.length===1&&pattern.test(values[0])?[`${label}: ${values[0]}`]:[];});
+}
+/** Missing years: unique future date within 180 days of receipt; never the server year. */
+function journeyTime(raw:string,received:string|undefined,explicitYear:string){
+  let time=parseMailTime(raw,'it');if(time.date)return time;
+  const short=raw.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})(?![\d/])/);if(!short || /\b\d{4}\b/.test(raw))return time;
+  const make=(year:number)=>parseMailTime(raw.replace(short[0],`${short[0]}/${year}`),'it');
+  if(/^20\d{2}$/.test(explicitYear))return make(+explicitYear);
+  if(!received || !/^\d{1,16}$/.test(received))return time;
+  const timestamp=Number(received);if(!Number.isFinite(timestamp)||!Number.isFinite(new Date(timestamp).getTime()))return time;
+  const day=Date.parse(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(timestamp)),year=new Date(timestamp).getUTCFullYear();
+  const options=[make(year),make(year+1)].filter(t=>t.date&&Date.parse(t.date)>=day&&Date.parse(t.date)-day<=180*86400000);
+  return options.length===1?options[0]:time;
+}
+function transportBodies(base:Candidate,bodies:ReturnType<typeof messageBodies>,message:GmailMessage,supplier:string):Candidate[]{
+  const records=bodies.html.length?bodies.html.flatMap(journeyTables):[textJourney(bodies.text)];
+  const segments=records.filter(r=>r.origin||r.destination||r.route),metadata=records.filter(r=>!r.origin&&!r.destination&&!r.route);
+  const combine=(records:JourneyFields[])=>{const result:JourneyFields={};for(const r of records)for(const [k,values] of Object.entries(r))for(const v of values)addJourney(result,k,v);return result;};
+  const common=combine(metadata),contexts=segments.length?segments:[common];
+  const unique=(fields:JourneyFields,key:string)=>fields[key]?.length===1?fields[key][0]:"";
+  const station=(value:string)=>{
+    const v=value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).find(s=>!parseMailTime(s,'it').date&&!/^(?:\d{1,2}[/:]|\d{4}-)/.test(s))||"";
+    return !journeyKey(v)&&/\p{L}/u.test(v)&&!/@|https?:|offert|sconto|prenota|newsletter/i.test(v)?place(v):"";
+  };
+  const result:Candidate[]=[];const seen=new Set<string>();
+  for(const context of contexts.slice(0,12)){
+    const fields=combine([common,context]),c=structuredClone(base),d=c.draft;
+    const explicit=Object.values(fields).flat().flatMap(v=>[...v.matchAll(/\b(?:\d{1,2}[/.-]\d{1,2}[/.-])(20\d{2})\b/g)].map(m=>m[1]));
+    const years=[...new Set([...explicit,...(fields.year||[])])],year=years.length===1?years[0]:"";
+    const origin=unique(fields,'origin'),destination=unique(fields,'destination'),route=unique(fields,'route').split(/\s*(?:→|->|\s>\s)\s*/);
+    if(segments.length){d.originAirport=station(origin)||(route.length===2?station(route[0]):"");d.destinationAirport=station(destination)||(route.length===2?station(route[1]):"");d.location=[d.originAirport,d.destinationAirport].filter(Boolean).join(' → ');if(bodies.html.length)c.timing={start:emptyMailTime(),end:emptyMailTime()};}
+    const pair=unique(fields,'times').match(/^(\d{1,2}:\d\d)\s*(?:>|→|–|-)\s*(\d{1,2}:\d\d)$/);
+    const date=unique(fields,'date'),startDate=unique(fields,'startDate')||date,endDate=unique(fields,'endDate')||date;
+    const start=journeyTime([startDate,unique(fields,'startTime')||pair?.[1],origin].filter(Boolean).join(' '),message.internalDate,year);
+    const end=journeyTime([endDate,unique(fields,'endTime')||pair?.[2],destination].filter(Boolean).join(' '),message.internalDate,year);
+    c.timing ||= {start:emptyMailTime(),end:emptyMailTime()};
+    if(start.raw && (start.date||start.time))c.timing.start=start;
+    if(end.raw && (end.date||end.time))c.timing.end=end;
+    // A shared day cannot establish an overnight arrival. Leave it for manual review.
+    if(!unique(fields,'endDate')&&c.timing.start.date===c.timing.end.date&&c.timing.end.time<c.timing.start.time)c.timing.end.date='';
+    d.notes=[...new Set([...d.notes.split('\n').filter(v=>v&&!/^(?:Numero treno|Numero volo|Classe|Carrozza|Posto):/.test(v)),...transportNotes(fields)])].join('\n');
+    c.flightNumber=d.notes.match(/^Numero volo: (.+)$/m)?.[1] || (segments.length?'':c.flightNumber);
+    const adjusted=providerDetails(c,'',supplier);
+    const key=JSON.stringify([d.originAirport,d.destinationAirport,adjusted.timing,d.notes]);if(!seen.has(key)){seen.add(key);result.push(adjusted);}
+  }
+  return result;
+}
 function geographical(text: string, names: string) {
   const pattern = new RegExp(`(?:^|\\n)[ \\t]*(?:${names})[ \\t]*(?:[:：][ \\t]*|\\r?\\n[ \\t]*)(?:\\r?\\n[ \\t]*)*([^\\n]+)`, "gi");
   for (const m of text.matchAll(pattern)) { const value = place(m[1].trim().slice(0,500)); if (value) return value; }
@@ -168,7 +280,8 @@ function providerDetails(candidate: Candidate, body: string, supplier: string, h
   if(!timing.start.offset && zones[0])timing.start=inLodgingZone(timing.start,zones[0]);
   if(!timing.end.offset && zones[1])timing.end=inLodgingZone(timing.end,zones[1]);
   const extras=[["Ospiti","Guests|Ospiti"],["Passeggeri","Passengers|Passeggeri|Passeggero|Passenger name|Nome passeggero|Intestatario"],["Numero treno","Train number|Numero treno|Treno"],["Classe","Class|Classe|Ambiente"],["Posto","Seat|Posto"],["Carrozza","Coach|Carrozza"],["Camera","Room(?: type)?|Camera"],["Totale","Prezzo totale|Total price|Totale|Total"]];
-  for(const [label,names] of extras){const value=labelled(body,names);if(value && !d.notes.includes(`${label}: ${value}`))d.notes=[d.notes,`${label}: ${value}`].filter(Boolean).join("\n");}
+  for(const [label,names] of extras){if(supplier!=="Booking.com"&&["Classe","Posto","Carrozza","Numero treno"].includes(label))continue;const value=labelled(body,names);if(value && !d.notes.includes(`${label}: ${value}`))d.notes=[d.notes,`${label}: ${value}`].filter(Boolean).join("\n");}
+  if(supplier!=="Booking.com"&&!html)for(const note of transportNotes(textJourney(body)))if(!d.notes.split('\n').includes(note))d.notes=[d.notes,note].filter(Boolean).join('\n');
   if(supplier === "Booking.com") d.notes=[d.notes,airbnbTimingNotes(timing.start,timing.end,supplier)].filter(Boolean).join("\n");
   return candidate;
 }
@@ -187,7 +300,7 @@ function finish(candidate: Candidate, supplier: string, hasImages = false): Cand
   const route = [d.originAirport,d.destinationAirport].filter(Boolean).join(" → ");
   const name = place(d.title.replace(/^(?:(?:fwd?|re):\s*)+/i,"").trim());
   d.title = d.type === "flight" ? (route ? `Volo ${route}` : "Volo da completare")
-    : d.type === "train" ? (route ? `Treno ${route}` : "Trasporto da completare")
+    : d.type === "train" ? (route ? `${supplier==="Italo"?"Italo —":"Treno"} ${route}` : "Trasporto da completare")
     : d.type === "hotel" ? (name ? (supplier === "Airbnb" ? name : /^hotel\b/i.test(name) ? name : `Hotel ${name}`) : supplier === "Airbnb" ? "Soggiorno Airbnb da completare" : "Soggiorno da completare")
     : d.type === "activity" ? (name ? `${name}${d.location ? ` — ${d.location}` : ""}` : "Attività da completare") : name || "Noleggio auto da completare";
   d.title = d.title.slice(0,500);
@@ -311,5 +424,6 @@ export function parseGmailMessage(message: GmailMessage, diagnostics?: ParseDiag
   const extra = [trainNumber && `Numero treno: ${trainNumber}`,flightNumber && `Numero volo: ${flightNumber}`, readLine(bodies.text, "Passengers|Passeggeri|Guests|Ospiti"), readLine(bodies.text, "Price|Prezzo|Total|Totale")].filter(Boolean);
   d.notes = extra.join("\n");
   const candidate = { draft: d, timing, warnings, event, flightNumber };
+  if(["Italo","easyJet"].includes(supplier) && event!=="uncertain")return transportBodies(providerDetails(candidate,bodies.text,supplier,bodies.html.join('\n')),bodies,message,supplier).map(c=>finish(c,supplier));
   return [finish(airbnb?applyAirbnb(candidate,airbnb):providerDetails(candidate,bodies.text,supplier,bodies.html.join("\n")), supplier,airbnb?.hasImages)];
 }

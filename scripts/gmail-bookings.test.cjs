@@ -2,6 +2,48 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 function load(file,imports={},extra={}){const box={exports:{},require:n=>n in imports?imports[n]:require(n),process:{env:env()},URL,URLSearchParams,Buffer,TextDecoder,Date,Response,Request,AbortSignal,structuredClone,...extra};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,box,{filename:file});return box.exports;}
 function env(){return {NODE_ENV:'test',NAMI_GMAIL_ENABLED:'1',NAMI_GMAIL_ORIGIN:'http://localhost:3000',NAMI_GMAIL_CLIENT_ID:'synthetic-client',NAMI_GMAIL_CLIENT_SECRET:'synthetic-secret',NAMI_GMAIL_TOKEN_KEYS:JSON.stringify({1:Buffer.alloc(32,7).toString('base64url')}),NAMI_GMAIL_KEY_VERSION:'1'};}
 const core=load('lib/gmail-core.ts',{'./gmail-geography':load('lib/gmail-geography.ts')}),dates=load('lib/gmail-dates.ts'),parser=load('lib/gmail-parser.ts',{'./gmail-core':core,'./gmail-dates':dates});
+const {italoHtml,easyjetHtml}=require('./fixtures/gmail-transport-html.cjs');
+function transportMessage(html,provider='Italo',received='2026-11-19T12:00Z'){const m=message(html,{html:true,subject:provider==='Italo'?'Fwd: Italo – Conferma Acquisto':'Fwd: easyJet Booking confirmation'});m.internalDate=String(Date.parse(received));return m;}
+test('Italo HTML preserves column ownership, abbreviated stations and local winter times',()=>{
+ const c=parser.parseGmailMessage(transportMessage(italoHtml()))[0],d=c.draft;
+ assert.equal(d.title,'Italo — Napoli C.LE → Milano Rog');assert.equal(d.originAirport,'Napoli C.LE');assert.equal(d.destinationAirport,'Milano Rog');assert.equal(d.startDate,'2026-12-31T14:15+01:00');assert.equal(d.endDate,'2026-12-31T19:09+01:00');assert.equal(d.reference,'SYNTHITALO21');
+ for(const note of ['Numero treno: 9946','Classe: Smart','Carrozza: 10','Posto: 23, 24'])assert(d.notes.includes(note),note);
+ for(const wrong of ['Classe: 14:15','Carrozza: Posto','Posto: 10','Carrozza: 99','Posto: 99','2029'])assert(!d.notes.includes(wrong),wrong);
+ assert.equal(core.previewQuality(c),'Importabile');
+});
+test('Italo reordered and empty cells never shift values; repeated tables deduplicate',()=>{
+ const html=italoHtml({reordered:true,empty:true}),m=transportMessage(html+html),rows=parser.parseGmailMessage(m);assert.equal(rows.length,1);assert(rows[0].draft.notes.includes('Classe: Smart'));assert(rows[0].draft.notes.includes('Carrozza: 10'));assert(!rows[0].draft.notes.includes('Posto:'));
+ const seats=italoHtml().replace('23, 24','23').replace('</table>','<tr><td>Posto</td><td>24</td></tr></table>');assert(parser.parseGmailMessage(transportMessage(seats))[0].draft.notes.includes('Posto: 23, 24'));
+});
+test('travel year is explicit first, otherwise uniquely future within 180 days; past and distant stay blank',()=>{
+ for(const [day,received,expected]of [['31/12/2027','2026-11-19T12:00Z','2027-12-31'],['03/01','2026-12-20T12:00Z','2027-01-03'],['01/10','2026-11-19T12:00Z',''],['31/12','2026-01-01T12:00Z',''],['31/02','2026-01-01T12:00Z','']]){const c=parser.parseGmailMessage(transportMessage(italoHtml({date:day}),'Italo',received))[0];assert.equal(c.timing.start.date,expected,day);}
+ const m=transportMessage(italoHtml());delete m.internalDate;assert.equal(parser.parseGmailMessage(m)[0].timing.start.date,'');
+});
+test('easyJet HTML outbound/return remain separate with each airports local summer offset',()=>{
+ const one=parser.parseGmailMessage(transportMessage(easyjetHtml(),'easyJet'));assert.equal(one.length,1);assert.equal(one[0].draft.startDate,'2027-07-12T14:15+02:00');assert.equal(one[0].draft.endDate,'2027-07-12T16:09+01:00');assert.equal(one[0].flightNumber,'U21234');
+ const rows=parser.parseGmailMessage(transportMessage(easyjetHtml({roundTrip:true}),'easyJet'));assert.equal(rows.length,2);assert.equal(rows[1].draft.originAirport,'LGW');assert.equal(rows[1].draft.destinationAirport,'FCO');assert.equal(rows[1].draft.startDate,'2027-07-19T11:00+01:00');assert.equal(rows[1].draft.endDate,'2027-07-19T14:20+02:00');assert.notEqual(core.candidateKeys(rows[0]).fingerprint,core.candidateKeys(rows[1]).fingerprint);
+});
+test('transport HTML nested tables and explicit travel year work without promotion/header dates',()=>{
+ const html=italoHtml().replace('<table>','<table><tr><td><table>').replace('</table>','</table></td></tr></table>')+'<p>Anno viaggio: 2027</p>';
+ const c=parser.parseGmailMessage(transportMessage(html))[0];assert.equal(c.draft.startDate,'2027-12-31T14:15+01:00');assert(c.draft.notes.includes('Classe: Smart'));
+ const hidden=italoHtml()+'<div style="display:none"><table><tr><th>Partenza</th><th>Arrivo</th></tr><tr><td>Roma</td><td>Torino</td></tr></table></div>';
+ assert.equal(parser.parseGmailMessage(transportMessage(hidden)).length,1);
+});
+test('transport HTML absent fields, conflicting columns, newsletters and attachments cannot invent details',()=>{
+ const partial=italoHtml().replace('Napoli C.LE','').replace('Milano Rog','').replace('31/12','').replace('14:15 &gt; 19:09','');const c=parser.parseGmailMessage(transportMessage(partial))[0];assert.equal(c.draft.startDate,'');assert.equal(c.draft.originAirport,'');assert.equal(core.previewQuality(c),'Da verificare');
+ const conflict=italoHtml().replace('</table>','<tr><td>Carrozza</td><td>11</td></tr></table>');assert(!parser.parseGmailMessage(transportMessage(conflict))[0].draft.notes.includes('Carrozza:'));
+ for(const provider of ['Italo','easyJet']){const html=(provider==='Italo'?italoHtml():easyjetHtml()).replace(/(?:PNR|Booking reference): [A-Z0-9]+/,'Offerte per il prossimo viaggio').replace(/Conferma Acquisto|Booking confirmation/,'Newsletter promozionale');const m=transportMessage(html,provider);m.payload.headers[0].value='Offerte e promozioni';assert.equal(parser.parseGmailMessage(m).length,0);}
+});
+test('overnight transport with no arrival day and DST ambiguous wall times stay for review',()=>{
+ const overnight=italoHtml({date:'31/12/2026'}).replace('14:15 &gt; 19:09','23:15 &gt; 01:09');const c=parser.parseGmailMessage(transportMessage(overnight))[0];assert.equal(c.draft.endDate,'');assert.equal(c.timing.end.time,'01:09');
+ const ambiguous=italoHtml({date:'25/10/2026'}).replace('14:15 &gt; 19:09','02:15 &gt; 04:09');assert.equal(parser.parseGmailMessage(transportMessage(ambiguous))[0].draft.startDate,'');
+});
+test('structured transport search, manual save and itinerary preserve values without attachments or duplicates',async()=>{
+ const h=harness(),m=transportMessage(italoHtml());m.internalDate=String(Date.parse('2026-11-22T12:00Z'));m.payload={mimeType:'multipart/mixed',headers:m.payload.headers,parts:[m.payload,{mimeType:'application/pdf',filename:'ignored.pdf',body:{attachmentId:'never-fetch'}}]};
+ let attachmentCalls=0;h.setFetch(async url=>{if(url.includes('/attachments/'))attachmentCalls++;return new Response(JSON.stringify(url.includes('/messages?')?{messages:[{id:m.id},{id:m.id}]}:m));});
+ const result=await h.server.searchGmail(h.user,{from:'2026-11-21',to:'2026-11-23',timeZone:'Europe/Rome'});assert.equal(result.candidates.length,1);assert.equal(attachmentCalls,0);assert.equal(result.searchStatus,undefined);assert.equal(h.bookings.length,0);
+ const r=result.candidates[0];await h.server.importGmail(h.user,{confirm:true,choices:[{token:r.token,draft:r.draft,tripId:'trip',action:'create'}]});assert.equal(h.bookings.length,1);assert.equal(h.bookings[0].originAirport,'Napoli C.LE');assert.equal(h.activities.length,2);assert.equal(h.activities[0].time,'14:15');assert.equal(h.activities[1].time,'19:09');
+});
 const draft=()=>({title:'Roma → Londra',type:'flight',startDate:'2027-01-02T09:30+01:00',endDate:'2027-01-02T11:00Z',reference:'SYNTHETIC',provider:'Example Air',location:'Roma → Londra',notes:'Numero volo: EX123',originAirport:'FCO',destinationAirport:'LHR',status:'confirmed'});
 function message(text,{html=false,subject='Conferma prenotazione',charset='utf-8'}={}){return {id:'synthetic1',internalDate:String(Date.parse('2026-12-01T12:00:00Z')),payload:{mimeType:html?'text/html':'text/plain',headers:[{name:'Subject',value:subject},{name:'From',value:'Example <booking@example.invalid>'},{name:'Content-Type',value:`text/plain; charset=${charset}`}],body:{data:Buffer.from(text,charset==='iso-8859-1'?'latin1':'utf8').toString('base64url')}}};}
 for(const [type,kind,start,end] of [['flight','FlightReservation','departureTime','arrivalTime'],['hotel','LodgingReservation','checkinTime','checkoutTime'],['train','TrainReservation','departureTime','arrivalTime'],['train','BusReservation','departureTime','arrivalTime'],['car','RentalCarReservation','pickupTime','dropoffTime'],['activity','EventReservation','startDate','endDate']])test(`structured ${kind} preserves explicit dates and identifiers`,()=>{const reservation={'@type':kind,reservationNumber:'SYNTHETIC',reservationFor:{name:'Synthetic reservation',provider:{name:'Example'},[start]:'2027-01-02T09:30+01:00',[end]:'2027-01-02T11:00Z'}};if(type==='hotel'||type==='car'){reservation[start]=reservation.reservationFor[start];reservation[end]=reservation.reservationFor[end];}const result=parser.parseGmailMessage(message(`<script type="application/ld+json">${JSON.stringify(reservation)}</script>`,{html:true}));assert.equal(result.length,1);assert.equal(result[0].draft.type,type);assert.equal(result[0].draft.reference,'SYNTHETIC');assert.equal(result[0].draft.startDate,'2027-01-02T09:30+01:00');});
@@ -76,7 +118,7 @@ test('authenticated easyJet supplier and explicit travel timestamps produce a ro
 });
 test('Italo body extracts route, reference and separate date/time fields',()=>{
  const c=parser.parseGmailMessage(message('Italo https://www.italotreno.it/\nCodice biglietto: ABCDEF\nStazione partenza: Roma\nStazione arrivo: Milano\nPartenza: 22 novembre 2026\nOra partenza: 09:30\nArrivo: 22 novembre 2026\nOra arrivo: 12:30\nFuso: +01:00\nPuoi modificare il tuo biglietto',{subject:'Italo – Conferma Acquisto'}))[0];
- assert.equal(c.draft.title,'Treno Roma → Milano');assert.equal(c.draft.provider,'Italo');assert.equal(c.draft.startDate,'2026-11-22T09:30+01:00');assert.equal(c.event,'confirmation');
+ assert.equal(c.draft.title,'Italo — Roma → Milano');assert.equal(c.draft.provider,'Italo');assert.equal(c.draft.startDate,'2026-11-22T09:30+01:00');assert.equal(c.event,'confirmation');
 });
 test('stay range without a year keeps both original dates and never borrows the email year',()=>{
  const c=parser.parseGmailMessage(message('Airbnb https://airbnb.com/\nCodice conferma: ABC12345\nDa: Airbnb <automated@airbnb.com>',{subject:'Fwd: Viaggio confermato 07–09 gennaio'}))[0];assert.equal(c.draft.title,'Soggiorno Airbnb da completare');assert.equal(c.draft.location,'');assert.equal(c.timing.start.date,'');assert.equal(c.timing.start.raw,'07 gennaio');assert.equal(c.timing.end.raw,'09 gennaio');assert.equal(c.draft.startDate,'');assert(c.warnings.some(w=>w.includes('anno')));
@@ -160,7 +202,7 @@ test('regional suggestions use dates and explicit country/airport aliases, ties 
 for(const [supplier,domain,body,expected] of [
  ['Booking.com','booking.com','Nome hotel\nAlbergo Sintetico\nIndirizzo\nVia Esempio 1, Roma, Italia\nCheck-in\ngio 14 gennaio 2027\ndalle 15:00\nCheck-out\nsab 16 gennaio 2027\n11:00\nOspiti\n2 adulti',{title:'Hotel Albergo Sintetico',location:'Via Esempio 1, Roma, Italia',start:'2027-01-14T15:00+01:00',notes:'Ospiti: 2 adulti'}],
  ['easyJet','easyjet.com','From: FCO\nTo: LGW\nDeparture\n14 January 2027\n09:30\nArrival\n14 January 2027\n11:10\nFlight number: U21234\nPassengers: 2',{title:'Volo FCO → LGW',location:'FCO → LGW',start:'2027-01-14T09:30+01:00',notes:'Numero volo: U21234'}],
- ['Italo','italotreno.it','Stazione partenza: Roma Termini\nStazione arrivo: Milano Centrale\nPartenza\n14 gennaio 2027\n09:30\nArrivo\n14 gennaio 2027\n12:40\nNumero treno: 9999\nClasse: Prima\nPosto: 12A',{title:'Treno Roma Termini → Milano Centrale',location:'Roma Termini → Milano Centrale',start:'2027-01-14T09:30+01:00',notes:'Posto: 12A'}],
+ ['Italo','italotreno.it','Stazione partenza: Roma Termini\nStazione arrivo: Milano Centrale\nPartenza\n14 gennaio 2027\n09:30\nArrivo\n14 gennaio 2027\n12:40\nNumero treno: 9999\nClasse: Prima\nPosto: 12A',{title:'Italo — Roma Termini → Milano Centrale',location:'Roma Termini → Milano Centrale',start:'2027-01-14T09:30+01:00',notes:'Posto: 12A'}],
 ])test(`${supplier} extracts forwarded HTML table blocks without using mail/payment dates`,()=>{
  const html='<p>From: '+supplier+' &lt;booking@'+domain+'&gt;</p><p>'+supplier+'</p><p>PNR: SYNTH2027</p>'+body.split('\n').map(v=>'<tr><td>'+v+'</td></tr>').join('')+'<p>Payment deadline: 2030-02-01T10:00Z</p>';
  const c=parser.parseGmailMessage(message(html,{html:true,subject:'Fwd: Booking confirmation'}))[0];assert.equal(c.draft.provider,supplier);assert.equal(c.draft.title,expected.title);assert.equal(c.draft.location,expected.location);assert.equal(c.draft.startDate,expected.start);assert(c.draft.notes.includes(expected.notes));assert(c.draft.endDate.startsWith('2027-01-'));assert.equal(c.event,'confirmation');

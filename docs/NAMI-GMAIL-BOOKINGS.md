@@ -217,3 +217,15 @@ Conferme ferroviarie/aeree di operatori riconosciuti con riferimento esplicito e
 Paginazione automatica limitata e ordinamento per ricezione preservati. Errori nel recupero dei singoli messaggi conservano i risultati validi e segnalano l'esame parziale; allegati ignorati ed email non riconosciute non producono avvisi di risultati parziali. Restano deduplicazione, reimportazione dopo eliminazione e sincronizzazione Itinerario.
 
 Validazione: 139 test sintetici PASS (Gmail, paginazione, UI, Places, date e toast), typecheck e build PASS; lista e modulo verificati a 320/375/390 px senza overflow. Nessuna email reale consultata. Nessun push o deploy.
+
+## Gmail Import 2.1 — HTML trasporti, 27 novembre 2026
+
+Baseline locale e Production verificata: 025eb2c, Ready. La fixture sintetica riproduce sulla baseline la perdita di tratta/date e l'associazione errata «Carrozza: Posto»: htmlText appiattisce celle e righe, mentre labelled legge il testo successivo senza conoscere la colonna.
+
+Il parser Italo/easyJet legge ora una struttura HTML inerte e limitata (200.000 caratteri, 12.000 token, profondità 60). Associa intestazioni/valori per colonna o coppia nella stessa riga, conserva celle vuote e supporta tabelle annidate e blocchi etichettati. Script, stili, footer, blocchi commerciali identificati e contenuti nascosti sono esclusi; nessun URL viene richiesto. Celle con rowspan/colspan multipli non sono interpretate come colonne semplici. Valori contraddittori restano da verificare, senza indovinare.
+
+Tratte easyJet distinte restano candidate separate; ripetizioni identiche non generano schede aggiuntive. Le abbreviazioni delle stazioni vengono conservate. Classe, carrozza, posti e numero del servizio passano validazioni specifiche prima delle Note; le etichette storiche Numero treno/Posto restano compatibili con la deduplicazione. Il modulo condiviso e la UI non sono modificati: partenza/arrivo, date, orari e Note ricevono i campi del draft, sempre modificabili e salvati solo dopo conferma.
+
+Per date senza anno si cerca prima un anno associato al viaggio nel blocco; altrimenti si ammette solo una data futura univoca entro 180 giorni dalla ricezione Gmail. Non si usa l'anno corrente del server. Date passate, lontane, invalide o ambigue rimangono incomplete. Offset derivati dalle stazioni/aeroporti noti con la data effettiva; ore ambigue al cambio DST e arrivi notturni senza giorno di arrivo restano da verificare.
+
+Validazione sintetica: 147 test PASS, comprese pipeline ricerca/conferma/salvataggio/Itinerario, nessuna richiesta allegati, regressioni Booking/Airbnb, UI e Places. Il layout rimane invariato. Nessuna email reale letta; la compatibilità con ogni variante dell'email reale richiede collaudo dopo un eventuale rilascio autorizzato.
